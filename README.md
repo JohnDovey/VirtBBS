@@ -1,6 +1,6 @@
 # VirtBBS
 
-**VirtBBS** is a modern, from-scratch rewrite of the classic PCBoard BBS system, written entirely in Go. It replaces modem-based dial-up access with Telnet and SSH servers, migrates all data to SQLite, and provides a native cross-platform sysop GUI built with Fyne.
+**VirtBBS** is a modern, from-scratch rewrite of the classic PCBoard BBS system. The server is written entirely in Go. It replaces modem-based dial-up access with Telnet and SSH servers, migrates all data to SQLite, and provides a cross-platform sysop GUI built with .NET / Avalonia UI.
 
 ---
 
@@ -24,7 +24,7 @@ PCBoard was one of the most influential Bulletin Board Systems (BBS) of its era,
 | **ANSI colour** | Full ANSI escape sequence rendering for menus and displays |
 | **Multi-node** | Node status tracking via SQLite (replaces PCBoard's `USERNET.XXX`) |
 | **Callers log** | Compatible 64-byte record format |
-| **Remote sysop GUI** | Fyne v2 native GUI (`virtbbs-gui`) connects over JSON/TCP API |
+| **Remote sysop GUI** | .NET / Avalonia UI GUI (`VirtBBS.GUI`) connects over JSON/TCP API |
 | **Config** | TOML format `VirtBBS.DAT` (replaces PCBoard's line-oriented `PCBOARD.DAT`) |
 
 ---
@@ -34,8 +34,9 @@ PCBoard was one of the most influential Bulletin Board Systems (BBS) of its era,
 ```
 VirtBBS/
 ├── cmd/
-│   ├── virtbbs/           # BBS server (Telnet + SSH + API)
-│   └── virtbbs-gui/       # Sysop console (Fyne GUI)
+│   └── virtbbs/           # BBS server (Telnet + SSH + API)
+├── gui-dotnet/
+│   └── VirtBBS.GUI/       # Sysop console (.NET / Avalonia UI)
 ├── internal/
 │   ├── ansi/              # ANSI escape sequence helpers
 │   ├── api/               # JSON-over-TCP sysop management API
@@ -85,10 +86,10 @@ VirtBBS/
 - Exposes a JSON-over-TCP management API (port 9999)
 - `--init-sysop` flag bootstraps the first sysop account
 
-**`virtbbs-gui`** — The sysop console. A native Fyne GUI:
-- Connects to any VirtBBS server over the network (local or remote)
-- Tabs: Nodes · Users · Messages · Conferences · Callers · Config · Settings
-- Settings (host/port/credentials) persisted in OS preferences
+**`VirtBBS.GUI`** — The sysop console. A cross-platform .NET / Avalonia UI app:
+- Connects to any VirtBBS server over the network (local or remote) via the JSON/TCP management API
+- Tabs: Nodes · Users · Messages · Conferences · Callers · Config · FidoNet
+- Host/port/credentials entered at connect time
 
 ### Network Ports (defaults)
 
@@ -127,14 +128,14 @@ VirtBBS interprets PCBoard Programming Language (`.PPS`) source files directly u
 
 | Concern | Library/Tool |
 |---|---|
-| Language | Go 1.22+ |
+| Language (server) | Go 1.22+ |
 | SQLite | `modernc.org/sqlite` (pure Go, no cgo) |
 | SSH | `golang.org/x/crypto/ssh` |
-| GUI | `fyne.io/fyne/v2` v2.4.5 (pure Go, no cgo) |
 | Config | `github.com/BurntSushi/toml` |
 | Passwords | `golang.org/x/crypto/bcrypt` |
+| GUI | .NET 8 + Avalonia UI 12, CommunityToolkit.Mvvm |
 
-The server binary (`virtbbs`) requires **no cgo** and cross-compiles cleanly for macOS, Linux, and Windows. The GUI binary (`virtbbs-gui`) requires the Fyne native graphics stack (OpenGL/Metal) but is otherwise pure Go.
+The server binary (`virtbbs`) requires **no cgo** and cross-compiles cleanly for macOS, Linux, and Windows. The GUI (`VirtBBS.GUI`) is a .NET 8 / Avalonia UI application and runs anywhere the .NET 8 runtime is available (macOS, Linux, Windows).
 
 ---
 
@@ -144,15 +145,18 @@ The server binary (`virtbbs`) requires **no cgo** and cross-compiles cleanly for
 # Clone / enter the project
 cd /path/to/VirtBBS
 
-# Build both executables (macOS native)
-GOPATH=/Volumes/JohnDovey/go go build -o virtbbs     ./cmd/virtbbs
-GOPATH=/Volumes/JohnDovey/go go build -o virtbbs-gui ./cmd/virtbbs-gui
+# Build the server (macOS native)
+GOPATH=/Volumes/JohnDovey/go go build -o virtbbs ./cmd/virtbbs
 
-# Cross-compile server for Linux amd64 (no GUI)
+# Cross-compile server for Linux amd64
 GOOS=linux GOARCH=amd64 GOPATH=/Volumes/JohnDovey/go go build -o virtbbs-linux-amd64 ./cmd/virtbbs
 
-# Cross-compile server for Windows amd64 (no GUI)
+# Cross-compile server for Windows amd64
 GOOS=windows GOARCH=amd64 GOPATH=/Volumes/JohnDovey/go go build -o virtbbs-windows-amd64.exe ./cmd/virtbbs
+
+# Build the sysop GUI (requires .NET 8 SDK)
+cd gui-dotnet/VirtBBS.GUI
+dotnet build
 ```
 
 ---
@@ -172,7 +176,8 @@ See [Installation.md](Installation.md) for full instructions.
 telnet localhost 2323
 
 # 4. Open the sysop console (GUI)
-./virtbbs-gui
+cd gui-dotnet/VirtBBS.GUI
+dotnet run
 ```
 
 ---

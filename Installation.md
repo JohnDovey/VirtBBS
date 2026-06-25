@@ -3,7 +3,8 @@
 ## Requirements
 
 - macOS 12+, Linux (kernel 4.x+), or Windows 10+
-- No additional runtimes required — VirtBBS ships as self-contained binaries
+- The `virtbbs` server ships as a self-contained binary — no additional runtime required
+- The sysop GUI (`VirtBBS.GUI`) requires the [.NET 8 runtime](https://dotnet.microsoft.com/download/dotnet/8.0) on whichever machine runs it
 
 ---
 
@@ -27,20 +28,20 @@ From the `releases/0.0.1/` package, copy the following into your installation di
 <install-dir>/
 ├── bin/
 │   ├── virtbbs          # BBS server  (Linux/macOS)
-│   ├── virtbbs.exe      # BBS server  (Windows)
-│   ├── virtbbs-gui      # Sysop GUI   (Linux/macOS)
-│   └── virtbbs-gui.exe  # Sysop GUI   (Windows)
+│   └── virtbbs.exe      # BBS server  (Windows)
 ├── ppe/
 │   ├── hello.pps        # Sample PPE: Hello World
 │   └── userinfo.pps     # Sample PPE: User Info display
 └── VirtBBS.DAT          # Configuration file
 ```
 
-On macOS/Linux, make the binaries executable:
+On macOS/Linux, make the server binary executable:
 
 ```bash
-chmod +x bin/virtbbs bin/virtbbs-gui
+chmod +x bin/virtbbs
 ```
+
+The sysop GUI (`VirtBBS.GUI`) is run separately from source — see [Open the Sysop Console (GUI)](#8-open-the-sysop-console-gui) below — and does not ship inside the `bin/` release package.
 
 ### 3. Review `VirtBBS.DAT`
 
@@ -129,22 +130,24 @@ Accept the host key fingerprint on first connection. SSH does not require any sp
 
 ### 8. Open the Sysop Console (GUI)
 
-On a machine with a display (local or remote):
+The sysop GUI (`VirtBBS.GUI`) is a .NET 8 / Avalonia UI application. It can run on the same machine as the server or on any machine with network access to the API port (default 9999), and requires the [.NET 8 SDK or runtime](https://dotnet.microsoft.com/download/dotnet/8.0).
+
+From the `gui-dotnet/VirtBBS.GUI` directory:
 
 ```bash
-bin/virtbbs-gui
+dotnet run
 ```
 
-On first launch, go to the **Settings** tab and enter:
+The connection bar at the top of the window asks for:
 
 | Field | Value |
 |---|---|
-| Host | `localhost` (or remote server IP) |
+| Host | `127.0.0.1` (or remote server IP) |
 | Port | `9999` |
-| Sysop name | Your sysop name |
-| Password | Your sysop password |
+| User | Your sysop name |
+| Pass | Your sysop password |
 
-Click **Connect**. The other tabs will populate with live data.
+Click **Connect**. The Nodes, Users, Messages, Conferences, Callers, Config, and FidoNet tabs will populate with live data.
 
 ---
 
@@ -153,8 +156,7 @@ Click **Connect**. The other tabs will populate with live data.
 ```
 <install-dir>/
 ├── bin/
-│   ├── virtbbs
-│   └── virtbbs-gui
+│   └── virtbbs
 ├── data/
 │   ├── virtbbs.db        # SQLite database (users, messages, conferences, files)
 │   └── host_key.pem      # SSH host key (auto-generated on first start)

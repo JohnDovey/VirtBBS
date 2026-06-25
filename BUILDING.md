@@ -2,34 +2,32 @@
 
 ## Prerequisites
 
-- Go 1.22+ (`go version`)
-- On macOS: Xcode command-line tools (`xcode-select --install`) — required by Fyne
-- On Linux: `libgl1-mesa-dev xorg-dev` packages
+- Go 1.22+ (`go version`) — builds the BBS server
+- .NET 8 SDK (`dotnet --version`) — builds/runs the sysop GUI
 
 ## Quick start
 
 ```bash
-# Fetch dependencies
+# Fetch Go dependencies
 go mod tidy
 
 # Build the BBS server (no cgo, cross-compiles cleanly)
 go build ./cmd/virtbbs
 
-# Build the sysop GUI (requires cgo on native platform for Fyne GL)
-go build ./cmd/virtbbs-gui
-
 # Run the BBS server
 ./virtbbs -config VirtBBS.DAT
 
-# Run the GUI (connect to localhost:9999 by default)
-./virtbbs-gui
+# Build/run the sysop GUI (.NET / Avalonia UI)
+cd gui-dotnet/VirtBBS.GUI
+dotnet build
+dotnet run
 ```
 
 ## Connecting
 
 - **Telnet**: `telnet localhost 2323`  (or SyncTerm, NetRunner, etc.)
 - **SSH**: `ssh -p 3232 username@localhost`
-- **Sysop GUI**: launch `virtbbs-gui`, set host/port/credentials in Settings tab
+- **Sysop GUI**: launch `VirtBBS.GUI` (`dotnet run` from `gui-dotnet/VirtBBS.GUI`), set host/port/credentials in the connection bar
 
 ## Importing from PCBoard 15.3
 
@@ -47,14 +45,14 @@ go build ./cmd/virtbbs-gui
 ## Cross-compilation
 
 ```bash
-# Windows (server only — no cgo)
+# Windows (server, no cgo)
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/virtbbs
 
 # Linux AMD64
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/virtbbs
-
-# GUI requires cgo — build natively on target platform
 ```
+
+The .NET GUI is cross-platform by default — `dotnet build`/`dotnet run` work unmodified on macOS, Linux, and Windows wherever the .NET 8 SDK is installed. Use `dotnet publish -r <rid> --self-contained` to produce a platform-specific standalone build (e.g. `-r osx-arm64`, `-r linux-x64`, `-r win-x64`).
 
 ## Default ports
 
