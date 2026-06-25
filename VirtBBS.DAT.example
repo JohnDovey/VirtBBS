@@ -1,0 +1,53 @@
+[network]
+  telnet_port = 2323
+  ssh_port = 3232
+  api_port = 9999
+  api_bind = "0.0.0.0"
+
+[paths]
+  db          = "data/virtbbs.db"
+  files       = "files"
+  logs        = "logs"
+  caller_log  = "logs/CALLERS.LOG"
+
+[sysop]
+  name = "Sysop"
+  # bcrypt hash of the sysop password — generate your own, do not commit a real hash.
+  password = ""
+
+[bbs]
+  name      = "My VirtBBS"
+  max_nodes = 10
+
+[session]
+  idle_timeout_mins  = 5
+  time_per_call_mins = 60
+  display_dir        = "display"
+  new_user_security  = 10
+
+[fido]
+  enabled      = false
+  address      = "1:1/1"
+  uplink       = ""
+  password     = ""
+  inbound_dir  = "fido/inbound"
+  outbound_dir = "fido/outbound"
+
+  # Map echomail area tags to VirtBBS conference IDs.
+  # Example:
+  #   FIDO_GENERAL     = 1
+  #   VIRTBBS_SUPPORT  = 2
+  [fido.areas]
+
+# ── Door Games ────────────────────────────────────────────────────────────────
+# Each [[doors]] section defines one door game.
+# drop_file can be "DOOR.SYS" (default) or "DORINFO1.DEF"
+# Example:
+#
+# [[doors]]
+#   name            = "Lord"
+#   description     = "Legend of the Red Dragon"
+#   cmd             = "/opt/doors/lord/lord"
+#   drop_file       = "DOOR.SYS"
+#   append_drop_file = true
+#   min_security    = 10

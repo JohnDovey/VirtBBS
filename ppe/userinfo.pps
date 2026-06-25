@@ -1,0 +1,25 @@
+; userinfo.pps — Display detailed user information
+; A practical PPE showing GETUSER, string functions, and formatted output
+
+GETUSER
+
+CLS
+PRINTLN "┌─────────────────────────────────────────────┐"
+PRINTLN "│              Your User Profile               │"
+PRINTLN "├─────────────────────────────────────────────┤"
+
+PROCEDURE ShowField(STRING label, STRING value)
+    PRINTLN "│  " + label + SPACE(12 - LEN(label)) + ": " + value + SPACE(27 - LEN(value)) + "│"
+ENDPROC
+
+ShowField "Name",     U_NAME
+ShowField "City",     U_CITY
+ShowField "Sec Level", STR(U_SEC)
+ShowField "Times On",  STR(U_TIMESON)
+ShowField "Node",      STR(NODENUM)
+ShowField "BBS",       BBSNAME
+
+PRINTLN "└─────────────────────────────────────────────┘"
+PRINTLN ""
+
+END

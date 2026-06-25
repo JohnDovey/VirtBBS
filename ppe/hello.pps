@@ -1,0 +1,75 @@
+; hello.pps — Simple VirtBBS PPE demo
+; Demonstrates: GETUSER, PRINT, PRINTLN, INPUT, IF/ENDIF, WHILE/WEND, FOR/NEXT
+
+GETUSER
+
+PRINTLN "╔══════════════════════════════════╗"
+PRINTLN "║        Hello from PPL!           ║"
+PRINTLN "╚══════════════════════════════════╝"
+PRINTLN ""
+PRINTLN "Welcome, " + U_NAME + "!"
+PRINTLN "You are calling from " + U_CITY
+PRINTLN "Your security level is " + STR(U_SEC)
+PRINTLN ""
+
+; Count to 5
+PRINTLN "Counting to 5:"
+FOR I = 1 TO 5
+    PRINT "  " + STR(I)
+NEXT
+PRINTLN ""
+PRINTLN ""
+
+; Simple menu loop
+BOOLEAN done
+done = FALSE
+
+WHILE NOT done
+    PRINTLN "What would you like to do?"
+    PRINTLN "  [1] See a joke"
+    PRINTLN "  [2] Guess a number"
+    PRINTLN "  [Q] Quit"
+    PRINTLN ""
+    INPUTSTR choice, "Your choice: "
+    choice = UPPER(choice)
+
+    IF choice = "1" THEN
+        PRINTLN ""
+        PRINTLN "Why do programmers prefer dark mode?"
+        DELAY 15
+        PRINTLN "Because light attracts bugs!"
+        PRINTLN ""
+    ELSEIF choice = "2" THEN
+        INTEGER secret
+        INTEGER guess
+        INTEGER tries
+        secret = RANDOM(10) + 1
+        tries = 0
+        PRINTLN ""
+        PRINTLN "I'm thinking of a number between 1 and 10..."
+        WHILE guess <> secret AND tries < 5
+            INPUTINT guess, "Your guess: "
+            tries = tries + 1
+            IF guess < secret THEN
+                PRINTLN "Too low!"
+            ELSEIF guess > secret THEN
+                PRINTLN "Too high!"
+            ELSE
+                PRINTLN "Correct! You got it in " + STR(tries) + " tries!"
+            ENDIF
+        WEND
+        IF guess <> secret THEN
+            PRINTLN "The number was " + STR(secret) + ". Better luck next time!"
+        ENDIF
+        PRINTLN ""
+    ELSEIF choice = "Q" THEN
+        done = TRUE
+    ELSE
+        PRINTLN "Invalid choice."
+    ENDIF
+WEND
+
+PRINTLN ""
+PRINTLN "Thanks for playing, " + U_NAME + "! Returning to main menu..."
+PRINTLN ""
+END

@@ -1,0 +1,27 @@
+# Local config (contains sysop password hash / fido credentials) — see VirtBBS.DAT.example
+/VirtBBS.DAT
+
+# Build artifacts
+/virtbbs
+/virtbbs-gui
+/releases/
+/updates/
+/update/
+
+# Go
+*.test
+*.out
+
+# .NET / Avalonia
+gui-dotnet/**/bin/
+gui-dotnet/**/obj/
+
+# Runtime data
+/data/*.db
+/data/*.pem
+/logs/*.log
+/logs/*.DAT
+
+# OS / editor
+.DS_Store
+*.swp

@@ -1,0 +1,390 @@
+// ============================================================================
+// VirtBBS — A modern BBS server inspired by PCBoard BBS
+//           (Clark Development Company, 1987-1996)
+//
+// Copyright (c) 2026 John Dovey <dovey.john@gmail.com>
+//
+// MIT License
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
+// Change History:
+//   v0.0.1  2026-06-24  Initial implementation
+//   v0.0.2  2026-06-24  Phase 10: Handler signatures updated to io.ReadWriteCloser
+//   v0.0.5  2026-06-24  Phase 12/14: doors config, CallerLog path from config
+// ============================================================================
+
+// virtbbs is the VirtBBS server — Telnet + SSH BBS with a built-in management API.
+package main
+
+import (
+	"bufio"
+	"database/sql"
+	"flag"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"strings"
+	"syscall"
+
+	"golang.org/x/crypto/bcrypt"
+	"golang.org/x/term"
+
+	_ "modernc.org/sqlite"
+
+	"github.com/virtbbs/virtbbs/internal/api"
+	"github.com/virtbbs/virtbbs/internal/callers"
+	"github.com/virtbbs/virtbbs/internal/conferences"
+	"github.com/virtbbs/virtbbs/internal/config"
+	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/files"
+	"github.com/virtbbs/virtbbs/internal/messages"
+	"github.com/virtbbs/virtbbs/internal/node"
+	"github.com/virtbbs/virtbbs/internal/session"
+	"github.com/virtbbs/virtbbs/internal/sshsrv"
+	"github.com/virtbbs/virtbbs/internal/telnet"
+	"github.com/virtbbs/virtbbs/internal/users"
+	"github.com/virtbbs/virtbbs/internal/version"
+)
+
+func main() {
+	cfgPath      := flag.String("config",        "VirtBBS.DAT", "path to VirtBBS.DAT")
+	initSysop    := flag.Bool("init-sysop",      false,         "create/reset sysop account and exit")
+	showVer      := flag.Bool("version",         false,         "print version and exit")
+	importCfg    := flag.String("import-config", "",            "import PCBOARD.DAT from this path and exit")
+	importUsers  := flag.String("import-users",  "",            "import PCBoard USERS binary from this path and exit")
+	importMsgs   := flag.String("import-msgs",   "",            "import PCBoard MSGS binary from this path and exit")
+	importMsgCon := flag.Int("import-msgs-conf", 0,             "target conference ID for --import-msgs (default 0)")
+	fidoToss          := flag.Bool("fido-toss",            false, "toss all inbound .PKT files and exit")
+	fidoScan          := flag.Bool("fido-scan",            false, "scan echo messages to outbound .PKT and exit")
+	importNodelist    := flag.String("import-nodelist",    "",    "import a NODELIST.xxx file (or dir) and exit")
+	importNodelistNet := flag.String("import-nodelist-net","FidoNet", "network name for --import-nodelist")
+	flag.Parse()
+
+	if *showVer {
+		fmt.Printf("VirtBBS %s\n", version.Version)
+		return
+	}
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		log.Fatalf("load config: %v", err)
+	}
+
+	// Ensure data directories exist
+	for _, dir := range []string{"data", cfg.Paths.Files, cfg.Paths.Logs} {
+		_ = os.MkdirAll(dir, 0755)
+	}
+
+	// Open shared SQLite database
+	db, err := sql.Open("sqlite", cfg.Paths.DB)
+	if err != nil {
+		log.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1) // SQLite single-writer
+
+	// Open stores
+	if err := os.MkdirAll("data", 0755); err != nil {
+		log.Fatalf("create data dir: %v", err)
+	}
+	userStore, err := users.Open(cfg.Paths.DB)
+	if err != nil {
+		log.Fatalf("users store: %v", err)
+	}
+	defer userStore.Close()
+
+	// ── One-shot import / fido commands ─────────────────────────────────────
+	if *initSysop {
+		if err := runInitSysop(cfg, userStore); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	if *importCfg != "" {
+		newCfg, err := config.ImportPCBoardDAT(*importCfg)
+		if err != nil {
+			log.Fatalf("import-config: %v", err)
+		}
+		// Preserve network/paths/sysop — only update BBS fields.
+		cfg.BBS.Name = newCfg.BBS.Name
+		cfg.BBS.MaxNodes = newCfg.BBS.MaxNodes
+		if newCfg.Sysop.Name != "" {
+			cfg.Sysop.Name = newCfg.Sysop.Name
+		}
+		if err := config.Save(cfg); err != nil {
+			log.Fatalf("save config: %v", err)
+		}
+		fmt.Printf("Imported config from %s — BBS name: %q, max nodes: %d\n",
+			*importCfg, cfg.BBS.Name, cfg.BBS.MaxNodes)
+		return
+	}
+
+	if *importUsers != "" {
+		imported, skipped, err := users.ImportUSERS(userStore, *importUsers)
+		if err != nil {
+			log.Fatalf("import-users: %v", err)
+		}
+		fmt.Printf("Imported %d users, skipped %d from %s\n", imported, skipped, *importUsers)
+		return
+	}
+
+	if *importMsgs != "" {
+		msgStore, err := messages.Open(cfg.Paths.DB)
+		if err != nil {
+			log.Fatalf("messages store: %v", err)
+		}
+		defer msgStore.Close()
+		imported, skipped, err := messages.ImportMSGS(msgStore, *importMsgCon, *importMsgs)
+		if err != nil {
+			log.Fatalf("import-msgs: %v", err)
+		}
+		fmt.Printf("Imported %d messages, skipped %d from %s into conference %d\n",
+			imported, skipped, *importMsgs, *importMsgCon)
+		return
+	}
+
+	if *fidoToss || *fidoScan {
+		msgStore, err := messages.Open(cfg.Paths.DB)
+		if err != nil {
+			log.Fatalf("messages store: %v", err)
+		}
+		defer msgStore.Close()
+		fidoCfg := &cfg.Fido
+
+		if *fidoToss {
+			result, err := fido.TossDir(fidoCfg, msgStore)
+			if err != nil {
+				log.Fatalf("fido-toss: %v", err)
+			}
+			fmt.Printf("Toss complete: %d packets, %d imported, %d skipped\n",
+				result.Packets, result.Imported, result.Skipped)
+			for _, e := range result.Errors {
+				fmt.Fprintln(os.Stderr, "  ERROR:", e)
+			}
+		}
+
+		if *fidoScan {
+			confStore, _ := conferences.Open(cfg.Paths.DB)
+			result, err := fido.ScanAll(fidoCfg, msgStore, confStore)
+			if confStore != nil {
+				confStore.Close()
+			}
+			if err != nil {
+				log.Fatalf("fido-scan: %v", err)
+			}
+			fmt.Printf("Scan complete: %d messages exported in %d PKT(s)\n",
+				result.Scanned, result.PKTFiles)
+			for _, e := range result.Errors {
+				fmt.Fprintln(os.Stderr, "  ERROR:", e)
+			}
+		}
+		return
+	}
+
+	if *importNodelist != "" {
+		msgStore, err := messages.Open(cfg.Paths.DB)
+		if err != nil {
+			log.Fatalf("messages store: %v", err)
+		}
+		defer msgStore.Close()
+		fmt.Printf("Importing nodelist from %s (network=%s)…\n", *importNodelist, *importNodelistNet)
+		result, err := fido.ImportFile(msgStore.DB(), *importNodelist, *importNodelistNet)
+		if err != nil {
+			log.Fatalf("import-nodelist: %v", err)
+		}
+		fmt.Printf("Done: %d inserted, %d skipped, %d errors\n",
+			result.Inserted, result.Skipped, len(result.Errors))
+		for _, e := range result.Errors {
+			fmt.Fprintln(os.Stderr, "  ERROR:", e)
+		}
+		return
+	}
+
+	msgStore, err := messages.Open(cfg.Paths.DB)
+	if err != nil {
+		log.Fatalf("messages store: %v", err)
+	}
+	defer msgStore.Close()
+
+	nodeStore, err := node.Open(db)
+	if err != nil {
+		log.Fatalf("node store: %v", err)
+	}
+
+	callerLogPath := cfg.Paths.CallerLog
+	if callerLogPath == "" {
+		callerLogPath = cfg.Paths.Logs + "/CALLERS.LOG"
+	}
+	callersLog, err := callers.Open(callerLogPath)
+	if err != nil {
+		log.Fatalf("callers log: %v", err)
+	}
+
+	fileStore, err := files.Open(cfg.Paths.DB, cfg.Paths.Files)
+	if err != nil {
+		log.Fatalf("files store: %v", err)
+	}
+	defer fileStore.Close()
+
+	confStore, err := conferences.Open(cfg.Paths.DB)
+	if err != nil {
+		log.Fatalf("conferences store: %v", err)
+	}
+	defer confStore.Close()
+
+	deps := session.Deps{
+		Users:       userStore,
+		Messages:    msgStore,
+		Nodes:       nodeStore,
+		Callers:     callersLog,
+		Files:       fileStore,
+		Conferences: confStore,
+	}
+
+	telnetHandler := func(rw io.ReadWriteCloser, remoteAddr string) {
+		session.Run(rw, remoteAddr, deps, true) // Telnet: server echoes
+	}
+	sshHandler := func(rw io.ReadWriteCloser, remoteAddr string) {
+		session.Run(rw, remoteAddr, deps, false) // SSH: PTY echoes
+	}
+
+	// Start Telnet server
+	go func() {
+		addr := fmt.Sprintf(":%d", cfg.Network.TelnetPort)
+		log.Printf("Telnet listening on %s", addr)
+		srv := &telnet.Server{Addr: addr, Handler: telnetHandler}
+		if err := srv.ListenAndServe(); err != nil {
+			log.Printf("Telnet error: %v", err)
+		}
+	}()
+
+	// Start SSH server
+	go func() {
+		addr := fmt.Sprintf(":%d", cfg.Network.SSHPort)
+		log.Printf("SSH listening on %s", addr)
+		srv := &sshsrv.Server{
+			Addr:        addr,
+			HostKeyFile: "data/host_key.pem",
+			ValidatePassword: func(user, pass string) bool {
+				_, err := userStore.Authenticate(user, pass)
+				return err == nil
+			},
+			Handler: sshHandler,
+		}
+		if err := srv.ListenAndServe(); err != nil {
+			log.Printf("SSH error: %v", err)
+		}
+	}()
+
+	// Start management API
+	apiAddr := fmt.Sprintf("%s:%d", cfg.Network.APIBind, cfg.Network.APIPort)
+	log.Printf("VirtBBS %s starting", version.Version)
+	log.Printf("Management API listening on %s", apiAddr)
+	apiDeps := api.Deps{
+		Users:       userStore,
+		Messages:    msgStore,
+		Nodes:       nodeStore,
+		Callers:     callersLog,
+		Conferences: confStore,
+	}
+	apiSrv := &api.Server{Addr: apiAddr, Deps: apiDeps}
+	log.Fatal(apiSrv.ListenAndServe())
+}
+
+// runInitSysop interactively creates or resets the sysop account and
+// writes the bcrypt password hash into VirtBBS.DAT.
+func runInitSysop(cfg *config.Config, store *users.Store) error {
+	sc := bufio.NewScanner(os.Stdin)
+
+	prompt := func(msg string) string {
+		fmt.Print(msg)
+		sc.Scan()
+		return strings.TrimSpace(sc.Text())
+	}
+
+	fmt.Println("=== VirtBBS First-Run Sysop Setup ===")
+	name := prompt("Sysop name [Sysop]: ")
+	if name == "" {
+		name = "Sysop"
+	}
+
+	fmt.Print("Password: ")
+	passBytes, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	if err != nil {
+		return fmt.Errorf("read password: %w", err)
+	}
+	fmt.Print("Confirm password: ")
+	pass2Bytes, err := term.ReadPassword(int(syscall.Stdin))
+	fmt.Println()
+	if err != nil {
+		return fmt.Errorf("read password: %w", err)
+	}
+	if string(passBytes) != string(pass2Bytes) {
+		return fmt.Errorf("passwords do not match")
+	}
+	if len(passBytes) == 0 {
+		return fmt.Errorf("password cannot be empty")
+	}
+	password := string(passBytes)
+
+	// Create or update the sysop user record in the DB
+	existing, _ := store.GetByName(name)
+	if existing != nil {
+		if err := store.SetPassword(existing.ID, password); err != nil {
+			return fmt.Errorf("update sysop password: %w", err)
+		}
+		existing.Sysop = true
+		existing.SecurityLevel = 110
+		if err := store.Update(existing); err != nil {
+			return fmt.Errorf("update sysop flags: %w", err)
+		}
+		fmt.Printf("Sysop account '%s' updated.\n", name)
+	} else {
+		u := &users.User{
+			Name:          name,
+			SecurityLevel: 110,
+			PageLength:    24,
+			XferProtocol:  "Z",
+			ANSI:          true,
+			Sysop:         true,
+		}
+		if err := store.Create(u, password); err != nil {
+			return fmt.Errorf("create sysop: %w", err)
+		}
+		fmt.Printf("Sysop account '%s' created.\n", name)
+	}
+
+	// Hash the password and store it in VirtBBS.DAT for the API
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	cfg.Sysop.Name = name
+	cfg.Sysop.PasswordHash = string(hash)
+	if err := config.Save(cfg); err != nil {
+		return fmt.Errorf("save VirtBBS.DAT: %w", err)
+	}
+	fmt.Println("VirtBBS.DAT updated with sysop credentials.")
+	fmt.Println("Setup complete — you can now start VirtBBS normally.")
+	return nil
+}
