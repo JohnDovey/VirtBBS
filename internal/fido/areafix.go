@@ -28,6 +28,9 @@
 //   v0.2.0  2026-06-25  Initial implementation — AreaFix responder (for downlink
 //                        subscription requests) and request generator (for
 //                        subscribing to our own uplink as a downlink)
+//   v0.3.0  2026-06-25  ProcessAreaFixRequest/replyAreaFix/areaFixTagExists take a
+//                        *NetworkDef instead of *Config, so the responder works for
+//                        any configured network, not just primary
 // ============================================================================
 
 package fido
@@ -158,15 +161,15 @@ func (a *AreaFixDB) AllDownlinkAddrs(network string) ([]string, error) {
 // and the password supplied as the first non-blank body line, applies any
 // +TAG/-TAG/%LIST/%QUERY/%HELP commands found in the remaining lines, and
 // writes an immediate netmail reply summarising the result.
-func ProcessAreaFixRequest(cfg *Config, db *sql.DB, confStore *conferences.Store, networkName string, pm *Message) error {
-	our := cfg.NodeAddr()
+func ProcessAreaFixRequest(nd *NetworkDef, db *sql.DB, confStore *conferences.Store, networkName string, pm *Message) error {
+	our := nd.NodeAddr()
 	if our == (Addr{}) {
-		return fmt.Errorf("areafix: invalid local address %q", cfg.Address)
+		return fmt.Errorf("areafix: invalid local address %q", nd.Address)
 	}
 
-	dl := cfg.DownlinkByAddr(pm.OrigAddr)
+	dl := nd.DownlinkByAddr(pm.OrigAddr)
 	if dl == nil {
-		return replyAreaFix(cfg, our, pm, "Unknown system — you are not configured as a downlink.\r\n")
+		return replyAreaFix(nd, our, pm, "Unknown system — you are not configured as a downlink.\r\n")
 	}
 
 	lines := strings.Split(strings.ReplaceAll(pm.Body, "\r\n", "\r"), "\r")
@@ -187,7 +190,7 @@ func ProcessAreaFixRequest(cfg *Config, db *sql.DB, confStore *conferences.Store
 					passwordOK = true
 					cmdLines = append(cmdLines, line)
 				} else {
-					return replyAreaFix(cfg, our, pm, "Invalid password.\r\n")
+					return replyAreaFix(nd, our, pm, "Invalid password.\r\n")
 				}
 			}
 			continue
@@ -195,7 +198,7 @@ func ProcessAreaFixRequest(cfg *Config, db *sql.DB, confStore *conferences.Store
 		cmdLines = append(cmdLines, line)
 	}
 	if !passwordOK {
-		return replyAreaFix(cfg, our, pm, "Invalid password.\r\n")
+		return replyAreaFix(nd, our, pm, "Invalid password.\r\n")
 	}
 
 	areafixDB := OpenAreaFixDB(db)
@@ -222,7 +225,7 @@ func ProcessAreaFixRequest(cfg *Config, db *sql.DB, confStore *conferences.Store
 			if tag == "" {
 				continue
 			}
-			if !areaFixTagExists(confStore, networkName, cfg, tag) {
+			if !areaFixTagExists(confStore, networkName, nd, tag) {
 				fmt.Fprintf(&out, "  +%-30s UNKNOWN AREA — not added\r\n", tag)
 				continue
 			}
@@ -249,19 +252,19 @@ func ProcessAreaFixRequest(cfg *Config, db *sql.DB, confStore *conferences.Store
 	out.WriteString("\r\n")
 	writeAreaFixQuery(&out, areafixDB, networkName, downlinkAddr)
 
-	return replyAreaFix(cfg, our, pm, out.String())
+	return replyAreaFix(nd, our, pm, out.String())
 }
 
 // areaFixTagExists reports whether tag is a valid, known echomail area —
 // either as a conference's EchoTag (preferred, via confStore) or in the
-// legacy cfg.Areas map.
-func areaFixTagExists(confStore *conferences.Store, networkName string, cfg *Config, tag string) bool {
+// legacy nd.Areas map.
+func areaFixTagExists(confStore *conferences.Store, networkName string, nd *NetworkDef, tag string) bool {
 	if confStore != nil {
 		if conf, err := confStore.GetByTag(tag, networkName); err == nil && conf != nil {
 			return true
 		}
 	}
-	_, ok := cfg.Areas[tag]
+	_, ok := nd.Areas[tag]
 	return ok
 }
 
@@ -311,8 +314,8 @@ func writeAreaFixHelp(out *strings.Builder) {
 
 // replyAreaFix writes an immediate netmail reply from the AreaFix robot
 // back to the requester, routed via the network's configured uplink.
-func replyAreaFix(cfg *Config, our Addr, pm *Message, body string) error {
-	uplink := cfg.UplinkAddr()
+func replyAreaFix(nd *NetworkDef, our Addr, pm *Message, body string) error {
+	uplink := nd.UplinkAddr()
 	if uplink == (Addr{}) {
 		return fmt.Errorf("areafix: no uplink configured to route reply")
 	}
@@ -324,8 +327,8 @@ func replyAreaFix(cfg *Config, our Addr, pm *Message, body string) error {
 		Subject:  "AreaFix response",
 		Body:     body,
 	}
-	outDir := OutboundDir(cfg.OutboundDir, uplink, false)
-	_, err := WritePKT(our, uplink, cfg.Password, outDir, []*NetmailMsg{reply})
+	outDir := OutboundDir(nd.OutboundDir, uplink, false)
+	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply})
 	return err
 }
 

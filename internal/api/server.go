@@ -38,7 +38,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -211,7 +210,8 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if !cfg.Fido.Enabled {
 			return nil, fmt.Errorf("FidoNet is not enabled")
 		}
-		result, err := fido.TossDir(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences)
+		primaryNet := cfg.Fido.AllNetworks()[0]
+		result, err := fido.TossDir(&primaryNet, s.Deps.Messages, s.Deps.Conferences)
 		if err != nil {
 			return nil, err
 		}
@@ -342,16 +342,8 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if nd == nil {
 			return nil, fmt.Errorf("network %q not found", p.Network)
 		}
-		// Gather outbound files.
-		var outFiles []string
-		entries, _ := os.ReadDir(nd.OutboundDir)
-		for _, e := range entries {
-			if !e.IsDir() {
-				outFiles = append(outFiles, nd.OutboundDir+"/"+e.Name())
-			}
-		}
-		result := fido.Poll(nd, outFiles, nd.InboundDir)
-		return result, result.Error
+		result := fido.PollAndToss(nd, s.Deps.Messages, s.Deps.Conferences)
+		return result, result.Poll.Error
 
 	case "fido.netmail.send":
 		var m fido.NetmailMsg

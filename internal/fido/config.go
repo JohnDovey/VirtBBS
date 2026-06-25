@@ -30,9 +30,12 @@
 //   v0.0.6  2026-06-24  Add NodelistPath, BinkpPort, Networks for multi-network support
 //   v0.1.0  2026-06-25  Add TaglinesFile for the configurable echomail tagline feature
 //   v0.2.0  2026-06-25  Add Downlinks + AreaFixPassword for the AreaFix responder/requester
+//   v0.3.0  2026-06-25  Add PollIntervalMins for the automatic poll/toss scheduler
 // ============================================================================
 
 package fido
+
+import "time"
 
 // Config holds all FidoNet settings for VirtBBS.
 // The top-level fields describe the primary (first) network.
@@ -62,6 +65,11 @@ type Config struct {
 	// AreaFixPassword is the password THIS BBS sends when requesting areas
 	// from its own uplink's AreaFix (i.e. when VirtBBS acts as a downlink).
 	AreaFixPassword string `toml:"areafix_password" json:"areafix_password"`
+
+	// PollIntervalMins overrides how often the scheduler automatically polls
+	// this network's uplink, in minutes. 0/unset means the scheduler default
+	// of 6 hours. Any positive value is clamped to a 5-minute minimum.
+	PollIntervalMins int `toml:"poll_interval_mins" json:"poll_interval_mins"`
 
 	// Networks lists additional FidoNet-compatible networks (LovlyNet, etc.).
 	// Each entry is a fully independent network with its own address space.
@@ -93,9 +101,10 @@ type NetworkDef struct {
 	// network's TaglinesFile in AllNetworks() if left blank.
 	TaglinesFile string `toml:"taglines_file" json:"taglines_file"`
 
-	// Downlinks/AreaFixPassword — see Config.Downlinks/Config.AreaFixPassword.
-	Downlinks       []Downlink `toml:"downlinks" json:"downlinks"`
-	AreaFixPassword string     `toml:"areafix_password" json:"areafix_password"`
+	// Downlinks/AreaFixPassword/PollIntervalMins — see the matching Config fields.
+	Downlinks        []Downlink `toml:"downlinks" json:"downlinks"`
+	AreaFixPassword  string     `toml:"areafix_password" json:"areafix_password"`
+	PollIntervalMins int        `toml:"poll_interval_mins" json:"poll_interval_mins"`
 }
 
 // DefaultConfig returns a Config with sensible disabled defaults.
@@ -168,8 +177,9 @@ func (c *Config) AllNetworks() []NetworkDef {
 		BinkpPort:       c.BinkpPort,
 		Areas:           c.Areas,
 		TaglinesFile:    c.TaglinesFile,
-		Downlinks:       c.Downlinks,
-		AreaFixPassword: c.AreaFixPassword,
+		Downlinks:        c.Downlinks,
+		AreaFixPassword:  c.AreaFixPassword,
+		PollIntervalMins: c.PollIntervalMins,
 	}
 	result := []NetworkDef{primary}
 	result = append(result, c.Networks...)
@@ -238,6 +248,28 @@ func (n *NetworkDef) Port() int {
 		return 24554
 	}
 	return n.BinkpPort
+}
+
+// DefaultPollInterval is how often the scheduler polls a network's uplink
+// when PollIntervalMins is unset (0).
+const DefaultPollInterval = 6 * time.Hour
+
+// MinPollInterval is the smallest poll interval the scheduler will honour,
+// regardless of what a sysop configures via PollIntervalMins.
+const MinPollInterval = 5 * time.Minute
+
+// EffectivePollInterval returns how often the scheduler should poll this
+// network's uplink: PollIntervalMins if set, clamped to a 5-minute minimum,
+// otherwise DefaultPollInterval (6 hours).
+func (n *NetworkDef) EffectivePollInterval() time.Duration {
+	if n.PollIntervalMins <= 0 {
+		return DefaultPollInterval
+	}
+	d := time.Duration(n.PollIntervalMins) * time.Minute
+	if d < MinPollInterval {
+		return MinPollInterval
+	}
+	return d
 }
 
 // DownlinkByAddr finds a configured Downlink by address (ignoring point),

@@ -957,7 +957,8 @@ func (s *session) sysopFidoMenu() {
 		switch cmd {
 		case "T":
 			s.writeln(ansi.Colorize(ansi.White, "Tossing inbound packets…"))
-			result, err := fido.TossDir(&cfg.Fido, s.deps.Messages, s.deps.Conferences)
+			primaryNet := cfg.Fido.AllNetworks()[0]
+			result, err := fido.TossDir(&primaryNet, s.deps.Messages, s.deps.Conferences)
 			if err != nil {
 				s.writeln(ansi.Colorize(ansi.Red, "Toss error: "+err.Error()))
 				continue
@@ -1310,34 +1311,21 @@ func (s *session) fidoPoll() {
 
 	s.writeln(ansi.Colorize(ansi.White, fmt.Sprintf("Polling %s uplink %s…", target.Name, target.Uplink)))
 
-	// Gather outbound PKT files.
-	var outFiles []string
-	entries, _ := os.ReadDir(target.OutboundDir)
-	for _, e := range entries {
-		if !e.IsDir() {
-			outFiles = append(outFiles, target.OutboundDir+"/"+e.Name())
-		}
-	}
-	s.writeln(ansi.Color(ansi.White) + fmt.Sprintf("  %d outbound file(s) to send.", len(outFiles)) + ansi.Reset())
-
-	result := fido.Poll(target, outFiles, target.InboundDir)
-	if result.Error != nil {
-		s.writeln(ansi.Colorize(ansi.Red, "Poll error: "+result.Error.Error()))
+	result := fido.PollAndToss(target, s.deps.Messages, s.deps.Conferences)
+	if result.Poll.Error != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Poll error: "+result.Poll.Error.Error()))
 		return
 	}
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
 		"Poll complete: sent %d, received %d file(s).",
-		len(result.Sent), len(result.Received))))
-	// Delete sent files.
-	for _, f := range result.Sent {
-		_ = os.Remove(target.OutboundDir + "/" + f)
-	}
-	// Toss received inbound.
-	if len(result.Received) > 0 {
-		s.writeln(ansi.Color(ansi.White) + "  Auto-tossing inbound…" + ansi.Reset())
-		tr, err := fido.TossDir(&cfg.Fido, s.deps.Messages, s.deps.Conferences)
-		if err == nil {
-			s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("  Tossed: %d imported.", tr.Imported)))
+		len(result.Poll.Sent), len(result.Poll.Received))))
+
+	if result.Toss != nil {
+		s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
+			"Auto-toss complete: %d packet(s), %d imported, %d skipped.",
+			result.Toss.Packets, result.Toss.Imported, result.Toss.Skipped)))
+		for _, e := range result.Toss.Errors {
+			s.writeln(ansi.Colorize(ansi.Red, "  Toss error: "+e))
 		}
 	}
 }

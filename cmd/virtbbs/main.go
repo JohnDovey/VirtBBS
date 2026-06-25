@@ -57,6 +57,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
+	"github.com/virtbbs/virtbbs/internal/scheduler"
 	"github.com/virtbbs/virtbbs/internal/session"
 	"github.com/virtbbs/virtbbs/internal/sshsrv"
 	"github.com/virtbbs/virtbbs/internal/telnet"
@@ -169,6 +170,7 @@ func main() {
 		}
 		defer msgStore.Close()
 		fidoCfg := &cfg.Fido
+		primaryNet := fidoCfg.AllNetworks()[0]
 
 		confStore, _ := conferences.Open(cfg.Paths.DB)
 		if confStore != nil {
@@ -176,7 +178,7 @@ func main() {
 		}
 
 		if *fidoToss {
-			result, err := fido.TossDir(fidoCfg, msgStore, confStore)
+			result, err := fido.TossDir(&primaryNet, msgStore, confStore)
 			if err != nil {
 				log.Fatalf("fido-toss: %v", err)
 			}
@@ -295,6 +297,12 @@ func main() {
 			log.Printf("SSH error: %v", err)
 		}
 	}()
+
+	// Start the automatic FidoNet poll/toss scheduler (one goroutine per
+	// enabled network with a configured uplink — see internal/scheduler).
+	if cfg.Fido.Enabled {
+		scheduler.Start(msgStore, confStore)
+	}
 
 	// Start management API
 	apiAddr := fmt.Sprintf("%s:%d", cfg.Network.APIBind, cfg.Network.APIPort)

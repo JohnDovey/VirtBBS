@@ -26,6 +26,8 @@
 //
 // Change History:
 //   v0.1.1  2026-06-25  Initial implementation — PING/PONG netmail test utility
+//   v0.3.0  2026-06-25  AutoRespondPing takes a *NetworkDef instead of *Config,
+//                        so it works for any configured network, not just primary
 // ============================================================================
 
 package fido
@@ -85,19 +87,19 @@ func BuildPongReply(our Addr, botName string, pm *Message) *NetmailMsg {
 // AutoRespondPing builds and writes a PONG reply PKT for an inbound PING
 // netmail pm, routed via the network's configured uplink. Called by the
 // toss pipeline whenever an inbound netmail's Subject is "PING".
-func AutoRespondPing(cfg *Config, pm *Message) error {
-	our := cfg.NodeAddr()
+func AutoRespondPing(nd *NetworkDef, pm *Message) error {
+	our := nd.NodeAddr()
 	if our == (Addr{}) {
-		return fmt.Errorf("cannot auto-reply to PING: invalid local address %q", cfg.Address)
+		return fmt.Errorf("cannot auto-reply to PING: invalid local address %q", nd.Address)
 	}
-	uplink := cfg.UplinkAddr()
+	uplink := nd.UplinkAddr()
 	if uplink == (Addr{}) {
 		return fmt.Errorf("cannot auto-reply to PING: no uplink configured")
 	}
 
 	reply := BuildPongReply(our, "VirtBBS PingBot", pm)
-	outDir := OutboundDir(cfg.OutboundDir, uplink, false)
-	_, err := WritePKT(our, uplink, cfg.Password, outDir, []*NetmailMsg{reply})
+	outDir := OutboundDir(nd.OutboundDir, uplink, false)
+	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply})
 	return err
 }
 

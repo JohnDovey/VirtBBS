@@ -2,7 +2,7 @@
 
 This guide covers every FidoNet setting in `VirtBBS.DAT`, how echomail/netmail
 routing works, how to add additional FidoNet-compatible networks, AreaFix,
-and the PING test utility. It covers VirtBBS **0.2.0**.
+and the PING test utility. It covers VirtBBS **0.3.0**.
 
 ---
 
@@ -37,6 +37,7 @@ All FidoNet settings live under the `[fido]` table in `VirtBBS.DAT`:
 | `binkp_port` | TCP port used when **polling** your uplink over BinkP. Defaults to `24554` if zero/unset. |
 | `taglines_file` | Optional path to a text file, one tagline per line. A random line is inserted above the tear line on every outgoing echomail message. Leave blank to disable. |
 | `areafix_password` | Password **we** send when requesting areas from **our own uplink's** AreaFix — see §8.4. |
+| `poll_interval_mins` | Overrides how often the automatic scheduler polls this network's uplink, in minutes. `0`/unset = 6 hours. Any value below 5 is clamped up to 5 — see §6.2. |
 | `[fido.areas]` | Maps echomail `AREA:` tags to local conference IDs — see §3. |
 | `[[fido.downlinks]]` | Systems that subscribe to our echomail areas via AreaFix — see §8.1. |
 
@@ -130,14 +131,52 @@ API.
 ## 6. Polling your uplink (BinkP)
 
 "Polling" connects to your uplink over BinkP, sends any outbound `.pkt`
-files, and receives anything waiting for you.
+files, and receives anything waiting for you. **Every poll is immediately
+followed by a toss of that network's inbound directory** — whether
+triggered manually, via the API, or by the automatic scheduler (§6.2) —
+so newly-received mail (and anything left over from a previous partial
+failure) is imported without a separate step. If the poll itself fails
+(can't connect, auth rejected, etc.) the toss is skipped for that attempt.
 
 Ways to trigger a poll:
 - **In-BBS:** Sysop menu → FidoNet → `[P]oll uplink`
 - **API:** `fido.poll` (params: `{"network": "<name>"}`, default network if blank)
+- **Automatically:** see §6.2
 
-Polling does **not** automatically toss what it receives — run `[T]oss
-inbound` (or `-fido-toss`) afterward to import newly-received packets.
+### 6.1 BinkP server — do we listen for incoming connections?
+
+**No.** VirtBBS's BinkP implementation is dial-out only — `Poll()` connects
+*to* your uplink; there is no listener accepting inbound BinkP connections
+on `binkp_port`. Practically, this means:
+
+- Your uplink must accept polls from you (the normal FidoNet model) — that works fine.
+- A downlink subscribed via AreaFix (§8) **cannot dial in to fetch its mail** from this BBS; nothing is listening to answer that call. Until a BinkP server is implemented, downlinks need some other way to receive the packets VirtBBS writes for them (e.g. you periodically copying files out-of-band, or the downlink's own system polling you over a different already-existing mechanism it supports).
+
+This is a real gap if you intend to feed echo areas to your own downlinks
+over BinkP specifically — let your sysop know if you'd like a BinkP server
+added; it's a separate, sizable feature (accepting connections, performing
+the receiving side of the M_NUL/M_ADR/M_PWD handshake, etc.) not yet built.
+
+### 6.2 Automatic scheduler
+
+VirtBBS automatically polls every **enabled network that has a configured
+uplink**, on a per-network schedule, with a toss immediately following each
+poll (see above) — no manual action required. This starts automatically
+when the server starts, as long as `[fido] enabled = true`.
+
+- **Default interval: every 6 hours**, for every qualifying network.
+- **Per-network override:** set `poll_interval_mins` under `[fido]` (primary network) or inside a `[[fido.networks]]` block, in minutes. Any value below 5 is clamped up to 5 — the scheduler will never poll more often than every 5 minutes.
+
+```toml
+[fido]
+  ...
+  poll_interval_mins = 30   # poll this network every 30 minutes instead of every 6 hours
+```
+
+Notes:
+- A network with no `uplink` configured, or with `enabled = false`, is skipped — it gets no scheduler goroutine.
+- Networks are detected once at server startup. A network added at runtime (e.g. via `config.update`) won't be scheduled until the server restarts; changes to an *existing* scheduled network's `enabled` flag, `uplink`, or `poll_interval_mins` take effect on that network's very next tick, no restart needed.
+- Scheduler activity (poll/toss results, errors) is written to the server's standard log output, prefixed `fido scheduler: <network name>`.
 
 ---
 
@@ -324,9 +363,10 @@ lookup + immediate send).
   inbound_dir      = "fido/inbound"     # where toss reads .pkt files from
   outbound_dir     = "fido/outbound"    # where scan/netmail writes .pkt files to
   nodelist_dir     = "fido/nodelist"    # NODELIST.* files for address lookups
-  binkp_port       = 24554              # BinkP port used when polling
-  taglines_file    = ""                 # optional taglines, one per line
-  areafix_password = ""                 # password WE send to OUR uplink's AreaFix
+  binkp_port         = 24554            # BinkP port used when polling
+  taglines_file      = ""               # optional taglines, one per line
+  areafix_password   = ""               # password WE send to OUR uplink's AreaFix
+  poll_interval_mins = 0                # 0 = scheduler default (6h); else clamped to >=5
 
   [fido.areas]                       # AREA: tag → conference ID (inbound routing)
     TAG_NAME = 1
@@ -337,17 +377,18 @@ lookup + immediate send).
     password = "letmein"
 
 [[fido.networks]]                    # zero or more additional networks
-  name             = "NetworkName"
-  enabled          = true
-  address          = "..."
-  uplink           = "..."
-  password         = ""
-  inbound_dir      = "..."
-  outbound_dir     = "..."
-  nodelist_dir     = "..."
-  binkp_port       = 24554
-  taglines_file    = ""
-  areafix_password = ""
+  name               = "NetworkName"
+  enabled            = true
+  address            = "..."
+  uplink             = "..."
+  password           = ""
+  inbound_dir        = "..."
+  outbound_dir       = "..."
+  nodelist_dir       = "..."
+  binkp_port         = 24554
+  taglines_file      = ""
+  areafix_password   = ""
+  poll_interval_mins = 0
 
   [fido.networks.areas]
     TAG_NAME = 3

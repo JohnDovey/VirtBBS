@@ -58,6 +58,15 @@
 //                        scan-time fan-out of echomail to subscribed downlinks alongside the
 //                        normal uplink packet; new [[fido.downlinks]]/areafix_password config and
 //                        a sysop "AreaFix" submenu for managing downlinks and upstream requests
+//   v0.3.0  2026-06-25  Automatic FidoNet poll/toss scheduler: every enabled network with a
+//                        configured uplink is polled automatically (default every 6 hours,
+//                        per-network override via poll_interval_mins, clamped to a 5-minute
+//                        minimum), with a toss immediately following every poll — manual,
+//                        API, and scheduled — via the new fido.PollAndToss. TossDir/TossFile,
+//                        AutoRespondPing, and the AreaFix responder now take a *NetworkDef
+//                        instead of *Config, so any configured network can be tossed, not
+//                        just primary. No BinkP server exists (dial-out only) — documented
+//                        as a known limitation in FidoNet Config.md §6.1.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -68,4 +77,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.2.0"
+const Version = "0.3.0"

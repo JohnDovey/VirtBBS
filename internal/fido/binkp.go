@@ -26,6 +26,9 @@
 //
 // Change History:
 //   v0.0.6  2026-06-24  Initial implementation — BinkP TCP client (RFC draft-ietf-fido-binkp)
+//   v0.3.0  2026-06-25  Add PollAndToss, combining a poll with an automatic toss of
+//                        whatever was received, for the scheduler and sysop/API poll
+//                        commands to share
 // ============================================================================
 
 // Package fido — binkp.go
@@ -53,6 +56,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/virtbbs/virtbbs/internal/conferences"
+	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
 // BinkP command bytes.
@@ -151,6 +157,48 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string) *PollResult
 	// Final EOB / BYE exchange.
 	_ = bp.sendCmd(bpM_EOB, "")
 	return res
+}
+
+// PollAndTossResult combines a BinkP poll outcome with the toss that
+// automatically follows it.
+type PollAndTossResult struct {
+	Poll *PollResult
+	Toss *TossResult // nil if the poll itself failed, so nothing was tossed
+}
+
+// PollAndToss gathers nd's outbound files, polls its uplink, deletes any
+// successfully-sent files, and then — regardless of whether anything new
+// was received this time — tosses nd's inbound directory, so any mail
+// left over from a previous partial failure is also picked up.
+//
+// This is the single entry point shared by the sysop "[P]oll uplink" menu,
+// the "fido.poll" management API, and the automatic scheduler, so all three
+// behave identically.
+func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.Store) *PollAndTossResult {
+	var outFiles []string
+	entries, _ := os.ReadDir(nd.OutboundDir)
+	for _, e := range entries {
+		if !e.IsDir() {
+			outFiles = append(outFiles, filepath.Join(nd.OutboundDir, e.Name()))
+		}
+	}
+
+	pollResult := Poll(nd, outFiles, nd.InboundDir)
+	result := &PollAndTossResult{Poll: pollResult}
+	if pollResult.Error != nil {
+		return result
+	}
+
+	for _, f := range pollResult.Sent {
+		_ = os.Remove(filepath.Join(nd.OutboundDir, f))
+	}
+
+	tossResult, err := TossDir(nd, store, confStore)
+	if err != nil {
+		tossResult = &TossResult{Errors: []string{err.Error()}}
+	}
+	result.Toss = tossResult
+	return result
 }
 
 // ─── Internal BinkP connection ─────────────────────────────────────────────────

@@ -31,6 +31,9 @@
 //   v0.1.1  2026-06-25  Auto-respond to inbound PING netmail with a PONG reply
 //   v0.2.0  2026-06-25  Route netmail addressed to "AreaFix" to the AreaFix
 //                        responder instead of normal storage
+//   v0.3.0  2026-06-25  TossDir/TossFile now take a *NetworkDef instead of
+//                        *Config, so any configured network can be tossed
+//                        (not just the primary) — needed by the scheduler
 // ============================================================================
 
 package fido
@@ -49,9 +52,9 @@ import (
 	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
-// PrimaryNetworkName is the network name toss.go and AreaFix use for the
-// primary network (toss.go only processes the primary network's inbound
-// directory — see FidoNet Config.md §6 for multi-network limitations).
+// PrimaryNetworkName is the network name AllNetworks() always assigns to
+// the primary (top-level [fido]) network. Used by call sites that are not
+// (yet) network-aware, such as the AreaFix downlink admin menu.
 const PrimaryNetworkName = "FidoNet"
 
 // TossResult summarises the outcome of a toss run.
@@ -62,25 +65,25 @@ type TossResult struct {
 	Errors   []string
 }
 
-// TossDir reads every .PKT file in cfg.InboundDir, imports all recognised
+// TossDir reads every .PKT file in nd.InboundDir, imports all recognised
 // echomail messages, and moves processed packets to <inbound>/.tossed/.
-// confStore may be nil (AreaFix's %LIST falls back to cfg.Areas and area
+// confStore may be nil (AreaFix's %LIST falls back to nd.Areas and area
 // validation is skipped for tag existence checks).
-func TossDir(cfg *Config, store *messages.Store, confStore *conferences.Store) (*TossResult, error) {
-	if !cfg.Enabled {
-		return nil, fmt.Errorf("FidoNet is disabled in config")
+func TossDir(nd *NetworkDef, store *messages.Store, confStore *conferences.Store) (*TossResult, error) {
+	if !nd.Enabled {
+		return nil, fmt.Errorf("network %s is disabled", nd.Name)
 	}
-	if err := os.MkdirAll(cfg.InboundDir, 0755); err != nil {
+	if err := os.MkdirAll(nd.InboundDir, 0755); err != nil {
 		return nil, err
 	}
-	tossed := filepath.Join(cfg.InboundDir, ".tossed")
+	tossed := filepath.Join(nd.InboundDir, ".tossed")
 	if err := os.MkdirAll(tossed, 0755); err != nil {
 		return nil, err
 	}
 
 	result := &TossResult{}
 
-	entries, err := os.ReadDir(cfg.InboundDir)
+	entries, err := os.ReadDir(nd.InboundDir)
 	if err != nil {
 		return nil, fmt.Errorf("read inbound dir: %w", err)
 	}
@@ -93,8 +96,8 @@ func TossDir(cfg *Config, store *messages.Store, confStore *conferences.Store) (
 			continue
 		}
 
-		pktPath := filepath.Join(cfg.InboundDir, e.Name())
-		imp, skip, errs := tossFile(cfg, store, confStore, pktPath)
+		pktPath := filepath.Join(nd.InboundDir, e.Name())
+		imp, skip, errs := tossFile(nd, store, confStore, pktPath)
 		result.Packets++
 		result.Imported += imp
 		result.Skipped += skip
@@ -108,11 +111,11 @@ func TossDir(cfg *Config, store *messages.Store, confStore *conferences.Store) (
 }
 
 // TossFile processes a single .PKT file, importing its messages.
-func TossFile(cfg *Config, store *messages.Store, confStore *conferences.Store, pktPath string) (imported, skipped int, errs []string) {
-	return tossFile(cfg, store, confStore, pktPath)
+func TossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, pktPath string) (imported, skipped int, errs []string) {
+	return tossFile(nd, store, confStore, pktPath)
 }
 
-func tossFile(cfg *Config, store *messages.Store, confStore *conferences.Store, pktPath string) (imported, skipped int, errs []string) {
+func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, pktPath string) (imported, skipped int, errs []string) {
 	f, err := os.Open(pktPath)
 	if err != nil {
 		errs = append(errs, fmt.Sprintf("%s: %v", pktPath, err))
@@ -139,7 +142,7 @@ func tossFile(cfg *Config, store *messages.Store, confStore *conferences.Store, 
 			// only matches "PING" exactly, so a PONG reaching us here never
 			// triggers another reply — no loop-guard needed beyond that.
 			if IsPing(pm.Subject) {
-				if err := AutoRespondPing(cfg, pm); err != nil {
+				if err := AutoRespondPing(nd, pm); err != nil {
 					errs = append(errs, fmt.Sprintf("ping auto-reply: %v", err))
 				}
 			}
@@ -148,12 +151,12 @@ func tossFile(cfg *Config, store *messages.Store, confStore *conferences.Store, 
 			// stored as ordinary netmail below, so the sysop can audit
 			// what downlinks have requested.
 			if IsAreaFixRequest(pm.ToName) {
-				if err := ProcessAreaFixRequest(cfg, store.DB(), confStore, PrimaryNetworkName, pm); err != nil {
+				if err := ProcessAreaFixRequest(nd, store.DB(), confStore, nd.Name, pm); err != nil {
 					errs = append(errs, fmt.Sprintf("areafix: %v", err))
 				}
 			}
 		} else {
-			confID = cfg.ConferenceForArea(area)
+			confID = nd.ConferenceForArea(area)
 			if confID < 0 {
 				skipped++
 				continue // unknown area
