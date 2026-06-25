@@ -26,6 +26,7 @@
 //
 // Change History:
 //   v0.0.6  2026-06-24  Initial implementation — netmail compose, route, PKT write
+//   v0.1.0  2026-06-25  Add TZUTC kludge (FTS-4001) to outbound netmail
 // ============================================================================
 
 // Package fido — netmail.go
@@ -46,7 +47,6 @@ package fido
 
 import (
 	"database/sql"
-	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -151,113 +151,36 @@ func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailM
 	}
 	defer f.Close()
 
-	// ── PKT header (58 bytes, FTS-0001 §2.2) ─────────────────────────────────
-	now := time.Now()
-	hdr := make([]byte, 58)
-
-	le := binary.LittleEndian
-	le.PutUint16(hdr[0:], uint16(origAddr.Node))
-	le.PutUint16(hdr[2:], uint16(destAddr.Node))
-	le.PutUint16(hdr[4:], uint16(now.Year()))
-	hdr[6] = byte(now.Month() - 1) // month 0-based
-	hdr[7] = byte(now.Day())
-	hdr[8] = byte(now.Hour())
-	hdr[9] = byte(now.Minute())
-	hdr[10] = byte(now.Second())
-	// hdr[11] padding
-	le.PutUint16(hdr[12:], 0)                // baud = 0
-	le.PutUint16(hdr[14:], 2)                // packet type 2
-	le.PutUint16(hdr[16:], uint16(origAddr.Net))
-	le.PutUint16(hdr[18:], uint16(destAddr.Net))
-
-	// Password (8 bytes, padded with nulls).
-	pw := []byte(password)
-	if len(pw) > 8 {
-		pw = pw[:8]
-	}
-	copy(hdr[20:28], pw)
-
-	le.PutUint16(hdr[28:], uint16(origAddr.Zone))
-	le.PutUint16(hdr[30:], uint16(destAddr.Zone))
-
-	// Product code, serial, capability — all zero is fine for a basic PKT.
-	// hdr[32..57] zeroed
-
-	if _, err := f.Write(hdr); err != nil {
-		return "", err
-	}
-
-	// ── Message records ───────────────────────────────────────────────────────
+	// Convert netmail messages to the shared Message type and write them
+	// using the same FTS-0001 record layout as echomail (WritePacket).
+	pktMsgs := make([]*Message, 0, len(msgs))
 	for _, m := range msgs {
 		from, _ := ParseAddr(m.FromAddr)
 		to, _ := ParseAddr(m.ToAddr)
-		if err := writeMsgRecord(f, m, from, to, origAddr.Zone); err != nil {
-			return "", err
+
+		// Attribute: Private (0x0002) always set for netmail; Crash (0x0100) if flagged.
+		attr := uint16(AttribPrivate)
+		if m.Crash {
+			attr |= AttribCrash
 		}
+
+		pktMsgs = append(pktMsgs, &Message{
+			OrigAddr: from,
+			DestAddr: to,
+			DateTime: time.Now().Format("02 Jan 06  15:04:05"),
+			ToName:   m.ToName,
+			FromName: m.FromName,
+			Subject:  m.Subject,
+			Body:     buildBody(m, from, to, origAddr.Zone),
+			Attrib:   attr,
+		})
 	}
 
-	// End-of-packet marker: 0x0000
-	if _, err := f.Write([]byte{0, 0}); err != nil {
+	if err := WritePacket(f, origAddr, destAddr, password, pktMsgs); err != nil {
 		return "", err
 	}
 
 	return path, nil
-}
-
-// writeMsgRecord writes one FTS-0001 message record.
-// Record layout:
-//   uint16  type       = 2
-//   uint16  origNode
-//   uint16  destNode
-//   uint16  origNet
-//   uint16  destNet
-//   uint16  attribute flags
-//   uint16  cost
-//   [20]byte dateTime  (ASCII, like "Tue 24 Jun 2026 12:00:00")
-//   NUL-terminated: toName, fromName, subject, body
-func writeMsgRecord(w *os.File, m *NetmailMsg, from, to Addr, localZone int) error {
-	le := binary.LittleEndian
-	rec := make([]byte, 14)
-	le.PutUint16(rec[0:], 2)                   // message type
-	le.PutUint16(rec[2:], uint16(from.Node))
-	le.PutUint16(rec[4:], uint16(to.Node))
-	le.PutUint16(rec[6:], uint16(from.Net))
-	le.PutUint16(rec[8:], uint16(to.Net))
-
-	// Attribute: Private (0x0002) always set for netmail; Crash (0x0100) if flagged.
-	attr := uint16(0x0002)
-	if m.Crash {
-		attr |= 0x0100
-	}
-	le.PutUint16(rec[10:], attr)
-	le.PutUint16(rec[12:], 0) // cost
-
-	if _, err := w.Write(rec); err != nil {
-		return err
-	}
-
-	// Date/time: 20 bytes, "DD Mmm YY  HH:MM:SS"
-	dt := time.Now().Format("02 Jan 06  15:04:05")
-	dtBuf := make([]byte, 20)
-	copy(dtBuf, dt)
-	if _, err := w.Write(dtBuf); err != nil {
-		return err
-	}
-
-	// NUL-terminated strings.
-	for _, s := range []string{m.ToName, m.FromName, m.Subject} {
-		if _, err := w.Write(append([]byte(s), 0)); err != nil {
-			return err
-		}
-	}
-
-	// Body: include KLUDGE lines for zone addressing if cross-zone.
-	body := buildBody(m, from, to, localZone)
-	if _, err := w.Write(append([]byte(body), 0)); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // buildBody prepends FTS KLUDGE lines and MSGID to the body.
@@ -267,6 +190,9 @@ func buildBody(m *NetmailMsg, from, to Addr, localZone int) string {
 	// MSGID kludge
 	msgID := fmt.Sprintf("\x01MSGID: %s %08X\r\n", m.FromAddr, time.Now().UnixNano()&0xFFFFFFFF)
 	sb.WriteString(msgID)
+
+	// TZUTC kludge (FTS-4001): local UTC offset at composition time, e.g. "+0200".
+	sb.WriteString(fmt.Sprintf("\x01TZUTC: %s\r\n", time.Now().Format("-0700")))
 
 	// INTL kludge: required when source/dest zones differ or either is non-local.
 	if from.Zone != to.Zone || from.Zone != localZone {

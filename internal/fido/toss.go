@@ -26,6 +26,11 @@
 //
 // Change History:
 //   v0.0.3  2026-06-24  Phase 9: FidoNet toss — import .PKT into message store
+//   v0.1.0  2026-06-25  Use Parse() to preserve MSGID/SEEN-BY/PATH/origin metadata
+//                        instead of discarding it; dedupe inbound messages by MSGID
+//   v0.1.1  2026-06-25  Auto-respond to inbound PING netmail with a PONG reply
+//   v0.2.0  2026-06-25  Route netmail addressed to "AreaFix" to the AreaFix
+//                        responder instead of normal storage
 // ============================================================================
 
 package fido
@@ -40,8 +45,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/messages"
 )
+
+// PrimaryNetworkName is the network name toss.go and AreaFix use for the
+// primary network (toss.go only processes the primary network's inbound
+// directory — see FidoNet Config.md §6 for multi-network limitations).
+const PrimaryNetworkName = "FidoNet"
 
 // TossResult summarises the outcome of a toss run.
 type TossResult struct {
@@ -53,7 +64,9 @@ type TossResult struct {
 
 // TossDir reads every .PKT file in cfg.InboundDir, imports all recognised
 // echomail messages, and moves processed packets to <inbound>/.tossed/.
-func TossDir(cfg *Config, store *messages.Store) (*TossResult, error) {
+// confStore may be nil (AreaFix's %LIST falls back to cfg.Areas and area
+// validation is skipped for tag existence checks).
+func TossDir(cfg *Config, store *messages.Store, confStore *conferences.Store) (*TossResult, error) {
 	if !cfg.Enabled {
 		return nil, fmt.Errorf("FidoNet is disabled in config")
 	}
@@ -81,7 +94,7 @@ func TossDir(cfg *Config, store *messages.Store) (*TossResult, error) {
 		}
 
 		pktPath := filepath.Join(cfg.InboundDir, e.Name())
-		imp, skip, errs := tossFile(cfg, store, pktPath)
+		imp, skip, errs := tossFile(cfg, store, confStore, pktPath)
 		result.Packets++
 		result.Imported += imp
 		result.Skipped += skip
@@ -95,11 +108,11 @@ func TossDir(cfg *Config, store *messages.Store) (*TossResult, error) {
 }
 
 // TossFile processes a single .PKT file, importing its messages.
-func TossFile(cfg *Config, store *messages.Store, pktPath string) (imported, skipped int, errs []string) {
-	return tossFile(cfg, store, pktPath)
+func TossFile(cfg *Config, store *messages.Store, confStore *conferences.Store, pktPath string) (imported, skipped int, errs []string) {
+	return tossFile(cfg, store, confStore, pktPath)
 }
 
-func tossFile(cfg *Config, store *messages.Store, pktPath string) (imported, skipped int, errs []string) {
+func tossFile(cfg *Config, store *messages.Store, confStore *conferences.Store, pktPath string) (imported, skipped int, errs []string) {
 	f, err := os.Open(pktPath)
 	if err != nil {
 		errs = append(errs, fmt.Sprintf("%s: %v", pktPath, err))
@@ -114,17 +127,50 @@ func tossFile(cfg *Config, store *messages.Store, pktPath string) (imported, ski
 	}
 
 	for _, pm := range msgs {
-		area := pm.AreaTag()
+		pb := pm.Parse()
+		area := pb.AreaTag
 
 		var confID int
 		if area == "" {
 			// NetMail — route to conference 0 (General) addressed to the recipient.
 			confID = 0
+
+			// Auto-respond to PING test messages with a PONG reply. IsPing
+			// only matches "PING" exactly, so a PONG reaching us here never
+			// triggers another reply — no loop-guard needed beyond that.
+			if IsPing(pm.Subject) {
+				if err := AutoRespondPing(cfg, pm); err != nil {
+					errs = append(errs, fmt.Sprintf("ping auto-reply: %v", err))
+				}
+			}
+
+			// AreaFix requests are handled by the responder and still
+			// stored as ordinary netmail below, so the sysop can audit
+			// what downlinks have requested.
+			if IsAreaFixRequest(pm.ToName) {
+				if err := ProcessAreaFixRequest(cfg, store.DB(), confStore, PrimaryNetworkName, pm); err != nil {
+					errs = append(errs, fmt.Sprintf("areafix: %v", err))
+				}
+			}
 		} else {
 			confID = cfg.ConferenceForArea(area)
 			if confID < 0 {
 				skipped++
 				continue // unknown area
+			}
+		}
+
+		// Idempotency: skip if this exact message (by MSGID) was already
+		// imported into this conference. Guards against re-processing the
+		// same .PKT twice, e.g. a crash between import and moving the file
+		// to .tossed/.
+		if pb.MSGID != "" {
+			exists, err := store.HasFidoMsgID(confID, pb.MSGID)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("dedupe check: %v", err))
+			} else if exists {
+				skipped++
+				continue
 			}
 		}
 
@@ -139,7 +185,11 @@ func tossFile(cfg *Config, store *messages.Store, pktPath string) (imported, ski
 			DatePosted:   posted,
 			Status:       "A",
 			Echo:         area != "",
-			Body:         pm.CleanBody(),
+			Body:         pb.Text,
+			FidoMsgID:    pb.MSGID,
+			FidoSeenBy:   strings.Join(pb.SeenBy, " "),
+			FidoPath:     strings.Join(pb.Path, " "),
+			FidoOrigin:   pm.OrigAddr.String(),
 		}
 		if err := store.Post(m); err != nil {
 			errs = append(errs, fmt.Sprintf("insert: %v", err))

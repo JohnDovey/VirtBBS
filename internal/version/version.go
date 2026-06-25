@@ -41,6 +41,23 @@
 //   v0.0.8  2026-06-25  Replaced the Fyne sysop GUI with a .NET/Avalonia UI console; ANSI banner
 //                        font now supports the apostrophe (') character; bumped golang.org/x/crypto
 //                        and Go toolchain to clear Dependabot vulnerabilities
+//   v0.1.0  2026-06-25  FidoNet message formatting: TZUTC kludge (netmail+echomail), standard
+//                        tear line + Origin line replacing the non-standard \x01ORIGIN kludge,
+//                        configurable echomail taglines, SEEN-BY/PATH construction and parsing
+//                        with inbound merge-on-relay, MSGID-based toss dedupe, and a fix for the
+//                        echomail resend-loop bug (messages are now marked exported and only
+//                        written to a given uplink's PKT once)
+//   v0.1.1  2026-06-25  Fix garbled box-drawing/special characters in SyncTerm and other CP437
+//                        terminals by translating UTF-8 output to CP437 at every I/O funnel
+//                        (session, editor, PPL); implement the FidoNet PING/PONG netmail test
+//                        convention with automatic reply on toss and a sysop "Ping a node" menu
+//                        option; add FidoNet Config.md documenting all [fido] settings
+//   v0.2.0  2026-06-25  Implement AreaFix: responder for downlink subscribe/unsubscribe netmail
+//                        requests (+TAG/-TAG/%LIST/%QUERY/%HELP) with automatic reply during toss,
+//                        a request generator for subscribing to our own uplink's AreaFix, and
+//                        scan-time fan-out of echomail to subscribed downlinks alongside the
+//                        normal uplink packet; new [[fido.downlinks]]/areafix_password config and
+//                        a sysop "AreaFix" submenu for managing downlinks and upstream requests
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -51,4 +68,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.0.8"
+const Version = "0.2.0"

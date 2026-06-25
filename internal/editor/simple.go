@@ -17,6 +17,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/virtbbs/virtbbs/internal/ansi"
 )
 
 // runSimple implements the traditional PCBoard-style line-by-line editor.
@@ -147,7 +149,9 @@ func readLine(rw io.ReadWriter) string {
 	return string(buf)
 }
 
-// writeStr writes a string to rw, ignoring errors.
+// writeStr writes a string to rw, ignoring errors. Box-drawing and other
+// special Unicode characters are translated to CP437 so classic BBS
+// terminals (SyncTerm, etc.) render them correctly instead of as garbage.
 func writeStr(w io.Writer, s string) {
-	_, _ = io.WriteString(w, s)
+	_, _ = io.WriteString(w, ansi.ToCP437(s))
 }

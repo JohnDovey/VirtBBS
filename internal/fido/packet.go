@@ -26,6 +26,8 @@
 //
 // Change History:
 //   v0.0.3  2026-06-24  Phase 9: FTS-0001 .PKT reader/writer
+//   v0.1.0  2026-06-25  Add Parse() — unified kludge/AREA/SEEN-BY/PATH extraction
+//                        replacing the separate AreaTag()/CleanBody() helpers
 // ============================================================================
 
 package fido
@@ -77,38 +79,78 @@ type Message struct {
 	FromName string
 	Subject  string
 	Body     string // full body including AREA: line for echomail
+	Attrib   uint16 // attribute flags (e.g. Private 0x0002, Crash 0x0100)
+	Cost     uint16
 
 	// Derived fields set by the toss step:
 	Area     string // echomail area tag (from "AREA: <tag>" kludge line)
 	IsEcho   bool   // true if body contains AREA: kludge
 }
 
+// Attribute flag bits for Message.Attrib (FTS-0001 §3.6).
+const (
+	AttribPrivate = 0x0002
+	AttribCrash   = 0x0100
+)
+
 // AreaTag returns the echomail area tag from the message body, or "" for netmail.
+//
+// Deprecated: use Parse().AreaTag, which extracts all metadata in one pass.
 func (m *Message) AreaTag() string {
-	for _, line := range strings.Split(m.Body, "\r") {
-		line = strings.TrimRight(line, "\n")
-		if strings.HasPrefix(line, "AREA:") {
-			return strings.TrimSpace(line[5:])
-		}
-	}
-	return ""
+	return m.Parse().AreaTag
 }
 
-// CleanBody returns the message body with kludge lines (^A...) removed
-// and the AREA: line stripped.
+// CleanBody returns the message body with kludge lines (^A...), the AREA:
+// line, and SEEN-BY: lines removed, leaving only the text a reader should
+// see — including the tear line ("--- ...") and Origin line ("* Origin:
+// ..."), which are NOT kludges and are conventionally shown to end users.
+//
+// Deprecated: use Parse().Text, which extracts all metadata in one pass.
 func (m *Message) CleanBody() string {
-	var out []string
+	return m.Parse().Text
+}
+
+// ParsedBody holds everything extracted from a raw FTS-0001 message body:
+// the AREA: tag, FidoNet metadata kludges/lines, and the clean reader-facing
+// text (kludges, AREA:, and SEEN-BY: stripped; tear/Origin lines kept).
+type ParsedBody struct {
+	AreaTag string   // echomail area tag from "AREA:<tag>", "" for netmail
+	MSGID   string   // value of the ^AMSGID kludge, "" if absent
+	SeenBy  []string // net/node tokens collected from all SEEN-BY: lines
+	Path    []string // net/node tokens collected from the ^APATH kludge
+	Text    string   // reader-facing body (kludges/AREA/SEEN-BY stripped)
+}
+
+// Parse extracts the AREA: tag, MSGID/PATH FidoNet metadata, and SEEN-BY
+// node list from the raw message body in a single pass, returning the
+// remaining reader-facing text separately. Kludge lines (^A-prefixed),
+// the AREA: line, and SEEN-BY: lines are removed from Text; the tear line
+// and Origin line are left in Text since real FidoNet readers show them.
+func (m *Message) Parse() ParsedBody {
+	var pb ParsedBody
+	var text []string
+
 	for _, line := range strings.Split(m.Body, "\r") {
 		line = strings.TrimRight(line, "\n")
-		if strings.HasPrefix(line, "\x01") { // ^A = kludge
-			continue
+
+		switch {
+		case strings.HasPrefix(line, "\x01MSGID:"):
+			pb.MSGID = strings.TrimSpace(strings.TrimPrefix(line, "\x01MSGID:"))
+		case strings.HasPrefix(line, "\x01PATH:"):
+			pb.Path = append(pb.Path, strings.Fields(strings.TrimPrefix(line, "\x01PATH:"))...)
+		case strings.HasPrefix(line, "\x01"):
+			// Other kludges (INTL, FMPT, TOPT, TZUTC, etc.) — hidden from readers.
+		case strings.HasPrefix(line, "AREA:"):
+			pb.AreaTag = strings.TrimSpace(strings.TrimPrefix(line, "AREA:"))
+		case strings.HasPrefix(line, "SEEN-BY:"):
+			pb.SeenBy = append(pb.SeenBy, strings.Fields(strings.TrimPrefix(line, "SEEN-BY:"))...)
+		default:
+			text = append(text, line)
 		}
-		if strings.HasPrefix(line, "AREA:") {
-			continue
-		}
-		out = append(out, line)
 	}
-	return strings.Join(out, "\r\n")
+
+	pb.Text = strings.Join(text, "\r\n")
+	return pb
 }
 
 // ── Reader ────────────────────────────────────────────────────────────────────
@@ -149,7 +191,7 @@ func ReadPacket(r io.Reader) ([]*Message, error) {
 			break
 		}
 
-		if pos+12 > len(data) {
+		if pos+14 > len(data) {
 			break
 		}
 
@@ -162,13 +204,18 @@ func ReadPacket(r io.Reader) ([]*Message, error) {
 		msgDestNode := binary.LittleEndian.Uint16(data[pos+4 : pos+6])
 		msgOrigNet  := binary.LittleEndian.Uint16(data[pos+6 : pos+8])
 		msgDestNet  := binary.LittleEndian.Uint16(data[pos+8 : pos+10])
-		// attrib := data[pos+10]  // attribute flags
-		// cost   := data[pos+11]  // cost
-		pos += 12
+		attrib := binary.LittleEndian.Uint16(data[pos+10 : pos+12])
+		cost := binary.LittleEndian.Uint16(data[pos+12 : pos+14])
+		pos += 14
 
-		// Read null-terminated strings: dateTime, toName, fromName, subject, body.
-		dateTime, adv := readNullStr(data[pos:])
-		pos += adv
+		// Date/time: fixed 20-byte ASCII field, NUL-padded.
+		if pos+20 > len(data) {
+			break
+		}
+		dateTime := readFixedStr(data[pos : pos+20])
+		pos += 20
+
+		// Read null-terminated strings: toName, fromName, subject, body.
 		toName, adv := readNullStr(data[pos:])
 		pos += adv
 		fromName, adv := readNullStr(data[pos:])
@@ -204,6 +251,8 @@ func ReadPacket(r io.Reader) ([]*Message, error) {
 			FromName: fromName,
 			Subject:  subject,
 			Body:     body,
+			Attrib:   attrib,
+			Cost:     cost,
 		}
 		msg.Area = msg.AreaTag()
 		msg.IsEcho = msg.Area != ""
@@ -220,6 +269,16 @@ func readNullStr(b []byte) (string, int) {
 		return string(b), len(b)
 	}
 	return string(b[:idx]), idx + 1
+}
+
+// readFixedStr reads a fixed-width ASCII field, truncating at the first NUL
+// (the field is NUL-padded if the string is shorter than the field width).
+func readFixedStr(b []byte) string {
+	idx := bytes.IndexByte(b, 0)
+	if idx < 0 {
+		return string(b)
+	}
+	return string(b[:idx])
 }
 
 // ── Writer ────────────────────────────────────────────────────────────────────
@@ -253,21 +312,29 @@ func WritePacket(w io.Writer, orig, dest Addr, password string, msgs []*Message)
 
 	// Write each message.
 	for _, m := range msgs {
-		msgPrefix := make([]byte, 12)
+		msgPrefix := make([]byte, 14)
 		binary.LittleEndian.PutUint16(msgPrefix[0:2], 2)
 		binary.LittleEndian.PutUint16(msgPrefix[2:4], uint16(m.OrigAddr.Node))
 		binary.LittleEndian.PutUint16(msgPrefix[4:6], uint16(m.DestAddr.Node))
 		binary.LittleEndian.PutUint16(msgPrefix[6:8], uint16(m.OrigAddr.Net))
 		binary.LittleEndian.PutUint16(msgPrefix[8:10], uint16(m.DestAddr.Net))
-		// attrib = 0 (normal), cost = 0
+		binary.LittleEndian.PutUint16(msgPrefix[10:12], m.Attrib)
+		binary.LittleEndian.PutUint16(msgPrefix[12:14], m.Cost)
 		if _, err := w.Write(msgPrefix); err != nil {
 			return err
 		}
+
 		dateStr := m.DateTime
 		if dateStr == "" {
 			dateStr = time.Now().Format("02 Jan 06  15:04:05")
 		}
-		for _, s := range []string{dateStr, m.ToName, m.FromName, m.Subject, m.Body} {
+		dateBuf := make([]byte, 20)
+		copy(dateBuf, dateStr)
+		if _, err := w.Write(dateBuf); err != nil {
+			return err
+		}
+
+		for _, s := range []string{m.ToName, m.FromName, m.Subject, m.Body} {
 			if _, err := w.Write(append([]byte(s), 0)); err != nil {
 				return err
 			}

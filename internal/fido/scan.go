@@ -28,6 +28,14 @@
 //   v0.0.3  2026-06-24  Phase 9: FidoNet scan — export messages to .PKT
 //   v0.0.6  2026-06-24  Multi-uplink bundling; per-conference uplink_addr override;
 //                        network-aware scanning via conferences.Store
+//   v0.1.0  2026-06-25  TZUTC/MSGID kludges, standard tear+Origin line (replacing
+//                        the non-standard \x01ORIGIN kludge), configurable taglines,
+//                        SEEN-BY/PATH construction (parsing+merging inbound values),
+//                        and fix the resend-loop bug: messages are now marked
+//                        exported only after a successful PKT write, and ListEcho
+//                        only returns not-yet-exported messages.
+//   v0.2.0  2026-06-25  Fan outgoing echomail out to AreaFix-subscribed downlinks,
+//                        in addition to the conference's configured uplink
 // ============================================================================
 
 package fido
@@ -44,10 +52,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/messages"
+	"github.com/virtbbs/virtbbs/internal/version"
 )
 
 // ScanResult summarises the outcome of a scan run.
@@ -61,8 +71,9 @@ type ScanResult struct {
 // conference into outbound .PKT files, one file per unique uplink address.
 //
 // It accepts an optional conferences.Store; when nil, falls back to the
-// old cfg.Areas map (compatibility with pre-v0.0.6 setups).
-func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store) (*ScanResult, error) {
+// old cfg.Areas map (compatibility with pre-v0.0.6 setups). bbsName is used
+// in the Origin line of each exported message.
+func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store, bbsName string) (*ScanResult, error) {
 	if !cfg.Enabled {
 		return nil, fmt.Errorf("FidoNet is disabled in config")
 	}
@@ -74,15 +85,26 @@ func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store) (
 		if !nd.Enabled {
 			continue
 		}
-		if err := scanNetwork(cfg, &nd, store, confStore, result); err != nil {
+		taglines := LoadTaglines(nd.TaglinesFile)
+		areafixDB := OpenAreaFixDB(store.DB())
+		if err := scanNetwork(cfg, &nd, store, confStore, bbsName, taglines, areafixDB, result); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("[%s] %v", nd.Name, err))
 		}
 	}
 	return result, nil
 }
 
+// bucketEntry pairs a packet-ready message with the source DB message ID,
+// so it can be marked exported only after the PKT containing it is
+// successfully written (preserving at-least-once delivery on write failure).
+type bucketEntry struct {
+	pmsg *Message
+	id   int64
+}
+
 // scanNetwork processes one network.
-func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store, result *ScanResult) error {
+func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store,
+	bbsName string, taglines []string, areafixDB *AreaFixDB, result *ScanResult) error {
 	orig := nd.NodeAddr()
 	defaultUplink := nd.UplinkAddr()
 
@@ -97,10 +119,11 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 		return err
 	}
 
-	// per-uplink message bucket: uplinkAddr.String() → []*Message
-	buckets := map[string][]*Message{}
-	// uplink address cache for writing PKTs
-	uplinkAddrs := map[string]Addr{}
+	// per-destination message bucket (uplink OR a subscribed downlink):
+	// destAddr.String() → []bucketEntry
+	buckets := map[string][]bucketEntry{}
+	// destination address cache for writing PKTs
+	destAddrs := map[string]Addr{}
 
 	// ── Build buckets ─────────────────────────────────────────────────────────
 
@@ -118,17 +141,13 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 
 			// Determine uplink for this conference.
 			uplinkAddr := defaultUplink
-			uplinkStr := nd.Uplink
 			if conf.UplinkAddr != "" {
-				a, err := ParseAddr(conf.UplinkAddr)
-				if err == nil {
+				if a, err := ParseAddr(conf.UplinkAddr); err == nil {
 					uplinkAddr = a
-					uplinkStr = conf.UplinkAddr
 				}
 			}
 			key := uplinkAddr.String()
-			uplinkAddrs[key] = uplinkAddr
-			_ = uplinkStr
+			destAddrs[key] = uplinkAddr
 
 			msgs, err := store.ListEcho(conf.ID, 500, 0)
 			if err != nil {
@@ -137,17 +156,8 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 				continue
 			}
 			for _, m := range msgs {
-				body := buildEchoBody(conf.EchoTag, orig, m.Body)
-				buckets[key] = append(buckets[key], &Message{
-					OrigAddr: orig,
-					DestAddr: uplinkAddr,
-					DateTime: m.DatePosted.Format("02 Jan 06  15:04:05"),
-					ToName:   m.ToName,
-					FromName: m.FromName,
-					Subject:  m.Subject,
-					Body:     body,
-				})
-				result.Scanned++
+				appendEchoMessage(buckets, destAddrs, key, m, conf.EchoTag, orig, uplinkAddr,
+					bbsName, taglines, nd, areafixDB, result)
 			}
 		}
 	} else {
@@ -160,32 +170,23 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 				continue
 			}
 			key := defaultUplink.String()
-			uplinkAddrs[key] = defaultUplink
+			destAddrs[key] = defaultUplink
 			for _, m := range msgs {
-				body := buildEchoBody(areaTag, orig, m.Body)
-				buckets[key] = append(buckets[key], &Message{
-					OrigAddr: orig,
-					DestAddr: defaultUplink,
-					DateTime: m.DatePosted.Format("02 Jan 06  15:04:05"),
-					ToName:   m.ToName,
-					FromName: m.FromName,
-					Subject:  m.Subject,
-					Body:     body,
-				})
-				result.Scanned++
+				appendEchoMessage(buckets, destAddrs, key, m, areaTag, orig, defaultUplink,
+					bbsName, taglines, nd, areafixDB, result)
 			}
 		}
 	}
 
-	// ── Write one PKT per uplink bucket ──────────────────────────────────────
+	// ── Write one PKT per destination bucket, then mark messages exported ────
 
-	for key, msgs := range buckets {
-		if len(msgs) == 0 {
+	for key, entries := range buckets {
+		if len(entries) == 0 {
 			continue
 		}
-		uplinkAddr := uplinkAddrs[key]
+		destAddr := destAddrs[key]
 		pktName := filepath.Join(nd.OutboundDir,
-			fmt.Sprintf("%s_%s.pkt", nd.Name, time.Now().Format("20060102150405")))
+			fmt.Sprintf("%s_%s_%s.pkt", nd.Name, sanitizeAddrForFilename(destAddr), time.Now().Format("20060102150405.000000")))
 
 		f, err := os.Create(pktName)
 		if err != nil {
@@ -193,21 +194,156 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 			continue
 		}
 
+		pmsgs := make([]*Message, len(entries))
+		for i, be := range entries {
+			pmsgs[i] = be.pmsg
+		}
+
 		password := nd.Password
-		if err := WritePacket(f, orig, uplinkAddr, password, msgs); err != nil {
+		if err := WritePacket(f, orig, destAddr, password, pmsgs); err != nil {
 			f.Close()
 			result.Errors = append(result.Errors, fmt.Sprintf("write pkt %s: %v", pktName, err))
 			continue
 		}
 		f.Close()
 		result.PKTFiles++
+
+		// Only now that the PKT is safely on disk do we mark these messages
+		// exported — a write failure above leaves them unmarked so they are
+		// retried on the next scan, instead of being silently lost.
+		//
+		// NOTE: a message fanned out to multiple destinations (uplink +
+		// subscribed downlinks) is marked exported once its FIRST bucket
+		// write succeeds, even if a later bucket (e.g. a downlink PKT)
+		// fails — it will not be retried for that specific destination on
+		// the next scan. This is an accepted simplification: exported
+		// tracking is per-message, not per-(message, destination).
+		for _, be := range entries {
+			if err := store.MarkExported(be.id); err != nil {
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("mark exported id=%d: %v", be.id, err))
+			}
+		}
 	}
 
 	return nil
 }
 
-// buildEchoBody prepends the AREA: kludge line and an origin line to the body.
-func buildEchoBody(areaTag string, orig Addr, body string) string {
-	return fmt.Sprintf("AREA:%s\r%s\r\x01ORIGIN: VirtBBS @ %s\r",
-		areaTag, body, orig.String())
+// sanitizeAddrForFilename returns a filesystem-safe representation of addr
+// for use in outbound PKT filenames (so each destination's packets are
+// trivially distinguishable on disk).
+func sanitizeAddrForFilename(addr Addr) string {
+	return strings.NewReplacer(":", "z", "/", "n", ".", "p").Replace(addr.String())
+}
+
+// appendEchoMessage builds the packet-ready echo message for m, appends it
+// to buckets[key] (the conference's uplink), and additionally fans it out
+// to every downlink currently subscribed to areaTag via AreaFix.
+func appendEchoMessage(buckets map[string][]bucketEntry, destAddrs map[string]Addr, key string, m *messages.Message,
+	areaTag string, orig, dest Addr, bbsName string, taglines []string, nd *NetworkDef,
+	areafixDB *AreaFixDB, result *ScanResult) {
+
+	var inSeenBy, inPath []string
+	if m.FidoSeenBy != "" {
+		inSeenBy = strings.Fields(m.FidoSeenBy)
+	}
+	if m.FidoPath != "" {
+		inPath = strings.Fields(m.FidoPath)
+	}
+	tagline := PickTagline(taglines)
+
+	body := buildEchoBody(areaTag, orig, bbsName, m.Body, tagline, inSeenBy, inPath)
+	entry := bucketEntry{
+		pmsg: &Message{
+			OrigAddr: orig,
+			DestAddr: dest,
+			DateTime: m.DatePosted.Format("02 Jan 06  15:04:05"),
+			ToName:   m.ToName,
+			FromName: m.FromName,
+			Subject:  m.Subject,
+			Body:     body,
+		},
+		id: m.ID,
+	}
+	buckets[key] = append(buckets[key], entry)
+	result.Scanned++
+
+	if areafixDB == nil {
+		return
+	}
+	downlinks, err := areafixDB.SubscribedDownlinks(nd.Name, areaTag)
+	if err != nil || len(downlinks) == 0 {
+		return
+	}
+	for _, addrStr := range downlinks {
+		dlAddr, err := ParseAddr(addrStr)
+		if err != nil || dlAddr == dest {
+			continue // skip malformed entries and the case where a downlink IS the uplink
+		}
+		if nd.DownlinkByAddr(dlAddr) == nil {
+			// Stale subscription left over after the downlink was removed
+			// from config — skip it rather than mailing a no-longer-known
+			// system (the sysop menu also deletes subscriptions on removal,
+			// this is a defensive second check).
+			continue
+		}
+		dlKey := dlAddr.String()
+		destAddrs[dlKey] = dlAddr
+		buckets[dlKey] = append(buckets[dlKey], bucketEntry{
+			pmsg: &Message{
+				OrigAddr: orig,
+				DestAddr: dlAddr,
+				DateTime: entry.pmsg.DateTime,
+				ToName:   m.ToName,
+				FromName: m.FromName,
+				Subject:  m.Subject,
+				Body:     body, // same bytes — this is the same echo message, just a second destination
+			},
+			id: m.ID,
+		})
+	}
+}
+
+// buildEchoBody constructs the full FTS-0004 echomail body:
+//
+//	AREA:<tag>
+//	^AMSGID: <orig> <serial>
+//	^ATZUTC: ±HHMM
+//	<message text>
+//	[blank line + tagline, if one is configured]
+//	--- VirtBBS <version>
+//	 * Origin: <bbsName> (<orig>)
+//	SEEN-BY: <merged net/node list>
+//	^APATH: <merged net/node list>
+//
+// inSeenBy/inPath are the SEEN-BY/PATH tokens already present on the message
+// (non-nil only for messages received via FidoNet toss and now being
+// relayed onward); they are merged with this BBS's own address. For a
+// locally-authored message both are nil, producing a fresh single-entry list.
+func buildEchoBody(areaTag string, orig Addr, bbsName, body, tagline string, inSeenBy, inPath []string) string {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "AREA:%s\r", areaTag)
+	fmt.Fprintf(&sb, "\x01MSGID: %s %08X\r", orig.String(), time.Now().UnixNano()&0xFFFFFFFF)
+	fmt.Fprintf(&sb, "\x01TZUTC: %s\r", time.Now().Format("-0700"))
+
+	sb.WriteString(body)
+	if !strings.HasSuffix(body, "\r") {
+		sb.WriteString("\r")
+	}
+
+	if tagline != "" {
+		fmt.Fprintf(&sb, "\r%s\r", tagline)
+	}
+
+	fmt.Fprintf(&sb, "--- VirtBBS %s\r", version.Version)
+	fmt.Fprintf(&sb, " * Origin: %s (%s)\r", bbsName, orig.String())
+
+	seenBy := MergeAddrTokens(inSeenBy, orig)
+	fmt.Fprintf(&sb, "SEEN-BY: %s\r", strings.Join(seenBy, " "))
+
+	path := MergeAddrTokens(inPath, orig)
+	fmt.Fprintf(&sb, "\x01PATH: %s\r", strings.Join(path, " "))
+
+	return sb.String()
 }

@@ -1,0 +1,369 @@
+// ============================================================================
+// VirtBBS — A modern BBS server inspired by PCBoard BBS
+//           (Clark Development Company, 1987-1996)
+//
+// Copyright (c) 2026 John Dovey <dovey.john@gmail.com>
+//
+// MIT License
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation
+// the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the
+// Software is furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+// DEALINGS IN THE SOFTWARE.
+//
+// Change History:
+//   v0.2.0  2026-06-25  Initial implementation — AreaFix responder (for downlink
+//                        subscription requests) and request generator (for
+//                        subscribing to our own uplink as a downlink)
+// ============================================================================
+
+package fido
+
+// Package fido — areafix.go
+//
+// Implements AreaFix, the long-standing FidoNet convention for managing
+// echomail area subscriptions by netmail. Two independent roles:
+//
+//   Responder  — other systems ("downlinks") send netmail to "AreaFix"
+//                 at OUR address to subscribe/unsubscribe from the echo
+//                 areas we feed them. ProcessAreaFixRequest handles this.
+//
+//   Requester  — THIS BBS sends netmail to "AreaFix" at our UPLINK's
+//                 address to subscribe/unsubscribe from areas we want to
+//                 receive. RequestAreaFix handles this.
+//
+// Command syntax (case-insensitive, one command per line, password first):
+//
+//	<password>
+//	+AREA_TAG       subscribe to AREA_TAG
+//	-AREA_TAG       unsubscribe from AREA_TAG
+//	%LIST           list all areas available to subscribe to
+//	%QUERY          list areas currently subscribed to
+//	%HELP           show this command summary
+
+import (
+	"database/sql"
+	"fmt"
+	"sort"
+	"strings"
+
+	"github.com/virtbbs/virtbbs/internal/conferences"
+)
+
+// AreaFixRobotName is the netmail ToName that triggers the responder.
+const AreaFixRobotName = "AreaFix"
+
+// IsAreaFixRequest reports whether toName addresses the AreaFix robot.
+func IsAreaFixRequest(toName string) bool {
+	return strings.EqualFold(strings.TrimSpace(toName), AreaFixRobotName)
+}
+
+// AreaFixDB manages AreaFix subscription state in SQLite.
+type AreaFixDB struct{ db *sql.DB }
+
+// OpenAreaFixDB returns an AreaFixDB using the shared database connection.
+func OpenAreaFixDB(db *sql.DB) *AreaFixDB { return &AreaFixDB{db: db} }
+
+// Subscribe records that downlinkAddr (zone:net/node) receives areaTag.
+func (a *AreaFixDB) Subscribe(network, downlinkAddr, areaTag string) error {
+	_, err := a.db.Exec(`INSERT OR IGNORE INTO fido_areafix_subs (network, downlink_addr, area_tag)
+		VALUES (?,?,?)`, network, downlinkAddr, areaTag)
+	return err
+}
+
+// Unsubscribe removes a downlink's subscription to areaTag.
+func (a *AreaFixDB) Unsubscribe(network, downlinkAddr, areaTag string) error {
+	_, err := a.db.Exec(`DELETE FROM fido_areafix_subs WHERE network=? AND downlink_addr=? AND area_tag=?`,
+		network, downlinkAddr, areaTag)
+	return err
+}
+
+// SubscriptionsFor returns the area tags downlinkAddr currently subscribes to.
+func (a *AreaFixDB) SubscriptionsFor(network, downlinkAddr string) ([]string, error) {
+	rows, err := a.db.Query(`SELECT area_tag FROM fido_areafix_subs
+		WHERE network=? AND downlink_addr=? ORDER BY area_tag`, network, downlinkAddr)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tags []string
+	for rows.Next() {
+		var tag string
+		if err := rows.Scan(&tag); err != nil {
+			return nil, err
+		}
+		tags = append(tags, tag)
+	}
+	return tags, rows.Err()
+}
+
+// SubscribedDownlinks returns the addresses of every downlink subscribed to
+// areaTag, used by the scanner to fan an outgoing echomail message out to
+// downlinks in addition to the conference's normal uplink destination.
+func (a *AreaFixDB) SubscribedDownlinks(network, areaTag string) ([]string, error) {
+	rows, err := a.db.Query(`SELECT downlink_addr FROM fido_areafix_subs
+		WHERE network=? AND area_tag=? ORDER BY downlink_addr`, network, areaTag)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var addrs []string
+	for rows.Next() {
+		var addr string
+		if err := rows.Scan(&addr); err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs, rows.Err()
+}
+
+// AllDownlinkAddrs returns the distinct set of downlink addresses with at
+// least one subscription on this network. Used by the sysop UI.
+func (a *AreaFixDB) AllDownlinkAddrs(network string) ([]string, error) {
+	rows, err := a.db.Query(`SELECT DISTINCT downlink_addr FROM fido_areafix_subs
+		WHERE network=? ORDER BY downlink_addr`, network)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var addrs []string
+	for rows.Next() {
+		var addr string
+		if err := rows.Scan(&addr); err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, addr)
+	}
+	return addrs, rows.Err()
+}
+
+// ── Responder (downlinks managing their subscriptions with us) ─────────────
+
+// ProcessAreaFixRequest handles an inbound netmail addressed to "AreaFix".
+// It validates the sender against the network's configured Downlinks list
+// and the password supplied as the first non-blank body line, applies any
+// +TAG/-TAG/%LIST/%QUERY/%HELP commands found in the remaining lines, and
+// writes an immediate netmail reply summarising the result.
+func ProcessAreaFixRequest(cfg *Config, db *sql.DB, confStore *conferences.Store, networkName string, pm *Message) error {
+	our := cfg.NodeAddr()
+	if our == (Addr{}) {
+		return fmt.Errorf("areafix: invalid local address %q", cfg.Address)
+	}
+
+	dl := cfg.DownlinkByAddr(pm.OrigAddr)
+	if dl == nil {
+		return replyAreaFix(cfg, our, pm, "Unknown system — you are not configured as a downlink.\r\n")
+	}
+
+	lines := strings.Split(strings.ReplaceAll(pm.Body, "\r\n", "\r"), "\r")
+	var cmdLines []string
+	passwordOK := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !passwordOK {
+			passwordOK = line == dl.Password
+			if !passwordOK {
+				// First non-blank line wasn't the password — but allow a
+				// password-less downlink (Password == "") to skip straight
+				// to commands.
+				if dl.Password == "" {
+					passwordOK = true
+					cmdLines = append(cmdLines, line)
+				} else {
+					return replyAreaFix(cfg, our, pm, "Invalid password.\r\n")
+				}
+			}
+			continue
+		}
+		cmdLines = append(cmdLines, line)
+	}
+	if !passwordOK {
+		return replyAreaFix(cfg, our, pm, "Invalid password.\r\n")
+	}
+
+	areafixDB := OpenAreaFixDB(db)
+	downlinkAddr := pm.OrigAddr.String()
+
+	var out strings.Builder
+	fmt.Fprintf(&out, "AreaFix response for %s (%s)\r\n\r\n", dl.Name, downlinkAddr)
+
+	if len(cmdLines) == 0 {
+		writeAreaFixHelp(&out)
+	}
+
+	for _, line := range cmdLines {
+		upper := strings.ToUpper(line)
+		switch {
+		case upper == "%LIST" || upper == "LIST":
+			writeAreaFixList(&out, confStore, networkName)
+		case upper == "%QUERY" || upper == "QUERY":
+			writeAreaFixQuery(&out, areafixDB, networkName, downlinkAddr)
+		case upper == "%HELP" || upper == "HELP" || upper == "?":
+			writeAreaFixHelp(&out)
+		case strings.HasPrefix(line, "+"):
+			tag := strings.ToUpper(strings.TrimSpace(line[1:]))
+			if tag == "" {
+				continue
+			}
+			if !areaFixTagExists(confStore, networkName, cfg, tag) {
+				fmt.Fprintf(&out, "  +%-30s UNKNOWN AREA — not added\r\n", tag)
+				continue
+			}
+			if err := areafixDB.Subscribe(networkName, downlinkAddr, tag); err != nil {
+				fmt.Fprintf(&out, "  +%-30s ERROR: %v\r\n", tag, err)
+				continue
+			}
+			fmt.Fprintf(&out, "  +%-30s subscribed\r\n", tag)
+		case strings.HasPrefix(line, "-"):
+			tag := strings.ToUpper(strings.TrimSpace(line[1:]))
+			if tag == "" {
+				continue
+			}
+			if err := areafixDB.Unsubscribe(networkName, downlinkAddr, tag); err != nil {
+				fmt.Fprintf(&out, "  -%-30s ERROR: %v\r\n", tag, err)
+				continue
+			}
+			fmt.Fprintf(&out, "  -%-30s unsubscribed\r\n", tag)
+		default:
+			fmt.Fprintf(&out, "  Unrecognised command: %q\r\n", line)
+		}
+	}
+
+	out.WriteString("\r\n")
+	writeAreaFixQuery(&out, areafixDB, networkName, downlinkAddr)
+
+	return replyAreaFix(cfg, our, pm, out.String())
+}
+
+// areaFixTagExists reports whether tag is a valid, known echomail area —
+// either as a conference's EchoTag (preferred, via confStore) or in the
+// legacy cfg.Areas map.
+func areaFixTagExists(confStore *conferences.Store, networkName string, cfg *Config, tag string) bool {
+	if confStore != nil {
+		if conf, err := confStore.GetByTag(tag, networkName); err == nil && conf != nil {
+			return true
+		}
+	}
+	_, ok := cfg.Areas[tag]
+	return ok
+}
+
+func writeAreaFixList(out *strings.Builder, confStore *conferences.Store, networkName string) {
+	out.WriteString("Areas available:\r\n")
+	if confStore == nil {
+		out.WriteString("  (none configured)\r\n")
+		return
+	}
+	confs, err := confStore.ListEcho(networkName)
+	if err != nil || len(confs) == 0 {
+		out.WriteString("  (none configured)\r\n")
+		return
+	}
+	tags := make([]string, 0, len(confs))
+	for _, c := range confs {
+		if c.EchoTag != "" {
+			tags = append(tags, c.EchoTag)
+		}
+	}
+	sort.Strings(tags)
+	for _, t := range tags {
+		fmt.Fprintf(out, "  %s\r\n", t)
+	}
+}
+
+func writeAreaFixQuery(out *strings.Builder, areafixDB *AreaFixDB, networkName, downlinkAddr string) {
+	tags, err := areafixDB.SubscriptionsFor(networkName, downlinkAddr)
+	out.WriteString("Currently subscribed:\r\n")
+	if err != nil || len(tags) == 0 {
+		out.WriteString("  (none)\r\n")
+		return
+	}
+	for _, t := range tags {
+		fmt.Fprintf(out, "  %s\r\n", t)
+	}
+}
+
+func writeAreaFixHelp(out *strings.Builder) {
+	out.WriteString("Commands (one per line, after your password):\r\n")
+	out.WriteString("  +TAG     subscribe to area TAG\r\n")
+	out.WriteString("  -TAG     unsubscribe from area TAG\r\n")
+	out.WriteString("  %LIST    list all areas available\r\n")
+	out.WriteString("  %QUERY   list your current subscriptions\r\n")
+	out.WriteString("  %HELP    show this help\r\n\r\n")
+}
+
+// replyAreaFix writes an immediate netmail reply from the AreaFix robot
+// back to the requester, routed via the network's configured uplink.
+func replyAreaFix(cfg *Config, our Addr, pm *Message, body string) error {
+	uplink := cfg.UplinkAddr()
+	if uplink == (Addr{}) {
+		return fmt.Errorf("areafix: no uplink configured to route reply")
+	}
+	reply := &NetmailMsg{
+		FromName: AreaFixRobotName,
+		FromAddr: our.String(),
+		ToName:   pm.FromName,
+		ToAddr:   pm.OrigAddr.String(),
+		Subject:  "AreaFix response",
+		Body:     body,
+	}
+	outDir := OutboundDir(cfg.OutboundDir, uplink, false)
+	_, err := WritePKT(our, uplink, cfg.Password, outDir, []*NetmailMsg{reply})
+	return err
+}
+
+// ── Requester (us subscribing to our own uplink's AreaFix) ─────────────────
+
+// RequestAreaFix composes and writes a netmail to "AreaFix" at our own
+// uplink, requesting subscription changes (adds/removes are AREA: tags,
+// without +/- prefixes). Used when VirtBBS itself is a downlink of nd.
+func RequestAreaFix(cfg *Config, fromName string, adds, removes []string) (pktPath string, err error) {
+	our := cfg.NodeAddr()
+	if our == (Addr{}) {
+		return "", fmt.Errorf("invalid local address %q", cfg.Address)
+	}
+	uplink := cfg.UplinkAddr()
+	if uplink == (Addr{}) {
+		return "", fmt.Errorf("no uplink configured")
+	}
+
+	var body strings.Builder
+	if cfg.AreaFixPassword != "" {
+		fmt.Fprintf(&body, "%s\r\n", cfg.AreaFixPassword)
+	}
+	for _, tag := range adds {
+		fmt.Fprintf(&body, "+%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
+	}
+	for _, tag := range removes {
+		fmt.Fprintf(&body, "-%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
+	}
+
+	msg := &NetmailMsg{
+		FromName: fromName,
+		FromAddr: our.String(),
+		ToName:   AreaFixRobotName,
+		ToAddr:   uplink.String(),
+		Subject:  "AreaFix",
+		Body:     body.String(),
+	}
+
+	outDir := OutboundDir(cfg.OutboundDir, uplink, false)
+	return WritePKT(our, uplink, cfg.Password, outDir, []*NetmailMsg{msg})
+}

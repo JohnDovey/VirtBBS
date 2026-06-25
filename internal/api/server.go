@@ -211,7 +211,7 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if !cfg.Fido.Enabled {
 			return nil, fmt.Errorf("FidoNet is not enabled")
 		}
-		result, err := fido.TossDir(&cfg.Fido, s.Deps.Messages)
+		result, err := fido.TossDir(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences)
 		if err != nil {
 			return nil, err
 		}
@@ -222,7 +222,7 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if !cfg.Fido.Enabled {
 			return nil, fmt.Errorf("FidoNet is not enabled")
 		}
-		result, err := fido.ScanAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences)
+		result, err := fido.ScanAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences, cfg.BBS.Name)
 		if err != nil {
 			return nil, err
 		}

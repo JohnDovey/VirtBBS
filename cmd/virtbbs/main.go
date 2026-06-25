@@ -170,8 +170,13 @@ func main() {
 		defer msgStore.Close()
 		fidoCfg := &cfg.Fido
 
+		confStore, _ := conferences.Open(cfg.Paths.DB)
+		if confStore != nil {
+			defer confStore.Close()
+		}
+
 		if *fidoToss {
-			result, err := fido.TossDir(fidoCfg, msgStore)
+			result, err := fido.TossDir(fidoCfg, msgStore, confStore)
 			if err != nil {
 				log.Fatalf("fido-toss: %v", err)
 			}
@@ -183,11 +188,7 @@ func main() {
 		}
 
 		if *fidoScan {
-			confStore, _ := conferences.Open(cfg.Paths.DB)
-			result, err := fido.ScanAll(fidoCfg, msgStore, confStore)
-			if confStore != nil {
-				confStore.Close()
-			}
+			result, err := fido.ScanAll(fidoCfg, msgStore, confStore, cfg.BBS.Name)
 			if err != nil {
 				log.Fatalf("fido-scan: %v", err)
 			}

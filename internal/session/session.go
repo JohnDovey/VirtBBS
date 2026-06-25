@@ -119,7 +119,7 @@ func Run(rw io.ReadWriteCloser, remoteAddr string, deps Deps, echoInput bool) {
 			for {
 				select {
 				case msg := <-ctrl.Messages:
-					_, _ = io.WriteString(rw, msg)
+					_, _ = io.WriteString(rw, ansi.ToCP437(msg))
 				case <-ctrl.Done():
 					return
 				}
@@ -133,7 +133,7 @@ func Run(rw io.ReadWriteCloser, remoteAddr string, deps Deps, echoInput bool) {
 	if cfg.Session.IdleTimeoutMins > 0 {
 		d := time.Duration(cfg.Session.IdleTimeoutMins) * time.Minute
 		s.idleTimer = time.AfterFunc(d, func() {
-			_, _ = io.WriteString(rw, "\r\n\033[1;31m*** Idle timeout — disconnecting ***\033[0m\r\n")
+			_, _ = io.WriteString(rw, ansi.ToCP437("\r\n\033[1;31m*** Idle timeout — disconnecting ***\033[0m\r\n"))
 			_ = rw.Close()
 		})
 		defer s.idleTimer.Stop()
@@ -151,7 +151,7 @@ func Run(rw io.ReadWriteCloser, remoteAddr string, deps Deps, echoInput bool) {
 	if cfg.Session.TimePerCallMins > 0 {
 		d := time.Duration(cfg.Session.TimePerCallMins) * time.Minute
 		s.callTimer = time.AfterFunc(d, func() {
-			_, _ = io.WriteString(rw, "\r\n\033[1;33m*** Your time for this call has expired. Goodbye! ***\033[0m\r\n")
+			_, _ = io.WriteString(rw, ansi.ToCP437("\r\n\033[1;33m*** Your time for this call has expired. Goodbye! ***\033[0m\r\n"))
 			_ = rw.Close()
 		})
 		defer s.callTimer.Stop()
@@ -951,13 +951,13 @@ func (s *session) sysopFidoMenu() {
 			s.writeln("")
 		}
 		s.writeln(ansi.Color(ansi.BrightYellow) +
-			"  [T]oss inbound   [S]can outbound   [N]odelist   [E]cho flags   [P]oll uplink   [Q]uit" + ansi.Reset())
+			"  [T]oss inbound   [S]can outbound   [N]odelist   [E]cho flags   [P]oll uplink   [I]Ping a node   [A]reaFix   [Q]uit" + ansi.Reset())
 		s.write(ansi.Prompt("FidoNet command: "))
 		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
 		switch cmd {
 		case "T":
 			s.writeln(ansi.Colorize(ansi.White, "Tossing inbound packets…"))
-			result, err := fido.TossDir(&cfg.Fido, s.deps.Messages)
+			result, err := fido.TossDir(&cfg.Fido, s.deps.Messages, s.deps.Conferences)
 			if err != nil {
 				s.writeln(ansi.Colorize(ansi.Red, "Toss error: "+err.Error()))
 				continue
@@ -970,7 +970,7 @@ func (s *session) sysopFidoMenu() {
 			}
 		case "S":
 			s.writeln(ansi.Colorize(ansi.White, "Scanning echo areas for outbound messages…"))
-			result, err := fido.ScanAll(&cfg.Fido, s.deps.Messages, s.deps.Conferences)
+			result, err := fido.ScanAll(&cfg.Fido, s.deps.Messages, s.deps.Conferences, cfg.BBS.Name)
 			if err != nil {
 				s.writeln(ansi.Colorize(ansi.Red, "Scan error: "+err.Error()))
 				continue
@@ -986,10 +986,167 @@ func (s *session) sysopFidoMenu() {
 			s.echoFlagConference()
 		case "P":
 			s.fidoPoll()
+		case "I":
+			s.fidoPing()
+		case "A":
+			s.fidoAreaFixMenu()
 		case "Q", "":
 			return
 		}
 	}
+}
+
+// fidoAreaFixMenu manages AreaFix downlinks (systems that subscribe to
+// echomail areas from us) and lets the sysop request areas from our own
+// uplink as a downlink — see internal/fido/areafix.go.
+func (s *session) fidoAreaFixMenu() {
+	for {
+		cfg := config.Get()
+		areafixDB := fido.OpenAreaFixDB(s.deps.Messages.DB())
+
+		s.writeln(ansi.Header("AreaFix Administration"))
+		if len(cfg.Fido.Downlinks) == 0 {
+			s.writeln(ansi.Color(ansi.Yellow) + "  No downlinks configured." + ansi.Reset())
+		} else {
+			s.writeln(ansi.Color(ansi.BrightCyan) +
+				fmt.Sprintf("  %-20s %-16s %s", "Name", "Address", "Subscriptions") + ansi.Reset())
+			for _, dl := range cfg.Fido.Downlinks {
+				tags, _ := areafixDB.SubscriptionsFor(fido.PrimaryNetworkName, dl.Address)
+				s.writeln(fmt.Sprintf("  %-20s %-16s %s", dl.Name, dl.Address, strings.Join(tags, ", ")))
+			}
+		}
+		s.writeln("")
+		s.writeln(ansi.Color(ansi.BrightYellow) +
+			"  [D]ownlink add   [R]emove downlink   [U]pstream request   [Q]uit" + ansi.Reset())
+		s.write(ansi.Prompt("AreaFix command: "))
+		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
+		switch cmd {
+		case "D":
+			s.fidoAddDownlink()
+		case "R":
+			s.fidoRemoveDownlink()
+		case "U":
+			s.fidoRequestUpstreamAreas()
+		case "Q", "":
+			return
+		}
+	}
+}
+
+// fidoAddDownlink prompts for a new downlink's details and persists it to
+// VirtBBS.DAT.
+func (s *session) fidoAddDownlink() {
+	s.write(ansi.Prompt("Downlink name: "))
+	name := strings.TrimSpace(s.readline())
+	s.write(ansi.Prompt("Downlink address (zone:net/node): "))
+	addr := strings.TrimSpace(s.readline())
+	if addr == "" {
+		return
+	}
+	if _, err := fido.ParseAddr(addr); err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Invalid address: "+err.Error()))
+		return
+	}
+	s.write(ansi.Prompt("Password the downlink must supply (blank = none): "))
+	password := strings.TrimSpace(s.readline())
+
+	cfg := config.Get()
+	merged := *cfg
+	merged.Fido.Downlinks = append(append([]fido.Downlink{}, cfg.Fido.Downlinks...),
+		fido.Downlink{Name: name, Address: addr, Password: password})
+
+	if err := config.Save(&merged); err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Error saving config: "+err.Error()))
+		return
+	}
+	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("Downlink %s (%s) added.", name, addr)))
+}
+
+// fidoRemoveDownlink prompts for an address and removes that downlink from
+// VirtBBS.DAT, also deleting its AreaFix subscriptions.
+func (s *session) fidoRemoveDownlink() {
+	s.write(ansi.Prompt("Downlink address to remove: "))
+	addr := strings.TrimSpace(s.readline())
+	if addr == "" {
+		return
+	}
+
+	cfg := config.Get()
+	merged := *cfg
+	var kept []fido.Downlink
+	removed := false
+	for _, dl := range cfg.Fido.Downlinks {
+		if strings.EqualFold(dl.Address, addr) {
+			removed = true
+			continue
+		}
+		kept = append(kept, dl)
+	}
+	if !removed {
+		s.writeln(ansi.Colorize(ansi.Yellow, "No downlink found with that address."))
+		return
+	}
+	merged.Fido.Downlinks = kept
+
+	if err := config.Save(&merged); err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Error saving config: "+err.Error()))
+		return
+	}
+
+	areafixDB := fido.OpenAreaFixDB(s.deps.Messages.DB())
+	tags, _ := areafixDB.SubscriptionsFor(fido.PrimaryNetworkName, addr)
+	for _, tag := range tags {
+		_ = areafixDB.Unsubscribe(fido.PrimaryNetworkName, addr, tag)
+	}
+	s.writeln(ansi.Colorize(ansi.BrightGreen, "Downlink removed and subscriptions cleared."))
+}
+
+// fidoRequestUpstreamAreas sends an AreaFix subscribe/unsubscribe request
+// to our own uplink, so VirtBBS can act as a downlink of a larger hub.
+func (s *session) fidoRequestUpstreamAreas() {
+	s.write(ansi.Prompt("Area tags to subscribe, space-separated (blank = none): "))
+	addLine := strings.TrimSpace(s.readline())
+	s.write(ansi.Prompt("Area tags to unsubscribe, space-separated (blank = none): "))
+	removeLine := strings.TrimSpace(s.readline())
+	if addLine == "" && removeLine == "" {
+		return
+	}
+
+	cfg := config.Get()
+	pktPath, err := fido.RequestAreaFix(&cfg.Fido, s.user.Name,
+		strings.Fields(addLine), strings.Fields(removeLine))
+	if err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "AreaFix request error: "+err.Error()))
+		return
+	}
+	s.writeln(ansi.Colorize(ansi.BrightGreen, "AreaFix request sent → "+pktPath))
+}
+
+// fidoPing prompts for a FidoNet address and sends a PING test netmail to
+// it. The receiving system (if it implements the same convention) replies
+// automatically with PONG — see internal/fido/ping.go.
+func (s *session) fidoPing() {
+	cfg := config.Get()
+	s.write(ansi.Prompt("Ping address (zone:net/node): "))
+	addr := strings.TrimSpace(s.readline())
+	if addr == "" {
+		return
+	}
+
+	toName := "Sysop"
+	if a, err := fido.ParseAddr(addr); err == nil {
+		ndb := fido.OpenNodelistDB(s.deps.Messages.DB())
+		if node, err := ndb.LookupAddr("FidoNet", a); err == nil && node != nil {
+			toName = node.Sysop
+		}
+	}
+
+	pktPath, err := fido.SendPing(&cfg.Fido, s.user.Name, toName, addr)
+	if err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Ping error: "+err.Error()))
+		return
+	}
+	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("PING sent to %s → %s", addr, pktPath)))
 }
 
 // ── FidoNet in-BBS functions ──────────────────────────────────────────────────
@@ -1178,7 +1335,7 @@ func (s *session) fidoPoll() {
 	// Toss received inbound.
 	if len(result.Received) > 0 {
 		s.writeln(ansi.Color(ansi.White) + "  Auto-tossing inbound…" + ansi.Reset())
-		tr, err := fido.TossDir(&cfg.Fido, s.deps.Messages)
+		tr, err := fido.TossDir(&cfg.Fido, s.deps.Messages, s.deps.Conferences)
 		if err == nil {
 			s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("  Tossed: %d imported.", tr.Imported)))
 		}
@@ -1604,7 +1761,7 @@ func (s *session) runPPE(ppsPath string) {
 // ── I/O helpers ───────────────────────────────────────────────────────────────
 
 func (s *session) write(text string) {
-	_, _ = io.WriteString(s.rw, text)
+	_, _ = io.WriteString(s.rw, ansi.ToCP437(text))
 }
 
 func (s *session) writeln(text string) {

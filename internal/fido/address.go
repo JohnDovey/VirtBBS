@@ -26,6 +26,7 @@
 //
 // Change History:
 //   v0.0.3  2026-06-24  Phase 9: FidoNet address type
+//   v0.1.0  2026-06-25  Add MergeAddrTokens for SEEN-BY/PATH line construction
 // ============================================================================
 
 // Package fido implements FidoNet packet handling for VirtBBS.
@@ -35,6 +36,7 @@ package fido
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -108,4 +110,49 @@ func ParseAddr(s string) (Addr, error) {
 // Equal reports whether two addresses are the same (ignoring point = 0 vs absent).
 func (a Addr) Equal(b Addr) bool {
 	return a.Zone == b.Zone && a.Net == b.Net && a.Node == b.Node && a.Point == b.Point
+}
+
+// MergeAddrTokens combines an existing list of "net/node" SEEN-BY/PATH
+// tokens with this BBS's own address, removing duplicates and returning
+// the result sorted ascending by net then node (per FTS-0004 convention).
+// self is rendered without zone/point, as SEEN-BY and PATH entries are
+// always plain net/node within the area's zone.
+func MergeAddrTokens(existing []string, self Addr) []string {
+	seen := make(map[string]bool, len(existing)+1)
+	var out []string
+
+	add := func(tok string) {
+		tok = strings.TrimSpace(tok)
+		if tok == "" || seen[tok] {
+			return
+		}
+		seen[tok] = true
+		out = append(out, tok)
+	}
+
+	for _, tok := range existing {
+		add(tok)
+	}
+	add(fmt.Sprintf("%d/%d", self.Net, self.Node))
+
+	sort.Slice(out, func(i, j int) bool {
+		ni, nodei := splitNetNode(out[i])
+		nj, nodej := splitNetNode(out[j])
+		if ni != nj {
+			return ni < nj
+		}
+		return nodei < nodej
+	})
+	return out
+}
+
+// splitNetNode parses a "net/node" token, returning (0, 0) if malformed.
+func splitNetNode(tok string) (net, node int) {
+	slash := strings.Index(tok, "/")
+	if slash < 0 {
+		return 0, 0
+	}
+	net, _ = strconv.Atoi(tok[:slash])
+	node, _ = strconv.Atoi(tok[slash+1:])
+	return net, node
 }

@@ -55,6 +55,13 @@ type Message struct {
 	Status       string
 	Echo         bool
 	Body         string
+
+	// FidoNet metadata. Empty/zero for locally-authored messages.
+	FidoMsgID      string // ^AMSGID kludge value, for dedupe/threading
+	FidoSeenBy     string // space-separated net/node tokens from SEEN-BY lines
+	FidoPath       string // space-separated net/node tokens from ^APATH kludge
+	FidoOrigin     string // originating zone:net/node if received via FidoNet toss
+	FidoExportedAt time.Time // zero if not yet written to an outbound PKT
 }
 
 // Store manages messages in SQLite.
@@ -71,7 +78,43 @@ func Open(path string) (*Store, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("messages schema: %w", err)
 	}
-	return &Store{db: db}, nil
+	s := &Store{db: db}
+	if err := s.migrate(); err != nil {
+		return nil, fmt.Errorf("messages migration: %w", err)
+	}
+	return s, nil
+}
+
+// migrate applies backwards-compatible ALTER TABLE statements for databases
+// created before the FidoNet metadata columns existed.
+// Errors for columns that already exist are silently ignored.
+func (s *Store) migrate() error {
+	alters := []string{
+		`ALTER TABLE messages ADD COLUMN fido_msgid TEXT`,
+		`ALTER TABLE messages ADD COLUMN fido_seenby TEXT`,
+		`ALTER TABLE messages ADD COLUMN fido_path TEXT`,
+		`ALTER TABLE messages ADD COLUMN fido_origin TEXT`,
+		`ALTER TABLE messages ADD COLUMN fido_exported_at TEXT`,
+	}
+	for _, stmt := range alters {
+		if _, err := s.db.Exec(stmt); err != nil {
+			if !containsAny(err.Error(), "duplicate column", "already exists") {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func containsAny(s string, subs ...string) bool {
+	for _, sub := range subs {
+		for i := 0; i <= len(s)-len(sub); i++ {
+			if s[i:i+len(sub)] == sub {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (s *Store) Close() error { return s.db.Close() }
@@ -89,10 +132,12 @@ func (s *Store) PostWithNumber(m *Message) error {
 	}
 	res, err := s.db.Exec(`
 		INSERT OR IGNORE INTO messages
-		  (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
+		  (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
+		   fido_msgid, fido_seenby, fido_path, fido_origin)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ConferenceID, m.MsgNumber, m.FromName, m.ToName, m.Subject,
 		m.DatePosted.Format(time.RFC3339), m.Status, boolInt(m.Echo), m.Body,
+		nullable(m.FidoMsgID), nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin),
 	)
 	if err != nil {
 		return err
@@ -113,10 +158,12 @@ func (s *Store) Post(m *Message) error {
 		m.DatePosted = time.Now()
 	}
 	res, err := s.db.Exec(`
-		INSERT INTO messages (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
+		INSERT INTO messages (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
+		                       fido_msgid, fido_seenby, fido_path, fido_origin)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ConferenceID, m.MsgNumber, m.FromName, m.ToName, m.Subject,
 		m.DatePosted.Format(time.RFC3339), m.Status, boolInt(m.Echo), m.Body,
+		nullable(m.FidoMsgID), nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin),
 	)
 	if err != nil {
 		return err
@@ -125,10 +172,13 @@ func (s *Store) Post(m *Message) error {
 	return nil
 }
 
+const messageCols = `id, conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
+		fido_msgid, fido_seenby, fido_path, fido_origin, fido_exported_at`
+
 // List returns messages in a conference, newest first.
 func (s *Store) List(conferenceID, limit, offset int) ([]*Message, error) {
 	rows, err := s.db.Query(`
-		SELECT id, conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body
+		SELECT `+messageCols+`
 		FROM messages WHERE conference_id=? AND status!='D'
 		ORDER BY msg_number DESC LIMIT ? OFFSET ?`,
 		conferenceID, limit, offset)
@@ -142,7 +192,7 @@ func (s *Store) List(conferenceID, limit, offset int) ([]*Message, error) {
 // ListFrom returns messages in a conference with msg_number >= startNum, oldest first.
 func (s *Store) ListFrom(conferenceID, startNum, limit int) ([]*Message, error) {
 	rows, err := s.db.Query(`
-		SELECT id, conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body
+		SELECT `+messageCols+`
 		FROM messages WHERE conference_id=? AND msg_number>=? AND status!='D'
 		ORDER BY msg_number ASC LIMIT ?`,
 		conferenceID, startNum, limit)
@@ -156,7 +206,7 @@ func (s *Store) ListFrom(conferenceID, startNum, limit int) ([]*Message, error) 
 // Get fetches a single message by conference + number.
 func (s *Store) Get(conferenceID, msgNumber int) (*Message, error) {
 	row := s.db.QueryRow(`
-		SELECT id, conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body
+		SELECT `+messageCols+`
 		FROM messages WHERE conference_id=? AND msg_number=?`,
 		conferenceID, msgNumber)
 	return scanMessage(row)
@@ -168,12 +218,13 @@ func (s *Store) Delete(id int64) error {
 	return err
 }
 
-// ListEcho returns echo-flagged messages in a conference, oldest first.
+// ListEcho returns echo-flagged messages in a conference that have not yet
+// been written to an outbound FidoNet packet, oldest first.
 // Used by the FidoNet scanner when building outbound packets.
 func (s *Store) ListEcho(conferenceID, limit, offset int) ([]*Message, error) {
 	rows, err := s.db.Query(`
-		SELECT id, conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body
-		FROM messages WHERE conference_id=? AND echo=1 AND status!='D'
+		SELECT `+messageCols+`
+		FROM messages WHERE conference_id=? AND echo=1 AND status!='D' AND fido_exported_at IS NULL
 		ORDER BY msg_number ASC LIMIT ? OFFSET ?`,
 		conferenceID, limit, offset)
 	if err != nil {
@@ -181,6 +232,28 @@ func (s *Store) ListEcho(conferenceID, limit, offset int) ([]*Message, error) {
 	}
 	defer rows.Close()
 	return scanMessages(rows)
+}
+
+// HasFidoMsgID reports whether a message with the given FidoNet MSGID
+// already exists in the conference. Used by the toss pipeline to detect
+// duplicate packet processing (e.g. a crash between import and marking
+// the source file as handled).
+func (s *Store) HasFidoMsgID(conferenceID int, msgID string) (bool, error) {
+	if msgID == "" {
+		return false, nil
+	}
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(1) FROM messages WHERE conference_id=? AND fido_msgid=?`,
+		conferenceID, msgID).Scan(&n)
+	return n > 0, err
+}
+
+// MarkExported records that a message has been written into an outbound
+// FidoNet packet, so it is not selected again by ListEcho on a later scan.
+func (s *Store) MarkExported(id int64) error {
+	_, err := s.db.Exec(`UPDATE messages SET fido_exported_at=? WHERE id=?`,
+		time.Now().Format(time.RFC3339), id)
+	return err
 }
 
 // HighMsgNumber returns the highest message number in a conference.
@@ -196,13 +269,22 @@ func scanMessage(sc scanner) (*Message, error) {
 	var m Message
 	var dateStr string
 	var echo int
+	var msgID, seenBy, path, origin, exportedAt sql.NullString
 	err := sc.Scan(&m.ID, &m.ConferenceID, &m.MsgNumber, &m.FromName, &m.ToName,
-		&m.Subject, &dateStr, &m.Status, &echo, &m.Body)
+		&m.Subject, &dateStr, &m.Status, &echo, &m.Body,
+		&msgID, &seenBy, &path, &origin, &exportedAt)
 	if err != nil {
 		return nil, err
 	}
 	m.DatePosted, _ = time.Parse(time.RFC3339, dateStr)
 	m.Echo = echo != 0
+	m.FidoMsgID = msgID.String
+	m.FidoSeenBy = seenBy.String
+	m.FidoPath = path.String
+	m.FidoOrigin = origin.String
+	if exportedAt.Valid {
+		m.FidoExportedAt, _ = time.Parse(time.RFC3339, exportedAt.String)
+	}
 	return &m, nil
 }
 
@@ -223,4 +305,13 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// nullable converts an empty string to a SQL NULL so optional FidoNet
+// metadata columns stay NULL (rather than "") for locally-authored messages.
+func nullable(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
 }

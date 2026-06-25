@@ -31,11 +31,17 @@ CREATE TABLE IF NOT EXISTS messages (
     echo            INTEGER NOT NULL DEFAULT 0,
     has_attachment  INTEGER NOT NULL DEFAULT 0,
     body            TEXT    NOT NULL DEFAULT '',
+    fido_msgid      TEXT,    -- FidoNet ^AMSGID kludge value, for dedupe/threading
+    fido_seenby     TEXT,    -- space-separated net/node tokens from SEEN-BY lines
+    fido_path       TEXT,    -- space-separated net/node tokens from ^APATH kludge
+    fido_origin     TEXT,    -- originating zone:net/node if received via FidoNet toss
+    fido_exported_at TEXT,   -- set once this message has been written to an outbound PKT
     UNIQUE (conference_id, msg_number)
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_conf ON messages(conference_id, msg_number);
 CREATE INDEX IF NOT EXISTS idx_messages_to   ON messages(to_name);
+CREATE INDEX IF NOT EXISTS idx_messages_fido_msgid ON messages(fido_msgid);
 
 -- FidoNet nodelist: imported from NODELIST.xxx files
 CREATE TABLE IF NOT EXISTS fido_nodes (
@@ -75,3 +81,16 @@ CREATE TABLE IF NOT EXISTS fido_netmail (
     created_at TEXT    NOT NULL DEFAULT (datetime('now')),
     sent_at    TEXT
 );
+
+-- AreaFix subscriptions: which echomail areas each downlink receives from us.
+CREATE TABLE IF NOT EXISTS fido_areafix_subs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    network       TEXT    NOT NULL DEFAULT 'FidoNet',
+    downlink_addr TEXT    NOT NULL,  -- zone:net/node of the downlink (no point)
+    area_tag      TEXT    NOT NULL,  -- AREA: tag, matches conferences.echo_tag
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(network, downlink_addr, area_tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_areafix_subs_downlink ON fido_areafix_subs(network, downlink_addr);
+CREATE INDEX IF NOT EXISTS idx_areafix_subs_area     ON fido_areafix_subs(network, area_tag);

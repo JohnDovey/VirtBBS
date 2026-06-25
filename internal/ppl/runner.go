@@ -36,6 +36,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/virtbbs/virtbbs/internal/ansi"
 )
 
 // Run compiles and executes a PPL source file (.PPS) given an Environment.
@@ -68,11 +70,11 @@ func EnvFromSession(rw io.ReadWriter, userName, userCity string, userSec, timesO
 	rd := newBufReader(rw)
 	return &Environment{
 		Print: func(s string) {
-			_, _ = io.WriteString(rw, s)
+			_, _ = io.WriteString(rw, ansi.ToCP437(s))
 		},
 		Input: func(prompt string) string {
 			if prompt != "" {
-				_, _ = io.WriteString(rw, prompt)
+				_, _ = io.WriteString(rw, ansi.ToCP437(prompt))
 			}
 			line, _ := rd.ReadString('\n')
 			return strings.TrimRight(line, "\r\n")
