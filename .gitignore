@@ -17,6 +17,11 @@ gui-dotnet/**/obj/
 dotnet-virtterm/**/bin/
 dotnet-virtterm/**/obj/
 
+# Android / Gradle
+android/**/build/
+android/**/.gradle/
+android/**/local.properties
+
 # Runtime data
 /data/*.db
 /data/*.pem

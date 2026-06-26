@@ -39,6 +39,8 @@ VirtBBS/
 │   └── VirtBBS.GUI/       # Sysop console (.NET / Avalonia UI)
 ├── dotnet-virtterm/
 │   └── VirtTerm/          # Graphical terminal client (.NET / WinForms) — own TLS protocol
+├── android/
+│   └── VirtAnd/           # Android point client (Kotlin) — offline-first, QWK/REP sync
 ├── internal/
 │   ├── ansi/              # ANSI escape sequence helpers
 │   ├── api/               # JSON-over-TCP sysop management API
