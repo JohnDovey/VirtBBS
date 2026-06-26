@@ -76,6 +76,12 @@ public partial class MainWindow : Window
         SetStatus("Not connected");
 
         Opened += async (_, _) => await ConnectAsync();
+
+        // Re-focus the terminal pane whenever the window becomes active again
+        // (e.g. after a dialog closes, or switching back from another app) —
+        // belt-and-suspenders alongside the explicit Focus() call after a
+        // successful connect in ConnectAsync.
+        Activated += (_, _) => _terminalControl.Focus();
     }
 
     private void SetStatus(string text) => _statusLabel.Text = text;
@@ -97,6 +103,12 @@ public partial class MainWindow : Window
             // thread so the window doesn't freeze while it's in progress.
             await Task.Run(() => _conn.Connect(_settings.Host, _settings.TerminalPort));
             SetStatus($"Connected to {_settings.Host}:{_settings.TerminalPort}");
+
+            // Give the terminal pane keyboard focus now that we're connected —
+            // otherwise nothing the user types goes anywhere until they happen
+            // to click into the pane first (Focus() was previously only ever
+            // called from OnPointerPressed).
+            _terminalControl.Focus();
         }
         catch (Exception ex)
         {
