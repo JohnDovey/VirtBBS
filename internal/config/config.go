@@ -27,6 +27,10 @@
 // Change History:
 //   v0.0.1  2026-06-24  Initial implementation
 //   v0.0.5  2026-06-24  Phase 12/14: added Doors []door.Config and CallerLogPath
+//   v0.6.0  2026-06-26  Phase 0 (VirtAnd/VirtTerm): NetworkConfig.UserAPIPort/UserAPIBind
+//                        for the new token-authenticated internal/userapi listener
+//   v0.8.0  2026-06-26  Phase 2 (VirtTerm): NetworkConfig.VirtTermPort/VirtTermBind for
+//                        the new TLS terminal-transport listener (internal/virtterm)
 // ============================================================================
 
 // Package config manages VirtBBS.DAT — the TOML configuration file.
@@ -63,10 +67,14 @@ type SessionConfig struct {
 }
 
 type NetworkConfig struct {
-	TelnetPort int    `toml:"telnet_port" json:"telnet_port"`
-	SSHPort    int    `toml:"ssh_port"    json:"ssh_port"`
-	APIPort    int    `toml:"api_port"    json:"api_port"`
-	APIBind    string `toml:"api_bind"    json:"api_bind"`
+	TelnetPort   int    `toml:"telnet_port"    json:"telnet_port"`
+	SSHPort      int    `toml:"ssh_port"       json:"ssh_port"`
+	APIPort      int    `toml:"api_port"       json:"api_port"`
+	APIBind      string `toml:"api_bind"       json:"api_bind"`
+	UserAPIPort  int    `toml:"userapi_port"   json:"userapi_port"` // VirtAnd/VirtTerm token-authenticated API
+	UserAPIBind  string `toml:"userapi_bind"   json:"userapi_bind"`
+	VirtTermPort int    `toml:"virtterm_port"  json:"virtterm_port"` // VirtTerm TLS terminal transport
+	VirtTermBind string `toml:"virtterm_bind"  json:"virtterm_bind"`
 }
 
 type PathsConfig struct {
@@ -136,10 +144,14 @@ func Save(cfg *Config) error {
 func defaults() *Config {
 	return &Config{
 		Network: NetworkConfig{
-			TelnetPort: 2323,
-			SSHPort:    3232,
-			APIPort:    9999,
-			APIBind:    "0.0.0.0",
+			TelnetPort:   2323,
+			SSHPort:      3232,
+			APIPort:      9999,
+			APIBind:      "0.0.0.0",
+			UserAPIPort:  9998,
+			UserAPIBind:  "0.0.0.0",
+			VirtTermPort: 6323,
+			VirtTermBind: "0.0.0.0",
 		},
 		Paths: PathsConfig{
 			DB:        "./data/virtbbs.db",

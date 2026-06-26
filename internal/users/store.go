@@ -26,14 +26,20 @@
 //
 // Change History:
 //   v0.0.1  2026-06-24  Initial implementation
+//   v0.6.0  2026-06-26  Phase 0 (VirtAnd/VirtTerm): user_api_tokens table +
+//                        CreateAPIToken/AuthenticateToken/RevokeAPIToken/ListAPITokens
+//                        for the new user-facing userapi package.
 // ============================================================================
 
 // Package users manages the VirtBBS user database.
 package users
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	_ "embed"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -349,4 +355,92 @@ func boolInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// ── API tokens (internal/userapi: VirtAnd, VirtTerm) ──────────────────────────
+
+// APIToken describes a user-issued API token (the raw token value is never
+// stored — only its SHA-256 hash, in the same spirit as the bcrypt password hash).
+type APIToken struct {
+	ID          int64
+	UserID      int64
+	DeviceLabel string
+	CreatedAt   string
+	RevokedAt   string // empty if still active
+}
+
+// hashToken returns the hex-encoded SHA-256 hash of a raw token value.
+// SHA-256 (not bcrypt) is used here because tokens are high-entropy random
+// values, not low-entropy human passwords — there's no brute-force risk to
+// slow down, and a fast deterministic hash lets AuthenticateToken look the
+// token up by hash directly instead of bcrypt-comparing against every row.
+func hashToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
+}
+
+// CreateAPIToken generates a new random API token for userID, stores only
+// its hash, and returns the raw token value (shown to the user exactly once).
+func (s *Store) CreateAPIToken(userID int64, deviceLabel string) (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	raw := hex.EncodeToString(buf)
+	_, err := s.db.Exec(`
+		INSERT INTO user_api_tokens (user_id, token_hash, device_label)
+		VALUES (?,?,?)`,
+		userID, hashToken(raw), deviceLabel)
+	if err != nil {
+		return "", fmt.Errorf("create api token: %w", err)
+	}
+	return raw, nil
+}
+
+// AuthenticateToken looks up the user owning an active (non-revoked) raw
+// token value. Returns ErrBadCredentials if not found or revoked.
+func (s *Store) AuthenticateToken(raw string) (*User, error) {
+	var userID int64
+	err := s.db.QueryRow(`
+		SELECT user_id FROM user_api_tokens
+		WHERE token_hash = ? AND revoked_at IS NULL`,
+		hashToken(raw)).Scan(&userID)
+	if err != nil {
+		return nil, ErrBadCredentials
+	}
+	u, err := s.GetByID(userID)
+	if err != nil || u.Deleted {
+		return nil, ErrBadCredentials
+	}
+	return u, nil
+}
+
+// RevokeAPIToken marks a token (by ID, scoped to userID) as revoked.
+func (s *Store) RevokeAPIToken(userID, tokenID int64) error {
+	_, err := s.db.Exec(`
+		UPDATE user_api_tokens SET revoked_at=?
+		WHERE id=? AND user_id=? AND revoked_at IS NULL`,
+		time.Now().Format("2006-01-02 15:04:05"), tokenID, userID)
+	return err
+}
+
+// ListAPITokens returns all tokens (active and revoked) issued to userID,
+// newest first.
+func (s *Store) ListAPITokens(userID int64) ([]*APIToken, error) {
+	rows, err := s.db.Query(`
+		SELECT id, user_id, device_label, created_at, COALESCE(revoked_at, '')
+		FROM user_api_tokens WHERE user_id=? ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*APIToken
+	for rows.Next() {
+		t := &APIToken{}
+		if err := rows.Scan(&t.ID, &t.UserID, &t.DeviceLabel, &t.CreatedAt, &t.RevokedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }

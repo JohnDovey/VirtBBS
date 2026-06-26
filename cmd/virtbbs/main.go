@@ -28,6 +28,12 @@
 //   v0.0.1  2026-06-24  Initial implementation
 //   v0.0.2  2026-06-24  Phase 10: Handler signatures updated to io.ReadWriteCloser
 //   v0.0.5  2026-06-24  Phase 12/14: doors config, CallerLog path from config
+//   v0.6.0  2026-06-26  Phase 0 (VirtAnd/VirtTerm): start internal/userapi listener
+//                        on cfg.Network.UserAPIBind:UserAPIPort
+//   v0.8.0  2026-06-26  Phase 2 (VirtTerm): start internal/virtterm TLS listener on
+//                        cfg.Network.VirtTermBind:VirtTermPort, reusing session.Run
+//                        exactly like the Telnet handler (self-signed cert at
+//                        data/virtterm_cert.pem / data/virtterm_key.pem)
 // ============================================================================
 
 // virtbbs is the VirtBBS server — Telnet + SSH BBS with a built-in management API.
@@ -61,8 +67,10 @@ import (
 	"github.com/virtbbs/virtbbs/internal/session"
 	"github.com/virtbbs/virtbbs/internal/sshsrv"
 	"github.com/virtbbs/virtbbs/internal/telnet"
+	"github.com/virtbbs/virtbbs/internal/userapi"
 	"github.com/virtbbs/virtbbs/internal/users"
 	"github.com/virtbbs/virtbbs/internal/version"
+	"github.com/virtbbs/virtbbs/internal/virtterm"
 )
 
 func main() {
@@ -294,6 +302,22 @@ func main() {
 		}
 	}()
 
+	// Start the VirtTerm TLS terminal-transport listener — same session.Run
+	// experience as Telnet/SSH, just over a TLS socket with simpler framing.
+	go func() {
+		addr := fmt.Sprintf("%s:%d", cfg.Network.VirtTermBind, cfg.Network.VirtTermPort)
+		log.Printf("VirtTerm (TLS) listening on %s", addr)
+		srv := &virtterm.Server{
+			Addr:     addr,
+			CertFile: "data/virtterm_cert.pem",
+			KeyFile:  "data/virtterm_key.pem",
+			Handler:  telnetHandler, // echoInput=true — same as Telnet, no IAC negotiation either
+		}
+		if err := srv.ListenAndServe(); err != nil {
+			log.Printf("VirtTerm error: %v", err)
+		}
+	}()
+
 	// Start the automatic FidoNet poll/toss scheduler (one goroutine per
 	// enabled network with a configured uplink — see internal/scheduler).
 	if cfg.Fido.Enabled {
@@ -318,6 +342,24 @@ func main() {
 		Conferences: confStore,
 	}
 	apiSrv := &api.Server{Addr: apiAddr, Deps: apiDeps}
+
+	// Start the user-facing API (VirtAnd, VirtTerm) — token-authenticated,
+	// separate port/trust-boundary from the sysop-only management API above.
+	userAPIAddr := fmt.Sprintf("%s:%d", cfg.Network.UserAPIBind, cfg.Network.UserAPIPort)
+	log.Printf("User API listening on %s", userAPIAddr)
+	userAPIDeps := userapi.Deps{
+		Users:       userStore,
+		Messages:    msgStore,
+		Conferences: confStore,
+		Files:       fileStore,
+	}
+	userAPISrv := &userapi.Server{Addr: userAPIAddr, Deps: userAPIDeps}
+	go func() {
+		if err := userAPISrv.ListenAndServe(); err != nil {
+			log.Printf("User API error: %v", err)
+		}
+	}()
+
 	log.Fatal(apiSrv.ListenAndServe())
 }
 

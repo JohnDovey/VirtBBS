@@ -111,3 +111,13 @@ CREATE TABLE IF NOT EXISTS fido_filefix_subs (
 
 CREATE INDEX IF NOT EXISTS idx_filefix_subs_downlink ON fido_filefix_subs(network, downlink_addr);
 CREATE INDEX IF NOT EXISTS idx_filefix_subs_area     ON fido_filefix_subs(network, file_tag);
+
+-- Nodelist version tracking: one row per successful import, written by
+-- fido.ImportFile (and therefore also fido.FetchAndImport). Lets clients
+-- (internal/userapi, used by VirtAnd/VirtTerm) cheaply ask "has this
+-- network's nodelist changed since I last synced" without re-downloading.
+CREATE TABLE IF NOT EXISTS fido_nodelist_versions (
+    network     TEXT    NOT NULL PRIMARY KEY,
+    imported_at TEXT    NOT NULL,
+    node_count  INTEGER NOT NULL DEFAULT 0
+);

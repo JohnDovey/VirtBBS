@@ -26,6 +26,9 @@
 //
 // Change History:
 //   v0.0.6  2026-06-24  Initial implementation — NODELIST.xxx parser, SQLite store, search
+//   v0.6.0  2026-06-26  Phase 0 (VirtAnd/VirtTerm): record a fido_nodelist_versions row
+//                        on every successful ImportFile, and add GetNodelistVersion so
+//                        clients can detect "has this network's nodelist changed".
 // ============================================================================
 
 // Package fido — nodelist.go
@@ -58,6 +61,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -251,7 +255,45 @@ func ImportFile(db *sql.DB, path, network string) (*ImportResult, error) {
 	}
 
 	_ = ndb // suppress unused warning
+
+	if err := RecordNodelistVersion(db, network, result.Inserted); err != nil {
+		return result, err
+	}
 	return result, nil
+}
+
+// RecordNodelistVersion upserts the fido_nodelist_versions row for network,
+// recording the current time and node count. Called by ImportFile after
+// every successful import.
+func RecordNodelistVersion(db *sql.DB, network string, nodeCount int) error {
+	_, err := db.Exec(`
+		INSERT INTO fido_nodelist_versions (network, imported_at, node_count)
+		VALUES (?,?,?)
+		ON CONFLICT(network) DO UPDATE SET imported_at=excluded.imported_at, node_count=excluded.node_count`,
+		network, time.Now().Format(time.RFC3339), nodeCount)
+	return err
+}
+
+// NodelistVersion describes the most recent successful import for a network.
+type NodelistVersion struct {
+	Network    string `json:"network"`
+	ImportedAt string `json:"imported_at"`
+	NodeCount  int    `json:"node_count"`
+}
+
+// GetNodelistVersion returns the most recent import record for network, or
+// nil if the network has never been successfully imported.
+func GetNodelistVersion(db *sql.DB, network string) (*NodelistVersion, error) {
+	v := &NodelistVersion{Network: network}
+	err := db.QueryRow(`SELECT imported_at, node_count FROM fido_nodelist_versions WHERE network=?`, network).
+		Scan(&v.ImportedAt, &v.NodeCount)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return v, nil
 }
 
 // findLatestNodelist finds the most recently modified NODELIST.* file in dir.

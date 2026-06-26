@@ -34,9 +34,11 @@ PCBoard was one of the most influential Bulletin Board Systems (BBS) of its era,
 ```
 VirtBBS/
 ├── cmd/
-│   └── virtbbs/           # BBS server (Telnet + SSH + API)
+│   └── virtbbs/           # BBS server (Telnet + SSH + API + userapi + virtterm)
 ├── gui-dotnet/
 │   └── VirtBBS.GUI/       # Sysop console (.NET / Avalonia UI)
+├── dotnet-virtterm/
+│   └── VirtTerm/          # Graphical terminal client (.NET / WinForms) — own TLS protocol
 ├── internal/
 │   ├── ansi/              # ANSI escape sequence helpers
 │   ├── api/               # JSON-over-TCP sysop management API
@@ -53,12 +55,15 @@ VirtBBS/
 │   │   ├── types.go       # PPL value types
 │   │   ├── interpreter.go # Tree-walking interpreter + built-ins
 │   │   └── runner.go      # High-level Run() / EnvFromSession()
+│   ├── qwk/               # Real legacy QWK/REP binary offline-mail packets
 │   ├── session/           # Per-user session state machine
 │   ├── sshsrv/            # SSH server
 │   ├── telnet/            # Telnet server + IAC negotiation
 │   ├── transfer/          # Pure-Go Zmodem file transfer
+│   ├── userapi/           # Token-authenticated JSON-over-TCP API (VirtAnd/VirtTerm)
 │   ├── users/             # User store + PCBoard USERS importer
-│   └── version/           # Version constant
+│   ├── version/           # Version constant
+│   └── virtterm/          # TLS terminal-transport listener for VirtTerm
 ├── pkg/
 │   └── pcbformat/         # PCBoard binary format decoders
 │       ├── dates.go       # YYMMDD / HHMM helpers

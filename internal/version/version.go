@@ -95,6 +95,21 @@
 //                        fido_msgid column, so any DB created before that column existed
 //                        failed to open ("no such column: fido_msgid"). The index is now
 //                        created in migrate(), after the column is guaranteed to exist.
+//   v0.6.0  2026-06-26  Phase 0 of VirtAnd (Android point client) / VirtTerm (.NET
+//                        graphical terminal client): new user_api_tokens table and
+//                        users.Store.CreateAPIToken/AuthenticateToken/RevokeAPIToken/
+//                        ListAPITokens, laying the groundwork for the new user-facing
+//                        internal/userapi package these two new clients will use.
+//   v0.7.0  2026-06-26  Phase 1 of VirtAnd/VirtTerm: real legacy QWK/REP binary
+//                        packet support (new internal/qwk — BuildPacket/ParseRep/
+//                        PostReplies) plus base64-in-JSON file content transfer
+//                        and QWK download/upload endpoints in internal/userapi
+//                        (qwk.download, qwk.upload, files.download, files.upload).
+//   v0.8.0  2026-06-26  Phase 2 of VirtTerm: new internal/virtterm — a TLS
+//                        terminal-transport listener (self-signed cert
+//                        auto-generated like the SSH host key) that hands
+//                        connections unmodified to the existing session.Run,
+//                        wired into main.go alongside Telnet/SSH/userapi.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -105,4 +120,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.5.1"
+const Version = "0.8.0"

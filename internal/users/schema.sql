@@ -40,3 +40,17 @@ CREATE TABLE IF NOT EXISTS user_conferences (
 
 CREATE INDEX IF NOT EXISTS idx_users_name ON users(name);
 CREATE INDEX IF NOT EXISTS idx_users_deleted ON users(deleted);
+
+-- User-generated API tokens for the new user-facing JSON/TCP API (internal/userapi),
+-- used by VirtAnd (Android point client) and VirtTerm (.NET terminal client).
+-- Hash-only storage, same spirit as the bcrypt password_hash column above.
+CREATE TABLE IF NOT EXISTS user_api_tokens (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash    TEXT    NOT NULL,
+    device_label  TEXT    NOT NULL DEFAULT '',
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    revoked_at    TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_api_tokens_user ON user_api_tokens(user_id);
