@@ -105,6 +105,21 @@ public class TerminalControl : Control
     // via OnTextInput below; handling both here AND there would double-send.
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        // Ctrl+<letter> chords (Ctrl+A..Ctrl+Z) map to control bytes 0x01-0x1A
+        // — used heavily by the BBS's full-screen message editor (Ctrl+S =
+        // save, Ctrl+A = abort, Ctrl+K = cut, etc.). Unlike WinForms, where
+        // OnKeyPress delivers these as the correct control byte in KeyChar
+        // automatically, Avalonia's OnTextInput never fires for Ctrl-chords
+        // at all — without this explicit mapping, every Ctrl+<letter>
+        // shortcut would silently do nothing.
+        if (e.KeyModifiers == KeyModifiers.Control && e.Key >= Key.A && e.Key <= Key.Z)
+        {
+            byte ctrlByte = (byte)(e.Key - Key.A + 1);
+            KeyInput?.Invoke(new[] { ctrlByte });
+            e.Handled = true;
+            return;
+        }
+
         byte[]? seq = e.Key switch
         {
             Key.Up => new byte[] { 0x1B, (byte)'[', (byte)'A' },
