@@ -103,6 +103,13 @@ func (s *Store) migrate() error {
 			}
 		}
 	}
+
+	// Must run after the ALTER TABLE statements above — creating this index
+	// in schema.sql (which runs before migrate()) fails on a pre-existing
+	// database that doesn't have fido_msgid yet.
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_fido_msgid ON messages(fido_msgid)`); err != nil {
+		return err
+	}
 	return nil
 }
 

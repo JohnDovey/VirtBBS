@@ -41,7 +41,9 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_conf ON messages(conference_id, msg_number);
 CREATE INDEX IF NOT EXISTS idx_messages_to   ON messages(to_name);
-CREATE INDEX IF NOT EXISTS idx_messages_fido_msgid ON messages(fido_msgid);
+-- idx_messages_fido_msgid is created in store.go's migrate(), AFTER the
+-- ALTER TABLE statements that add fido_msgid to pre-existing databases —
+-- creating it here would fail on an old DB before migrate() has run.
 
 -- FidoNet nodelist: imported from NODELIST.xxx files
 CREATE TABLE IF NOT EXISTS fido_nodes (

@@ -90,6 +90,11 @@
 //                        nodelist_url/nodelist_update_interval_hours config, a second
 //                        per-network scheduler ticker, a sysop "[L]oad nodelist now" menu
 //                        option, and a fido.nodelist.fetch API endpoint.
+//   v0.5.1  2026-06-25  Fix a startup crash on pre-existing databases: schema.sql created
+//                        idx_messages_fido_msgid before migrate()'s ALTER TABLE added the
+//                        fido_msgid column, so any DB created before that column existed
+//                        failed to open ("no such column: fido_msgid"). The index is now
+//                        created in migrate(), after the column is guaranteed to exist.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -100,4 +105,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.5.0"
+const Version = "0.5.1"
