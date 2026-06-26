@@ -133,6 +133,22 @@
 //                        expansion/CP437 decode/box-alignment fixes; stale
 //                        node-row purge on list/startup; PPL input via session
 //                        readline.
+//   v0.11.0 2026-06-26  Real Zmodem file transfer support in VirtTerm and
+//                        VirtTermMac: both clients now detect the server's
+//                        download/upload Zmodem cues mid-stream, hand off to
+//                        a new client-side Zmodem implementation (Terminal/
+//                        Zmodem.cs, a C# port of this package), and prompt
+//                        for a save folder / upload file via a native file
+//                        picker. Found and fixed four real bugs in this
+//                        package along the way, via a Go<->C# interop test
+//                        harness: a deadlock in readHexFrame's trailing
+//                        CR/LF/XON consumption; ZFILE/ZDATA's data subpacket
+//                        never actually being read on the hex-header path
+//                        (only the unused binary path read it); the
+//                        subpacket CRC trailer bytes not being un-escaped
+//                        like the payload; and ReceiveFile only reading one
+//                        data subpacket per ZDATA header instead of the full
+//                        run of subpackets a real transfer sends.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -143,4 +159,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.10.0"
+const Version = "0.11.0"

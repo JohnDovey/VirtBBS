@@ -65,20 +65,16 @@ protocol logic (which is the unmodified, shared code listed above).
 
 ## Known limitations (same as VirtTerm, by design — see the plan)
 
-- **No Zmodem support — file uploads/downloads through the BBS's `[F]iles`
-  menu do not work in this client.** VirtBBS's file transfers
-  (`internal/transfer/zmodem.go`) are pure-Go Zmodem over the raw Telnet/SSH
-  byte stream: the server sends a `ZRQINIT`/`ZRINIT` handshake and expects
-  the *terminal client itself* to recognize it and switch into Zmodem
-  receive/send mode. Neither `VirtTerm` nor `VirtTermMac` does any such
-  detection — `TerminalConnection` just forwards raw bytes to the ANSI
-  screen renderer, so a Zmodem handshake would be displayed as garbage
-  characters instead of triggering a download. Implementing this would mean
-  porting (or binding to) a Zmodem implementation client-side, sniffing the
-  incoming byte stream for the handshake sequence, and wiring up a real file
-  picker (`SaveFileDialog`/`OpenFileDialog` — Avalonia's equivalent is
-  `IStorageProvider`) for where downloaded files land and which file gets
-  uploaded. Not yet done in either client.
+- **Zmodem file transfers (`[F]iles` menu downloads/uploads) work.**
+  `Terminal/Zmodem.cs` is a C# port of the server's
+  `internal/transfer/zmodem.go` wire format. `TerminalConnection` watches a
+  small rolling tail of incoming bytes for the server's literal
+  download/upload announcement text, hands the live socket off to
+  `Zmodem.ReceiveFile`/`SendFile` (verified byte-for-byte against the real
+  server over a live TCP socket, both directions), and prompts for a save
+  folder or upload file via Avalonia's `IStorageProvider`. No crash-recovery
+  resume (always starts at offset 0) and no progress dialog beyond the
+  status bar — both acceptable gaps for a first working version.
 - Fixed 80x25 grid — no resize negotiation, since VirtBBS's own session
   layer is hard-baked to this size.
 - No native UI for any multi-step BBS flow (composing a message,

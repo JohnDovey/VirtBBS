@@ -200,7 +200,7 @@ func SendFile(rw io.ReadWriter, path string) error {
 	}
 
 	// 3. Read receiver response: ZRPOS (resume offset) or ZRINIT/ZSKIP.
-	ftype, hdrData, err := readAnyFrame(br)
+	ftype, hdrData, _, err := readAnyFrame(br)
 	if err != nil {
 		return fmt.Errorf("after ZFILE: %w", err)
 	}
@@ -215,7 +215,7 @@ func SendFile(rw io.ReadWriter, path string) error {
 		if err := sendDataSubpacket(rw, []byte(fileData), ZCRCW, false); err != nil {
 			return err
 		}
-		ftype, hdrData, err = readAnyFrame(br)
+		ftype, hdrData, _, err = readAnyFrame(br)
 		if err != nil {
 			return err
 		}
@@ -254,7 +254,7 @@ func SendFile(rw io.ReadWriter, path string) error {
 			}
 			if isLast {
 				// Wait for ZACK before sending ZEOF.
-				if _, _, err := readAnyFrame(br); err != nil {
+				if _, _, _, err := readAnyFrame(br); err != nil {
 					return fmt.Errorf("after last data: %w", err)
 				}
 				break
@@ -274,7 +274,7 @@ func SendFile(rw io.ReadWriter, path string) error {
 	}
 
 	// 7. Wait for ZRINIT (ready for next file), then send ZFIN.
-	if _, _, err := readAnyFrame(br); err != nil {
+	if _, _, _, err := readAnyFrame(br); err != nil {
 		return fmt.Errorf("after ZEOF: %w", err)
 	}
 	if err := sendHexHeader(rw, ZFIN, 0); err != nil {
@@ -301,7 +301,7 @@ func ReceiveFile(rw io.ReadWriter, destDir string) (string, error) {
 
 	// 2. Wait for ZFILE from sender.
 	for {
-		ftype, data, err := readAnyFrame(br)
+		ftype, data, _, err := readAnyFrame(br)
 		if err != nil {
 			return "", fmt.Errorf("waiting for ZFILE: %w", err)
 		}
@@ -340,18 +340,50 @@ func ReceiveFile(rw io.ReadWriter, destDir string) (string, error) {
 			// 4. Receive data.
 			received := resumeAt
 			for {
-				ftype, pkt, err := readAnyFrame(br)
+				ftype, pkt, marker, err := readAnyFrame(br)
 				if err != nil {
 					return outPath, fmt.Errorf("receiving data: %w", err)
 				}
 				switch ftype {
 				case ZDATA:
-					if _, err := f.Write(pkt); err != nil {
-						return outPath, fmt.Errorf("write: %w", err)
+					// A single ZDATA header is followed by a *run* of raw
+					// data subpackets with no header in between (the
+					// sender only issues a fresh header once a subpacket's
+					// marker is ZCRCW — see SendFile's chunking loop).
+					// Keep consuming subpackets directly via
+					// readDataSubpacket — bypassing readAnyFrame's header
+					// scan — until that marker is seen, then fall through
+					// to this outer loop for the next real header (ZEOF or
+					// another ZDATA). Missing this inner loop previously
+					// truncated every transfer at exactly one 1024-byte
+					// chunk: the scanner silently ate the headerless
+					// follow-on subpackets as noise while hunting for a
+					// ZPAD ZPAD ZDLE that never came.
+					for {
+						if _, err := f.Write(pkt); err != nil {
+							return outPath, fmt.Errorf("write: %w", err)
+						}
+						received += int64(len(pkt))
+						// Only ZCRCW/ZCRCQ actually request an ack; ZCRCG
+						// means "keep streaming, no ack needed" and
+						// SendFile relies on that — it never reads any ack
+						// until after the final ZCRCW chunk. Acking every
+						// chunk regardless queues up stale ACKs the sender
+						// never drains, which it can then mistake for the
+						// one it's actually waiting for, closing the
+						// connection mid-transfer (see the matching fix
+						// and explanation in the C# Zmodem.cs port).
+						if marker == ZCRCW || marker == ZCRCQ {
+							_ = sendHexHeader(rw, ZACK, uint32(received))
+						}
+						if marker == ZCRCW {
+							break
+						}
+						pkt, marker, err = readDataSubpacket(br)
+						if err != nil {
+							return outPath, fmt.Errorf("receiving data: %w", err)
+						}
 					}
-					received += int64(len(pkt))
-					// Acknowledge.
-					_ = sendHexHeader(rw, ZACK, uint32(received))
 				case ZEOF:
 					// Transfer complete.
 					_ = sendHexHeader(rw, ZRINIT,
@@ -451,17 +483,17 @@ func needsEscape(b byte) bool {
 // It returns the frame type and for ZDATA/ZFILE frames also the data subpacket content.
 // For header-only frames (ZRPOS, ZRQINIT, etc.) the returned data slice contains
 // the raw 4-byte position field.
-func readAnyFrame(br *bufio.Reader) (byte, []byte, error) {
+func readAnyFrame(br *bufio.Reader) (byte, []byte, byte, error) {
 	canCount := 0
 	for {
 		b, err := br.ReadByte()
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, 0, err
 		}
 		if b == 0x18 { // CAN
 			canCount++
 			if canCount >= 5 {
-				return ZCAN, nil, nil
+				return ZCAN, nil, 0, nil
 			}
 			continue
 		}
@@ -473,13 +505,13 @@ func readAnyFrame(br *bufio.Reader) (byte, []byte, error) {
 		// Might be the start of a frame. Read the next byte.
 		b2, err := br.ReadByte()
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, 0, err
 		}
 		if b2 == ZPAD {
 			// Two ZPADs — read one more.
 			b2, err = br.ReadByte()
 			if err != nil {
-				return 0, nil, err
+				return 0, nil, 0, err
 			}
 		}
 		if b2 != ZDLE {
@@ -492,7 +524,7 @@ func readAnyFrame(br *bufio.Reader) (byte, []byte, error) {
 		// Read encoding type.
 		enc, err := br.ReadByte()
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, 0, err
 		}
 		switch enc {
 		case ZHEX:
@@ -508,87 +540,155 @@ func readAnyFrame(br *bufio.Reader) (byte, []byte, error) {
 }
 
 // readHexFrame reads and decodes a ZHEX-encoded Zmodem header.
-// Returns the frame type and the 4-byte position as data.
-func readHexFrame(br *bufio.Reader) (byte, []byte, error) {
+// Returns the frame type, the 4-byte position (or subpacket payload for
+// ZFILE/ZDATA) as data, and — for ZFILE/ZDATA only — the subpacket's ZCRC
+// end-marker (ZCRCE/ZCRCG/ZCRCQ/ZCRCW), 0 otherwise.
+func readHexFrame(br *bufio.Reader) (byte, []byte, byte, error) {
 	// 14 hex digits = 7 bytes (type[1] + pos[4] + crc[2])
 	hexBuf := make([]byte, 14)
 	for i := range hexBuf {
 		b, err := br.ReadByte()
 		if err != nil {
-			return 0, nil, err
+			return 0, nil, 0, err
 		}
 		hexBuf[i] = b
 	}
-	// Consume optional CR LF XON
-	for {
-		b, err := br.ReadByte()
-		if err != nil {
-			break
-		}
-		if b != '\r' && b != '\n' && b != 0x11 {
-			_ = br.UnreadByte()
-			break
-		}
-	}
-
 	raw, err := hexDecode(hexBuf)
 	if err != nil {
-		return 0, nil, fmt.Errorf("hex decode: %w", err)
+		return 0, nil, 0, fmt.Errorf("hex decode: %w", err)
 	}
 	// raw[0]=type raw[1-4]=pos raw[5-6]=crc16
 	// Verify CRC.
 	got := crc16(raw[:5])
 	want := uint16(raw[5])<<8 | uint16(raw[6])
 	if got != want {
-		return 0, nil, fmt.Errorf("hex header CRC mismatch: got %04x want %04x", got, want)
+		return 0, nil, 0, fmt.Errorf("hex header CRC mismatch: got %04x want %04x", got, want)
 	}
-	return raw[0], raw[1:5], nil
+
+	ft := raw[0]
+	if ft == ZFILE || ft == ZDATA {
+		// A data subpacket follows directly on the wire (the sender wrote
+		// it in the same burst right after this header — see sendHexHeader
+		// callers, which always immediately call sendDataSubpacket for
+		// these two types). It's therefore safe to consume the header's
+		// optional trailing CR LF XON here before reading it: unlike
+		// header-only frames (ZRQINIT, ZRPOS, ZACK, ZEOF, ZFIN — see below),
+		// there's no risk of blocking forever waiting on a peer that's
+		// itself waiting on us, because more bytes are already in flight.
+		//
+		// This subpacket read was previously missing entirely for the hex
+		// path (it only existed in the otherwise-unused readBinFrame) — so
+		// ZFILE's filename/size payload was never actually extracted for
+		// any hex-framed transfer, which is the only kind this package
+		// sends. Caught via a Go<->C# Zmodem interop test while building
+		// VirtTerm/VirtTermMac's client-side Zmodem support: ReceiveFile's
+		// upload path would have silently failed to read the uploaded
+		// file's name from a real Zmodem-sending client.
+		for {
+			b, err := br.ReadByte()
+			if err != nil {
+				return 0, nil, 0, err
+			}
+			if b != '\r' && b != '\n' && b != 0x11 {
+				_ = br.UnreadByte()
+				break
+			}
+		}
+		payload, marker, err := readDataSubpacket(br)
+		if err != nil {
+			return ft, nil, 0, err
+		}
+		return ft, payload, marker, nil
+	}
+
+	// Header-only frame (ZRQINIT, ZRINIT, ZRPOS, ZACK, ZEOF, ZFIN, ...):
+	// deliberately does NOT try to consume its optional trailing CR LF XON.
+	// Doing so unconditionally here was a real deadlock: it requires
+	// reading one byte past what's been sent so far to confirm there's
+	// nothing more, which blocks forever whenever the peer is itself
+	// waiting on *our* response before sending anything else (e.g.
+	// waitForZRQINIT blocking here while the far end blocks waiting for us
+	// to reply — caught via the same interop test above). The trailing
+	// bytes are harmless to leave unconsumed: readAnyFrame's outer scan
+	// loop already silently skips any byte that isn't part of a
+	// ZPAD ZPAD ZDLE sequence, so they get skipped naturally next call.
+	return ft, raw[1:5], 0, nil
 }
 
 // readBinFrame reads and decodes a ZBIN or ZBIN32-encoded Zmodem header.
-func readBinFrame(br *bufio.Reader, use32 bool) (byte, []byte, error) {
+func readBinFrame(br *bufio.Reader, use32 bool) (byte, []byte, byte, error) {
 	crcLen := 2
 	if use32 {
 		crcLen = 4
 	}
 	raw, err := readEscaped(br, 5+crcLen)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, 0, err
 	}
 	if use32 {
 		got := crc32b(raw[:5])
 		want := binary.LittleEndian.Uint32(raw[5:])
 		if got != want {
-			return 0, nil, fmt.Errorf("bin32 CRC mismatch")
+			return 0, nil, 0, fmt.Errorf("bin32 CRC mismatch")
 		}
 	} else {
 		got := crc16(raw[:5])
 		want := uint16(raw[5])<<8 | uint16(raw[6])
 		if got != want {
-			return 0, nil, fmt.Errorf("bin CRC mismatch")
+			return 0, nil, 0, fmt.Errorf("bin CRC mismatch")
 		}
 	}
 	// For data frames (ZFILE, ZDATA), read the subpacket payload.
 	ft := raw[0]
 	pos := raw[1:5]
 	if ft == ZFILE || ft == ZDATA {
-		payload, err := readDataSubpacket(br)
+		payload, marker, err := readDataSubpacket(br)
 		if err != nil {
-			return ft, nil, err
+			return ft, nil, 0, err
 		}
-		return ft, payload, nil
+		return ft, payload, marker, nil
 	}
-	return ft, pos, nil
+	return ft, pos, 0, nil
+}
+
+// readEscapedByte reads one byte, transparently un-escaping it if it's a
+// ZDLE-prefixed sequence. sendDataSubpacket always escapes the trailing
+// CRC bytes the same way as the payload (see escapeData(crcBytes) there),
+// so the CRC bytes themselves need this same unescaping when read back —
+// reading them as two raw bytes (as this function's CRC-reading call sites
+// used to do) only happens to work when neither CRC byte's value happens
+// to need escaping, which is true most of the time but not always. Caught
+// via a Go<->C# Zmodem interop test while building VirtTerm/VirtTermMac's
+// client-side Zmodem support, on a CRC value matching ZDLE's own byte.
+func readEscapedByte(br *bufio.Reader) (byte, error) {
+	b, err := br.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	if b != ZDLE {
+		return b, nil
+	}
+	b2, err := br.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	if b2 == ZDLEE {
+		return ZDLE, nil
+	}
+	return b2 ^ 0x40, nil
 }
 
 // readDataSubpacket reads a ZDLE-escaped data stream up to the end-of-subpacket
-// marker (ZDLE ZCRCE/ZCRCG/ZCRCQ/ZCRCW) and verifies its CRC-16.
-func readDataSubpacket(br *bufio.Reader) ([]byte, error) {
+// marker (ZDLE ZCRCE/ZCRCG/ZCRCQ/ZCRCW), verifies its CRC-16, and returns that
+// marker byte alongside the data: ZCRCG/ZCRCQ mean more subpackets follow
+// immediately with no new header in between (see ReceiveFile's inner loop),
+// ZCRCW means the sender will issue a fresh header next.
+func readDataSubpacket(br *bufio.Reader) ([]byte, byte, error) {
 	var data []byte
 	for {
 		b, err := br.ReadByte()
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if b != ZDLE {
 			data = append(data, b)
@@ -597,20 +697,27 @@ func readDataSubpacket(br *bufio.Reader) ([]byte, error) {
 		// Escape sequence.
 		b2, err := br.ReadByte()
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		switch b2 {
 		case ZCRCE, ZCRCG, ZCRCQ, ZCRCW:
-			// End of subpacket. Read 2-byte CRC.
-			c1, _ := br.ReadByte()
-			c2, _ := br.ReadByte()
+			// End of subpacket. Read the 2-byte CRC, itself ZDLE-escaped
+			// the same way the payload is (see readEscapedByte above).
+			c1, err := readEscapedByte(br)
+			if err != nil {
+				return data, 0, err
+			}
+			c2, err := readEscapedByte(br)
+			if err != nil {
+				return data, 0, err
+			}
 			want := uint16(c1)<<8 | uint16(c2)
 			crcData := append(data, b2)
 			got := crc16(crcData)
 			if got != want {
-				return data, fmt.Errorf("subpacket CRC mismatch: got %04x want %04x", got, want)
+				return data, 0, fmt.Errorf("subpacket CRC mismatch: got %04x want %04x", got, want)
 			}
-			return data, nil
+			return data, b2, nil
 		case ZDLEE:
 			data = append(data, ZDLE)
 		default:
@@ -648,7 +755,7 @@ func readEscaped(br *bufio.Reader, n int) ([]byte, error) {
 // waitForZRQINIT scans the byte stream until it sees a valid ZRQINIT frame.
 func waitForZRQINIT(br *bufio.Reader) error {
 	for {
-		ft, _, err := readAnyFrame(br)
+		ft, _, _, err := readAnyFrame(br)
 		if err != nil {
 			return err
 		}

@@ -46,6 +46,34 @@ public class MainForm : Form
         _conn.Disconnected += () => BeginInvoke(new MethodInvoker(HandleLoggedOut));
         _conn.ConnectionError += ex => BeginInvoke(new MethodInvoker(() => SetStatus($"Error: {ex.Message}")));
 
+        // Zmodem handoff callbacks fire synchronously on TerminalConnection's
+        // background read thread (it blocks for the whole transfer), so the
+        // dialog calls below use the blocking Invoke (not BeginInvoke) to
+        // hop to the UI thread and wait for the result — safe here
+        // specifically because we're never calling this *from* the UI
+        // thread, so there's no deadlock risk in blocking on it.
+        _conn.ZmodemResolveDownloadPath = info => (string?)Invoke(new Func<string?>(() =>
+        {
+            using var dlg = new FolderBrowserDialog
+            {
+                Description = $"Save {info.Filename} ({info.Size:N0} bytes) to...",
+                UseDescriptionForTitle = true,
+            };
+            return dlg.ShowDialog(this) == DialogResult.OK
+                ? System.IO.Path.Combine(dlg.SelectedPath, info.Filename)
+                : null;
+        }));
+
+        _conn.ZmodemResolveUploadPath = () => (string?)Invoke(new Func<string?>(() =>
+        {
+            using var dlg = new OpenFileDialog { Title = "Select file to upload", Multiselect = false };
+            return dlg.ShowDialog(this) == DialogResult.OK ? dlg.FileName : null;
+        }));
+
+        _conn.ZmodemProgress = bytes => BeginInvoke(new MethodInvoker(() => SetStatus($"Zmodem: {bytes:N0} bytes transferred...")));
+        _conn.ZmodemCompleted += path => BeginInvoke(new MethodInvoker(() => SetStatus($"Zmodem transfer complete: {path}")));
+        _conn.ZmodemFailed += msg => BeginInvoke(new MethodInvoker(() => SetStatus($"Zmodem transfer failed: {msg}")));
+
         _terminalControl = new TerminalControl(_screen);
         _terminalControl.KeyInput += data => _conn.Send(data);
 

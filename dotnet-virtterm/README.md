@@ -59,19 +59,16 @@ identically to a real DOS font.
 
 ## Known limitations (by design, see the plan)
 
-- **No Zmodem support — file uploads/downloads through the BBS's `[F]iles`
-  menu do not work in this client.** VirtBBS's file transfers
-  (`internal/transfer/zmodem.go`) are pure-Go Zmodem over the raw Telnet/SSH
-  byte stream: the server sends a `ZRQINIT`/`ZRINIT` handshake and expects
-  the *terminal client itself* to recognize it and switch into Zmodem
-  receive/send mode. `TerminalConnection` just forwards raw bytes to the
-  ANSI screen renderer — there's no handshake detection, so a Zmodem
-  transfer would render as garbage characters instead of triggering a
-  download/upload. Implementing this would mean porting (or binding to) a
-  Zmodem implementation client-side, sniffing the incoming stream for the
-  handshake, and wiring up a real file picker
-  (`OpenFileDialog`/`SaveFileDialog`) for the upload source / download
-  destination. Not yet done.
+- **Zmodem file transfers (`[F]iles` menu downloads/uploads) work.**
+  `Terminal/Zmodem.cs` is a C# port of the server's
+  `internal/transfer/zmodem.go` wire format. `TerminalConnection` watches a
+  small rolling tail of incoming bytes for the server's literal
+  download/upload announcement text, hands the live socket off to
+  `Zmodem.ReceiveFile`/`SendFile` (verified byte-for-byte against the real
+  server over a live TCP socket, both directions), and prompts for a save
+  folder or upload file via `FolderBrowserDialog`/`OpenFileDialog`. No
+  crash-recovery resume (always starts at offset 0) and no progress dialog
+  beyond the status bar — both acceptable gaps for a first working version.
 - Fixed 80x25 grid — no resize negotiation. VirtBBS's own session layer is
   hard-baked to this size, so there's nothing to negotiate.
 - No native UI for composing messages, browsing files, or any other

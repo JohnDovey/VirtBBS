@@ -13,6 +13,7 @@ using System;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using VirtTermMac.Menus;
 using VirtTermMac.Net;
@@ -49,6 +50,36 @@ public partial class MainWindow : Window
         _conn = new TerminalConnection(_screen);
         _conn.Disconnected += () => Dispatcher.UIThread.Post(HandleLoggedOut);
         _conn.ConnectionError += ex => Dispatcher.UIThread.Post(() => SetStatus($"Error: {ex.Message}"));
+
+        // Zmodem handoff callbacks fire synchronously on TerminalConnection's
+        // background read thread (it blocks for the whole transfer), so the
+        // file-picker calls below must hop to the UI thread and block this
+        // background thread on the result — safe here specifically because
+        // we're never calling this *from* the UI thread, so there's no
+        // deadlock risk in waiting on the dispatched Task synchronously.
+        _conn.ZmodemResolveDownloadPath = info => Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+            {
+                Title = $"Save {info.Filename} ({info.Size:N0} bytes) to...",
+            });
+            if (folders.Count == 0) return null;
+            return System.IO.Path.Combine(folders[0].Path.LocalPath, info.Filename);
+        }).GetAwaiter().GetResult();
+
+        _conn.ZmodemResolveUploadPath = () => Dispatcher.UIThread.InvokeAsync(async () =>
+        {
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Select file to upload",
+                AllowMultiple = false,
+            });
+            return files.Count == 0 ? null : files[0].Path.LocalPath;
+        }).GetAwaiter().GetResult();
+
+        _conn.ZmodemProgress = bytes => Dispatcher.UIThread.Post(() => SetStatus($"Zmodem: {bytes:N0} bytes transferred..."));
+        _conn.ZmodemCompleted += path => Dispatcher.UIThread.Post(() => SetStatus($"Zmodem transfer complete: {path}"));
+        _conn.ZmodemFailed += msg => Dispatcher.UIThread.Post(() => SetStatus($"Zmodem transfer failed: {msg}"));
 
         _terminalControl = new TerminalControl(_screen);
         _terminalControl.KeyInput += data => _conn.Send(data);
