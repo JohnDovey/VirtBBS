@@ -56,12 +56,12 @@ public class DynamicMenuBuilder
 
         // ── Connection menu (fixed: Logon/Logoff always present) ──────────
         var connMenu = new MenuItem { Header = "_Connection" };
-        var logonItem = new MenuItem { Header = "_Logon..." };
-        logonItem.Click += (_, _) => LogonRequested?.Invoke();
-        var logoffItem = new MenuItem { Header = "Log_off" };
-        logoffItem.Click += (_, _) => LogoffRequested?.Invoke();
-        connMenu.Items.Add(logonItem);
-        connMenu.Items.Add(logoffItem);
+        _logonItem = new MenuItem { Header = "_Logon..." };
+        _logonItem.Click += (_, _) => LogonRequested?.Invoke();
+        _logoffItem = new MenuItem { Header = "Log_off", IsEnabled = false };
+        _logoffItem.Click += (_, _) => LogoffRequested?.Invoke();
+        connMenu.Items.Add(_logonItem);
+        connMenu.Items.Add(_logoffItem);
         connMenu.Items.Add(new Separator());
         var exitItem = new MenuItem { Header = "E_xit" };
         exitItem.Click += (_, _) =>
@@ -124,15 +124,26 @@ public class DynamicMenuBuilder
     }
 
     /// <summary>
-    /// Shows/hides the Sysop Menu item. internal/userapi has no "who am I"
-    /// endpoint today, so MainWindow currently leaves this hidden unless the
-    /// user has marked their own account as sysop in Settings — a known
-    /// limitation, not a security boundary (the BBS itself still enforces
-    /// the real security-level check if a non-sysop sends 'S' anyway).
+    /// Shows/hides the Sysop Menu item. MainWindow sets this from the real
+    /// session.whoami response once logged in; before that (or if
+    /// session.whoami fails for some reason) it falls back to whatever the
+    /// user checked in the Connect dialog. Either way the BBS itself still
+    /// enforces the real security-level check if a non-sysop sends 'S'.
     /// </summary>
     public void SetSysopVisible(bool visible)
     {
         if (_sysopItem == null) return;
         _sysopItem.IsVisible = visible;
+    }
+
+    /// <summary>
+    /// Greys out "Logon" and enables "Logoff" once logged in (or the reverse
+    /// once logged out) — set by MainWindow on the first "Command: " prompt
+    /// seen after connecting, and reversed when the connection drops.
+    /// </summary>
+    public void SetLoggedIn(bool loggedIn)
+    {
+        if (_logonItem != null) _logonItem.IsEnabled = !loggedIn;
+        if (_logoffItem != null) _logoffItem.IsEnabled = loggedIn;
     }
 }

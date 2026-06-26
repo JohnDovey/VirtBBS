@@ -19,6 +19,8 @@ namespace VirtTerm;
 
 public class MainForm : Form
 {
+    private const string DefaultTitle = "VirtTerm";
+
     private AppSettings _settings;
     private readonly AnsiScreen _screen = new();
     private readonly TerminalConnection _conn;
@@ -27,15 +29,21 @@ public class MainForm : Form
     private readonly StatusStrip _status = new();
     private readonly ToolStripStatusLabel _statusLabel = new("Not connected");
 
+    // Set once per connection, the first time the terminal reaches the main
+    // "Command: " prompt — that's the closest thing to a "login succeeded"
+    // signal available from a dumb-terminal byte stream. Reset on disconnect
+    // so a fresh connection fetches whoami again.
+    private bool _loggedIn;
+
     public MainForm()
     {
         _settings = AppSettings.Load();
 
-        Text = "VirtTerm";
+        Text = DefaultTitle;
         StartPosition = FormStartPosition.CenterScreen;
 
         _conn = new TerminalConnection(_screen);
-        _conn.Disconnected += () => BeginInvoke(new MethodInvoker(() => SetStatus("Disconnected")));
+        _conn.Disconnected += () => BeginInvoke(new MethodInvoker(HandleLoggedOut));
         _conn.ConnectionError += ex => BeginInvoke(new MethodInvoker(() => SetStatus($"Error: {ex.Message}")));
 
         _terminalControl = new TerminalControl(_screen);
@@ -43,9 +51,20 @@ public class MainForm : Form
 
         // The "Command: " gate is checked on every screen update (cheap
         // substring check — see AnsiScreen.UpdateTail) and reflected into
-        // the menu's enabled state on the UI thread.
-        _screen.Changed += () => BeginInvoke(new MethodInvoker(
-            () => _menuBuilder.SetAtPrompt(_screen.IsAtCommandPrompt)));
+        // the menu's enabled state on the UI thread. The very first time it
+        // goes true after a connect, treat that as "login succeeded" and
+        // fetch the user/BBS identity for the title bar.
+        _screen.Changed += () => BeginInvoke(new MethodInvoker(() =>
+        {
+            var atPrompt = _screen.IsAtCommandPrompt;
+            _menuBuilder.SetAtPrompt(atPrompt);
+            if (atPrompt && !_loggedIn)
+            {
+                _loggedIn = true;
+                _menuBuilder.SetLoggedIn(true);
+                _ = FetchWhoAmIAndUpdateTitleAsync();
+            }
+        }));
 
         _menuBuilder.Keystroke += b => _conn.Send(new[] { b });
         _menuBuilder.LogonRequested += () => _ = ConnectAsync();
@@ -75,6 +94,36 @@ public class MainForm : Form
 
     private void SetStatus(string text) => _statusLabel.Text = text;
 
+    /// <summary>Reverses everything HandleLoggedOut undoes once the user reaches the main menu.</summary>
+    private async Task FetchWhoAmIAndUpdateTitleAsync()
+    {
+        var api = new UserApiClient { Host = _settings.Host, Port = _settings.UserApiPort, Token = _settings.Token };
+        try
+        {
+            var who = await api.CallAsync<WhoAmI>("session.whoami");
+            if (who == null) return;
+            BeginInvoke(new MethodInvoker(() =>
+            {
+                Text = $"{who.Name} — {who.BbsName} — {DefaultTitle}";
+                _menuBuilder.SetSysopVisible(who.Sysop);
+            }));
+        }
+        catch
+        {
+            // Couldn't fetch identity (userapi unreachable/misconfigured) —
+            // leave the title generic rather than blocking the session on it.
+        }
+    }
+
+    /// <summary>Resets title/menu state to "not logged in" — fired on disconnect.</summary>
+    private void HandleLoggedOut()
+    {
+        SetStatus("Disconnected");
+        _loggedIn = false;
+        Text = DefaultTitle;
+        _menuBuilder.SetLoggedIn(false);
+    }
+
     private async Task ConnectAsync()
     {
         using var dlg = new ConnectForm(_settings);
@@ -83,6 +132,12 @@ public class MainForm : Form
         _settings = dlg.Result;
         _settings.Save();
         _menuBuilder.SetSysopVisible(_settings.IsSysop);
+
+        // A fresh connect attempt always starts in the "not logged in" state,
+        // even if the previous session never cleanly fired Disconnected.
+        _loggedIn = false;
+        _menuBuilder.SetLoggedIn(false);
+        Text = DefaultTitle;
 
         SetStatus($"Connecting to {_settings.Host}:{_settings.TerminalPort}...");
         try

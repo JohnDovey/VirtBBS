@@ -41,6 +41,8 @@ public class DynamicMenuBuilder
 
     private ToolStripMenuItem? _menuVirtBBS; // M/F/C/U/W/T/D/P/R/S/G submenu items, gated by prompt state
     private ToolStripMenuItem? _sysopItem;
+    private ToolStripMenuItem? _logonItem;
+    private ToolStripMenuItem? _logoffItem;
 
     // Mirrors mainMenu()'s exact set of single-keystroke commands.
     private static readonly (string Label, char Key)[] FixedBbsItems =
@@ -62,10 +64,10 @@ public class DynamicMenuBuilder
 
         // ── Connection menu (fixed: Logon/Logoff always present) ──────────
         var connMenu = new ToolStripMenuItem("&Connection");
-        var logonItem = new ToolStripMenuItem("&Logon...", null, (_, _) => LogonRequested?.Invoke());
-        var logoffItem = new ToolStripMenuItem("Log&off", null, (_, _) => LogoffRequested?.Invoke());
-        connMenu.DropDownItems.Add(logonItem);
-        connMenu.DropDownItems.Add(logoffItem);
+        _logonItem = new ToolStripMenuItem("&Logon...", null, (_, _) => LogonRequested?.Invoke());
+        _logoffItem = new ToolStripMenuItem("Log&off", null, (_, _) => LogoffRequested?.Invoke()) { Enabled = false };
+        connMenu.DropDownItems.Add(_logonItem);
+        connMenu.DropDownItems.Add(_logoffItem);
         connMenu.DropDownItems.Add(new ToolStripSeparator());
         var exitItem = new ToolStripMenuItem("E&xit", null, (_, _) => Application.Exit());
         connMenu.DropDownItems.Add(exitItem);
@@ -115,15 +117,26 @@ public class DynamicMenuBuilder
     }
 
     /// <summary>
-    /// Shows/hides the Sysop Menu item. internal/userapi has no "who am I"
-    /// endpoint today, so MainForm currently leaves this hidden unless the
-    /// user has marked their own account as sysop in Settings — a known
-    /// limitation, not a security boundary (the BBS itself still enforces
-    /// the real security-level check if a non-sysop sends 'S' anyway).
+    /// Shows/hides the Sysop Menu item. MainForm sets this from the real
+    /// session.whoami response once logged in; before that (or if
+    /// session.whoami fails for some reason) it falls back to whatever the
+    /// user checked in the Connect dialog. Either way the BBS itself still
+    /// enforces the real security-level check if a non-sysop sends 'S'.
     /// </summary>
     public void SetSysopVisible(bool visible)
     {
         if (_sysopItem == null) return;
         _sysopItem.Visible = visible;
+    }
+
+    /// <summary>
+    /// Greys out "Logon" and enables "Logoff" once logged in (or the reverse
+    /// once logged out) — set by MainForm on the first "Command: " prompt
+    /// seen after connecting, and reversed when the connection drops.
+    /// </summary>
+    public void SetLoggedIn(bool loggedIn)
+    {
+        if (_logonItem != null) _logonItem.Enabled = !loggedIn;
+        if (_logoffItem != null) _logoffItem.Enabled = loggedIn;
     }
 }
