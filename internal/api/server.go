@@ -210,12 +210,7 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if !cfg.Fido.Enabled {
 			return nil, fmt.Errorf("FidoNet is not enabled")
 		}
-		primaryNet := cfg.Fido.AllNetworks()[0]
-		result, err := fido.TossDir(&primaryNet, s.Deps.Messages, s.Deps.Conferences)
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
+		return fido.TossAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences), nil
 
 	case "fido.scan":
 		cfg := config.Get()

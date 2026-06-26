@@ -22,7 +22,7 @@ Example: /opt/virtbbs      (Linux)
 
 ### 2. Copy the release files
 
-From the `releases/0.3.0/` package, copy the following into your installation directory:
+From the `releases/0.4.0/` package, copy the following into your installation directory:
 
 ```
 <install-dir>/
@@ -104,7 +104,7 @@ bin/virtbbs
 The server will log startup messages:
 
 ```
-2026/06/25 12:00:00 VirtBBS 0.3.0 starting
+2026/06/25 12:00:00 VirtBBS 0.4.0 starting
 2026/06/24 12:00:00 Telnet listening on :2323
 2026/06/24 12:00:00 SSH listening on :3232
 2026/06/24 12:00:00 Management API listening on 0.0.0.0:9999
@@ -273,6 +273,40 @@ Enter the same sysop name and a new password. The record will be updated in the 
 
 ---
 
+## Upgrading / Database Schema Changes
+
+**You don't need to run any migration command.** Every VirtBBS release that
+adds new database columns or tables applies the change automatically, the
+next time the server (or any CLI command like `--fido-toss`) opens the
+database — there's no separate `migrate` step to remember.
+
+How it works, if you're curious: each store (`messages`, `users`,
+`conferences`, etc.) embeds a `schema.sql` with `CREATE TABLE IF NOT EXISTS`
+statements (safe to re-run — a no-op if the table already exists), plus a
+`migrate()` function that runs `ALTER TABLE ... ADD COLUMN ...` for any
+columns added since your database was first created. If a column already
+exists, SQLite's "duplicate column" error is caught and ignored, so it's
+safe to run against a brand-new database, a database from three versions
+ago, or anything in between.
+
+To upgrade:
+
+1. Stop the running `virtbbs` process.
+2. Replace the `bin/virtbbs` binary with the new release.
+3. Start it again — `bin/virtbbs` (or restart your system service).
+
+That's it. New columns/tables appear automatically on that first startup;
+existing data is untouched. There's no need to back up before upgrading
+for schema reasons specifically, but as always, a copy of `data/virtbbs.db`
+and `VirtBBS.DAT` before any upgrade is good practice.
+
+If you ever see an error mentioning a missing column or table after
+upgrading, it most likely means the **old** binary is still running
+against a database a **newer** binary already migrated (or vice versa) —
+make sure you've fully stopped the old process before starting the new one.
+
+---
+
 ## Version
 
-This guide covers VirtBBS **0.3.0**.
+This guide covers VirtBBS **0.4.0**.

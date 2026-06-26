@@ -67,6 +67,20 @@
 //                        instead of *Config, so any configured network can be tossed, not
 //                        just primary. No BinkP server exists (dial-out only) — documented
 //                        as a known limitation in FidoNet Config.md §6.1.
+//   v0.4.0  2026-06-25  BinkP server: VirtBBS now listens on every enabled network's
+//                        binkp_port and answers inbound polls from configured uplinks/
+//                        downlinks (handshake, password auth, file exchange tagged by
+//                        destination address, auto-toss of what's received). TossAll
+//                        tosses every enabled network in one pass (sysop/API/CLI toss
+//                        commands are no longer primary-network-only). AreaFix downlinks
+//                        are now genuinely per-network (Config.Downlinks vs each
+//                        NetworkDef's own Downlinks). New FileFix (mirrors AreaFix for
+//                        file areas via [fido.file_areas]/[[fido.downlinks]] — tracks
+//                        subscriptions; no TIC distribution pipeline yet acts on them).
+//                        New TRACE netmail utility (mirrors PING, replies with routing
+//                        details). RequestAreaFix/SendPing now take *NetworkDef for full
+//                        multi-network support. Documented DB auto-migration in
+//                        Installation.md.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -77,4 +91,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.3.0"
+const Version = "0.4.0"

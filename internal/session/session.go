@@ -951,18 +951,15 @@ func (s *session) sysopFidoMenu() {
 			s.writeln("")
 		}
 		s.writeln(ansi.Color(ansi.BrightYellow) +
-			"  [T]oss inbound   [S]can outbound   [N]odelist   [E]cho flags   [P]oll uplink   [I]Ping a node   [A]reaFix   [Q]uit" + ansi.Reset())
+			"  [T]oss inbound   [S]can outbound   [N]odelist   [E]cho flags   [P]oll uplink" + ansi.Reset())
+		s.writeln(ansi.Color(ansi.BrightYellow) +
+			"  [I]Ping a node   [X]Trace a node   [A]reaFix   [F]ileFix   [Q]uit" + ansi.Reset())
 		s.write(ansi.Prompt("FidoNet command: "))
 		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
 		switch cmd {
 		case "T":
-			s.writeln(ansi.Colorize(ansi.White, "Tossing inbound packets…"))
-			primaryNet := cfg.Fido.AllNetworks()[0]
-			result, err := fido.TossDir(&primaryNet, s.deps.Messages, s.deps.Conferences)
-			if err != nil {
-				s.writeln(ansi.Colorize(ansi.Red, "Toss error: "+err.Error()))
-				continue
-			}
+			s.writeln(ansi.Colorize(ansi.White, "Tossing inbound packets (all networks)…"))
+			result := fido.TossAll(&cfg.Fido, s.deps.Messages, s.deps.Conferences)
 			s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
 				"Toss complete: %d packet(s), %d imported, %d skipped.",
 				result.Packets, result.Imported, result.Skipped)))
@@ -989,8 +986,12 @@ func (s *session) sysopFidoMenu() {
 			s.fidoPoll()
 		case "I":
 			s.fidoPing()
+		case "X":
+			s.fidoTrace()
 		case "A":
 			s.fidoAreaFixMenu()
+		case "F":
+			s.fidoFileFixMenu()
 		case "Q", "":
 			return
 		}
@@ -1001,18 +1002,21 @@ func (s *session) sysopFidoMenu() {
 // echomail areas from us) and lets the sysop request areas from our own
 // uplink as a downlink — see internal/fido/areafix.go.
 func (s *session) fidoAreaFixMenu() {
+	target := s.pickFidoNetwork("administer")
+	if target == nil {
+		return
+	}
 	for {
-		cfg := config.Get()
 		areafixDB := fido.OpenAreaFixDB(s.deps.Messages.DB())
 
-		s.writeln(ansi.Header("AreaFix Administration"))
-		if len(cfg.Fido.Downlinks) == 0 {
+		s.writeln(ansi.Header("AreaFix Administration — " + target.Name))
+		if len(target.Downlinks) == 0 {
 			s.writeln(ansi.Color(ansi.Yellow) + "  No downlinks configured." + ansi.Reset())
 		} else {
 			s.writeln(ansi.Color(ansi.BrightCyan) +
 				fmt.Sprintf("  %-20s %-16s %s", "Name", "Address", "Subscriptions") + ansi.Reset())
-			for _, dl := range cfg.Fido.Downlinks {
-				tags, _ := areafixDB.SubscriptionsFor(fido.PrimaryNetworkName, dl.Address)
+			for _, dl := range target.Downlinks {
+				tags, _ := areafixDB.SubscriptionsFor(target.Name, dl.Address)
 				s.writeln(fmt.Sprintf("  %-20s %-16s %s", dl.Name, dl.Address, strings.Join(tags, ", ")))
 			}
 		}
@@ -1023,20 +1027,24 @@ func (s *session) fidoAreaFixMenu() {
 		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
 		switch cmd {
 		case "D":
-			s.fidoAddDownlink()
+			s.fidoAddDownlink(target.Name)
 		case "R":
-			s.fidoRemoveDownlink()
+			s.fidoRemoveDownlink(target.Name)
 		case "U":
-			s.fidoRequestUpstreamAreas()
+			s.fidoRequestUpstreamAreas(target)
 		case "Q", "":
 			return
+		}
+		// Re-fetch in case config.Save changed it underneath us.
+		if t := config.Get().Fido.NetworkByName(target.Name); t != nil {
+			target = t
 		}
 	}
 }
 
 // fidoAddDownlink prompts for a new downlink's details and persists it to
-// VirtBBS.DAT.
-func (s *session) fidoAddDownlink() {
+// VirtBBS.DAT, under the given network.
+func (s *session) fidoAddDownlink(networkName string) {
 	s.write(ansi.Prompt("Downlink name: "))
 	name := strings.TrimSpace(s.readline())
 	s.write(ansi.Prompt("Downlink address (zone:net/node): "))
@@ -1051,60 +1059,78 @@ func (s *session) fidoAddDownlink() {
 	s.write(ansi.Prompt("Password the downlink must supply (blank = none): "))
 	password := strings.TrimSpace(s.readline())
 
-	cfg := config.Get()
-	merged := *cfg
-	merged.Fido.Downlinks = append(append([]fido.Downlink{}, cfg.Fido.Downlinks...),
-		fido.Downlink{Name: name, Address: addr, Password: password})
-
-	if err := config.Save(&merged); err != nil {
+	dl := fido.Downlink{Name: name, Address: addr, Password: password}
+	if err := s.updateNetworkDownlinks(networkName, func(cur []fido.Downlink) []fido.Downlink {
+		return append(append([]fido.Downlink{}, cur...), dl)
+	}); err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Error saving config: "+err.Error()))
 		return
 	}
-	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("Downlink %s (%s) added.", name, addr)))
+	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("Downlink %s (%s) added to %s.", name, addr, networkName)))
 }
 
 // fidoRemoveDownlink prompts for an address and removes that downlink from
-// VirtBBS.DAT, also deleting its AreaFix subscriptions.
-func (s *session) fidoRemoveDownlink() {
+// VirtBBS.DAT under the given network, also deleting its AreaFix subscriptions.
+func (s *session) fidoRemoveDownlink(networkName string) {
 	s.write(ansi.Prompt("Downlink address to remove: "))
 	addr := strings.TrimSpace(s.readline())
 	if addr == "" {
 		return
 	}
 
-	cfg := config.Get()
-	merged := *cfg
-	var kept []fido.Downlink
 	removed := false
-	for _, dl := range cfg.Fido.Downlinks {
-		if strings.EqualFold(dl.Address, addr) {
-			removed = true
-			continue
+	err := s.updateNetworkDownlinks(networkName, func(cur []fido.Downlink) []fido.Downlink {
+		var kept []fido.Downlink
+		for _, dl := range cur {
+			if strings.EqualFold(dl.Address, addr) {
+				removed = true
+				continue
+			}
+			kept = append(kept, dl)
 		}
-		kept = append(kept, dl)
+		return kept
+	})
+	if err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Error saving config: "+err.Error()))
+		return
 	}
 	if !removed {
 		s.writeln(ansi.Colorize(ansi.Yellow, "No downlink found with that address."))
 		return
 	}
-	merged.Fido.Downlinks = kept
-
-	if err := config.Save(&merged); err != nil {
-		s.writeln(ansi.Colorize(ansi.Red, "Error saving config: "+err.Error()))
-		return
-	}
 
 	areafixDB := fido.OpenAreaFixDB(s.deps.Messages.DB())
-	tags, _ := areafixDB.SubscriptionsFor(fido.PrimaryNetworkName, addr)
+	tags, _ := areafixDB.SubscriptionsFor(networkName, addr)
 	for _, tag := range tags {
-		_ = areafixDB.Unsubscribe(fido.PrimaryNetworkName, addr, tag)
+		_ = areafixDB.Unsubscribe(networkName, addr, tag)
 	}
 	s.writeln(ansi.Colorize(ansi.BrightGreen, "Downlink removed and subscriptions cleared."))
 }
 
+// updateNetworkDownlinks loads the live config, applies mutate to the named
+// network's Downlinks slice (primary network if networkName matches the
+// primary, otherwise the matching [[fido.networks]] entry), and saves the
+// result. Returns an error if the network can't be found.
+func (s *session) updateNetworkDownlinks(networkName string, mutate func([]fido.Downlink) []fido.Downlink) error {
+	cfg := config.Get()
+	merged := *cfg
+	if strings.EqualFold(networkName, fido.PrimaryNetworkName) {
+		merged.Fido.Downlinks = mutate(cfg.Fido.Downlinks)
+		return config.Save(&merged)
+	}
+	merged.Fido.Networks = append([]fido.NetworkDef{}, cfg.Fido.Networks...)
+	for i := range merged.Fido.Networks {
+		if strings.EqualFold(merged.Fido.Networks[i].Name, networkName) {
+			merged.Fido.Networks[i].Downlinks = mutate(merged.Fido.Networks[i].Downlinks)
+			return config.Save(&merged)
+		}
+	}
+	return fmt.Errorf("network %q not found", networkName)
+}
+
 // fidoRequestUpstreamAreas sends an AreaFix subscribe/unsubscribe request
-// to our own uplink, so VirtBBS can act as a downlink of a larger hub.
-func (s *session) fidoRequestUpstreamAreas() {
+// to nd's own uplink, so VirtBBS can act as a downlink of a larger hub.
+func (s *session) fidoRequestUpstreamAreas(nd *fido.NetworkDef) {
 	s.write(ansi.Prompt("Area tags to subscribe, space-separated (blank = none): "))
 	addLine := strings.TrimSpace(s.readline())
 	s.write(ansi.Prompt("Area tags to unsubscribe, space-separated (blank = none): "))
@@ -1113,8 +1139,7 @@ func (s *session) fidoRequestUpstreamAreas() {
 		return
 	}
 
-	cfg := config.Get()
-	pktPath, err := fido.RequestAreaFix(&cfg.Fido, s.user.Name,
+	pktPath, err := fido.RequestAreaFix(nd, s.user.Name,
 		strings.Fields(addLine), strings.Fields(removeLine))
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "AreaFix request error: "+err.Error()))
@@ -1123,11 +1148,77 @@ func (s *session) fidoRequestUpstreamAreas() {
 	s.writeln(ansi.Colorize(ansi.BrightGreen, "AreaFix request sent → "+pktPath))
 }
 
+// fidoFileFixMenu shows FileFix file-area subscriptions for the current
+// network's downlinks (the same [[fido.downlinks]] list AreaFix uses — see
+// internal/fido/filefix.go) and lets the sysop request file areas from our
+// own uplink's FileFix. Adding/removing downlinks themselves is done via
+// the AreaFix menu, since it's the same underlying link relationship.
+func (s *session) fidoFileFixMenu() {
+	target := s.pickFidoNetwork("administer")
+	if target == nil {
+		return
+	}
+	for {
+		filefixDB := fido.OpenFileFixDB(s.deps.Messages.DB())
+
+		s.writeln(ansi.Header("FileFix Administration — " + target.Name))
+		if len(target.Downlinks) == 0 {
+			s.writeln(ansi.Color(ansi.Yellow) + "  No downlinks configured (add via AreaFix menu)." + ansi.Reset())
+		} else {
+			s.writeln(ansi.Color(ansi.BrightCyan) +
+				fmt.Sprintf("  %-20s %-16s %s", "Name", "Address", "File subscriptions") + ansi.Reset())
+			for _, dl := range target.Downlinks {
+				tags, _ := filefixDB.SubscriptionsFor(target.Name, dl.Address)
+				s.writeln(fmt.Sprintf("  %-20s %-16s %s", dl.Name, dl.Address, strings.Join(tags, ", ")))
+			}
+		}
+		s.writeln("")
+		s.writeln(ansi.Colorize(ansi.Yellow,
+			"  Note: no TIC file-echo distribution pipeline exists yet — subscriptions"))
+		s.writeln(ansi.Colorize(ansi.Yellow,
+			"  are tracked but nothing currently sends files based on them."))
+		s.writeln("")
+		s.writeln(ansi.Color(ansi.BrightYellow) + "  [U]pstream request   [Q]uit" + ansi.Reset())
+		s.write(ansi.Prompt("FileFix command: "))
+		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
+		switch cmd {
+		case "U":
+			s.fidoRequestUpstreamFiles(target)
+		case "Q", "":
+			return
+		}
+	}
+}
+
+// fidoRequestUpstreamFiles sends a FileFix subscribe/unsubscribe request to
+// nd's own uplink, so VirtBBS can act as a downlink of a larger hub for
+// file areas, mirroring fidoRequestUpstreamAreas.
+func (s *session) fidoRequestUpstreamFiles(nd *fido.NetworkDef) {
+	s.write(ansi.Prompt("File area tags to subscribe, space-separated (blank = none): "))
+	addLine := strings.TrimSpace(s.readline())
+	s.write(ansi.Prompt("File area tags to unsubscribe, space-separated (blank = none): "))
+	removeLine := strings.TrimSpace(s.readline())
+	if addLine == "" && removeLine == "" {
+		return
+	}
+
+	pktPath, err := fido.RequestFileFix(nd, s.user.Name,
+		strings.Fields(addLine), strings.Fields(removeLine))
+	if err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "FileFix request error: "+err.Error()))
+		return
+	}
+	s.writeln(ansi.Colorize(ansi.BrightGreen, "FileFix request sent → "+pktPath))
+}
+
 // fidoPing prompts for a FidoNet address and sends a PING test netmail to
 // it. The receiving system (if it implements the same convention) replies
 // automatically with PONG — see internal/fido/ping.go.
 func (s *session) fidoPing() {
-	cfg := config.Get()
+	target := s.pickFidoNetwork("ping from")
+	if target == nil {
+		return
+	}
 	s.write(ansi.Prompt("Ping address (zone:net/node): "))
 	addr := strings.TrimSpace(s.readline())
 	if addr == "" {
@@ -1137,17 +1228,48 @@ func (s *session) fidoPing() {
 	toName := "Sysop"
 	if a, err := fido.ParseAddr(addr); err == nil {
 		ndb := fido.OpenNodelistDB(s.deps.Messages.DB())
-		if node, err := ndb.LookupAddr("FidoNet", a); err == nil && node != nil {
+		if node, err := ndb.LookupAddr(target.Name, a); err == nil && node != nil {
 			toName = node.Sysop
 		}
 	}
 
-	pktPath, err := fido.SendPing(&cfg.Fido, s.user.Name, toName, addr)
+	pktPath, err := fido.SendPing(target, s.user.Name, toName, addr)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Ping error: "+err.Error()))
 		return
 	}
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("PING sent to %s → %s", addr, pktPath)))
+}
+
+// fidoTrace prompts for a FidoNet address and sends a TRACE test netmail to
+// it, mirroring fidoPing. The receiving system (if it implements the same
+// convention) replies automatically with routing details — see
+// internal/fido/trace.go.
+func (s *session) fidoTrace() {
+	target := s.pickFidoNetwork("trace from")
+	if target == nil {
+		return
+	}
+	s.write(ansi.Prompt("Trace address (zone:net/node): "))
+	addr := strings.TrimSpace(s.readline())
+	if addr == "" {
+		return
+	}
+
+	toName := "Sysop"
+	if a, err := fido.ParseAddr(addr); err == nil {
+		ndb := fido.OpenNodelistDB(s.deps.Messages.DB())
+		if node, err := ndb.LookupAddr(target.Name, a); err == nil && node != nil {
+			toName = node.Sysop
+		}
+	}
+
+	pktPath, err := fido.SendTrace(target, s.user.Name, toName, addr)
+	if err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Trace error: "+err.Error()))
+		return
+	}
+	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("TRACE sent to %s → %s", addr, pktPath)))
 }
 
 // ── FidoNet in-BBS functions ──────────────────────────────────────────────────
@@ -1281,31 +1403,42 @@ func (s *session) echoFlagConference() {
 	s.writeln(ansi.Colorize(ansi.BrightGreen, "Saved."))
 }
 
-// fidoPoll calls the uplink via BinkP, sending any outbound bundles.
-func (s *session) fidoPoll() {
+// pickFidoNetwork prompts the sysop to choose which configured FidoNet
+// network to act on, when more than one is enabled. Returns nil (after
+// printing a message) if FidoNet isn't enabled or no network is found.
+// verb is used in the prompt, e.g. "poll", "ping", "trace".
+func (s *session) pickFidoNetwork(verb string) *fido.NetworkDef {
 	cfg := config.Get()
-	nd := cfg.Fido.AllNetworks()
-	if len(nd) == 0 || !nd[0].Enabled {
+	nets := cfg.Fido.AllNetworks()
+	if len(nets) == 0 || !nets[0].Enabled {
 		s.writeln(ansi.Colorize(ansi.Yellow, "FidoNet not enabled."))
-		return
+		return nil
 	}
 
-	// Pick network to poll if multiple.
-	netName := nd[0].Name
-	if len(nd) > 1 {
-		for i, n := range nd {
+	netName := nets[0].Name
+	if len(nets) > 1 {
+		for i, n := range nets {
 			s.writeln(fmt.Sprintf("  %d. %s (%s → %s)", i+1, n.Name, n.Address, n.Uplink))
 		}
-		s.write(ansi.Prompt("Network # to poll (Enter=1): "))
+		s.write(ansi.Prompt(fmt.Sprintf("Network # to %s (Enter=1): ", verb)))
 		numStr := strings.TrimSpace(s.readline())
-		if num, err := strconv.Atoi(numStr); err == nil && num >= 1 && num <= len(nd) {
-			netName = nd[num-1].Name
+		if num, err := strconv.Atoi(numStr); err == nil && num >= 1 && num <= len(nets) {
+			netName = nets[num-1].Name
 		}
 	}
 
 	target := cfg.Fido.NetworkByName(netName)
 	if target == nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Network not found."))
+		return nil
+	}
+	return target
+}
+
+// fidoPoll calls the uplink via BinkP, sending any outbound bundles.
+func (s *session) fidoPoll() {
+	target := s.pickFidoNetwork("poll")
+	if target == nil {
 		return
 	}
 

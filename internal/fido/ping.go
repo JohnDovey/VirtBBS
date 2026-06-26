@@ -103,14 +103,14 @@ func AutoRespondPing(nd *NetworkDef, pm *Message) error {
 	return err
 }
 
-// SendPing composes and writes a PING netmail PKT to toAddr, for sysop-
-// initiated connectivity testing. fromName is the local sender identity
-// (typically the sysop's name); toName is looked up by the caller (e.g.
-// from the nodelist) or defaults to "Sysop" when unknown.
-func SendPing(cfg *Config, fromName, toName, toAddr string) (pktPath string, err error) {
-	our := cfg.NodeAddr()
+// SendPing composes and writes a PING netmail PKT to toAddr on network nd,
+// for sysop-initiated connectivity testing. fromName is the local sender
+// identity (typically the sysop's name); toName is looked up by the caller
+// (e.g. from the nodelist) or defaults to "Sysop" when unknown.
+func SendPing(nd *NetworkDef, fromName, toName, toAddr string) (pktPath string, err error) {
+	our := nd.NodeAddr()
 	if our == (Addr{}) {
-		return "", fmt.Errorf("invalid local address %q", cfg.Address)
+		return "", fmt.Errorf("invalid local address %q", nd.Address)
 	}
 	dest, err := ParseAddr(toAddr)
 	if err != nil {
@@ -126,10 +126,10 @@ func SendPing(cfg *Config, fromName, toName, toAddr string) (pktPath string, err
 		Body:     fmt.Sprintf("PING from %s at %s.\r\n", our.String(), time.Now().Format("02 Jan 06  15:04:05")),
 	}
 
-	uplink := cfg.UplinkAddr()
+	uplink := nd.UplinkAddr()
 	if uplink == (Addr{}) {
 		return "", fmt.Errorf("no uplink configured")
 	}
-	outDir := OutboundDir(cfg.OutboundDir, uplink, false)
-	return WritePKT(our, uplink, cfg.Password, outDir, []*NetmailMsg{msg})
+	outDir := OutboundDir(nd.OutboundDir, uplink, false)
+	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg})
 }

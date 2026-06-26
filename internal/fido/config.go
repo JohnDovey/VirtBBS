@@ -71,6 +71,16 @@ type Config struct {
 	// of 6 hours. Any positive value is clamped to a 5-minute minimum.
 	PollIntervalMins int `toml:"poll_interval_mins" json:"poll_interval_mins"`
 
+	// FileAreas maps FileFix file-area tags to local file directory IDs
+	// (internal/files.Dir.ID) — the FileFix equivalent of Areas. See
+	// internal/fido/filefix.go.
+	FileAreas map[string]int `toml:"file_areas" json:"file_areas"`
+
+	// FileFixPassword is the password THIS BBS sends when requesting file
+	// areas from its own uplink's FileFix — the FileFix equivalent of
+	// AreaFixPassword.
+	FileFixPassword string `toml:"filefix_password" json:"filefix_password"`
+
 	// Networks lists additional FidoNet-compatible networks (LovlyNet, etc.).
 	// Each entry is a fully independent network with its own address space.
 	Networks []NetworkDef `toml:"networks" json:"networks"`
@@ -101,10 +111,12 @@ type NetworkDef struct {
 	// network's TaglinesFile in AllNetworks() if left blank.
 	TaglinesFile string `toml:"taglines_file" json:"taglines_file"`
 
-	// Downlinks/AreaFixPassword/PollIntervalMins — see the matching Config fields.
-	Downlinks        []Downlink `toml:"downlinks" json:"downlinks"`
-	AreaFixPassword  string     `toml:"areafix_password" json:"areafix_password"`
-	PollIntervalMins int        `toml:"poll_interval_mins" json:"poll_interval_mins"`
+	// Downlinks/AreaFixPassword/PollIntervalMins/FileAreas/FileFixPassword — see the matching Config fields.
+	Downlinks        []Downlink     `toml:"downlinks" json:"downlinks"`
+	AreaFixPassword  string         `toml:"areafix_password" json:"areafix_password"`
+	PollIntervalMins int            `toml:"poll_interval_mins" json:"poll_interval_mins"`
+	FileAreas        map[string]int `toml:"file_areas" json:"file_areas"`
+	FileFixPassword  string         `toml:"filefix_password" json:"filefix_password"`
 }
 
 // DefaultConfig returns a Config with sensible disabled defaults.
@@ -162,6 +174,15 @@ func (c *Config) ConferenceForArea(tag string) int {
 	return id
 }
 
+// FileDirForTag returns the file directory ID mapped to a FileFix tag, -1 if not found.
+func (c *Config) FileDirForTag(tag string) int {
+	id, ok := c.FileAreas[tag]
+	if !ok {
+		return -1
+	}
+	return id
+}
+
 // AllNetworks returns the primary network plus all additional networks as
 // a flat slice of NetworkDef. Used when iterating all configured networks.
 func (c *Config) AllNetworks() []NetworkDef {
@@ -174,12 +195,14 @@ func (c *Config) AllNetworks() []NetworkDef {
 		InboundDir:      c.InboundDir,
 		OutboundDir:     c.OutboundDir,
 		NodelistDir:     c.NodelistDir,
-		BinkpPort:       c.BinkpPort,
-		Areas:           c.Areas,
-		TaglinesFile:    c.TaglinesFile,
+		BinkpPort:        c.BinkpPort,
+		Areas:            c.Areas,
+		TaglinesFile:     c.TaglinesFile,
 		Downlinks:        c.Downlinks,
 		AreaFixPassword:  c.AreaFixPassword,
 		PollIntervalMins: c.PollIntervalMins,
+		FileAreas:        c.FileAreas,
+		FileFixPassword:  c.FileFixPassword,
 	}
 	result := []NetworkDef{primary}
 	result = append(result, c.Networks...)
@@ -237,6 +260,15 @@ func (n *NetworkDef) UplinkAddr() Addr {
 
 func (n *NetworkDef) ConferenceForArea(tag string) int {
 	id, ok := n.Areas[tag]
+	if !ok {
+		return -1
+	}
+	return id
+}
+
+// FileDirForTag returns the file directory ID mapped to a FileFix tag, -1 if not found.
+func (n *NetworkDef) FileDirForTag(tag string) int {
+	id, ok := n.FileAreas[tag]
 	if !ok {
 		return -1
 	}

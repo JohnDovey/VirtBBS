@@ -94,3 +94,18 @@ CREATE TABLE IF NOT EXISTS fido_areafix_subs (
 
 CREATE INDEX IF NOT EXISTS idx_areafix_subs_downlink ON fido_areafix_subs(network, downlink_addr);
 CREATE INDEX IF NOT EXISTS idx_areafix_subs_area     ON fido_areafix_subs(network, area_tag);
+
+-- FileFix subscriptions: which file areas each downlink receives from us.
+-- See FidoNet Config.md for the current limitation (no TIC distribution
+-- pipeline yet acts on these subscriptions).
+CREATE TABLE IF NOT EXISTS fido_filefix_subs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    network       TEXT    NOT NULL DEFAULT 'FidoNet',
+    downlink_addr TEXT    NOT NULL,  -- zone:net/node of the downlink (no point)
+    file_tag      TEXT    NOT NULL,  -- file-area tag, matches fido.file_areas key
+    created_at    TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(network, downlink_addr, file_tag)
+);
+
+CREATE INDEX IF NOT EXISTS idx_filefix_subs_downlink ON fido_filefix_subs(network, downlink_addr);
+CREATE INDEX IF NOT EXISTS idx_filefix_subs_area     ON fido_filefix_subs(network, file_tag);

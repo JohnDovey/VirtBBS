@@ -29,6 +29,9 @@
 //   v0.3.0  2026-06-25  Add PollAndToss, combining a poll with an automatic toss of
 //                        whatever was received, for the scheduler and sysop/API poll
 //                        commands to share
+//   v0.4.0  2026-06-25  Add ServeBinkP — a BinkP server accepting inbound connections
+//                        from configured uplinks and downlinks, so other systems can
+//                        poll THIS BBS instead of only the reverse
 // ============================================================================
 
 // Package fido — binkp.go
@@ -50,6 +53,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -199,6 +203,276 @@ func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.S
 	}
 	result.Toss = tossResult
 	return result
+}
+
+// ─── Server (accepting inbound polls) ──────────────────────────────────────────
+
+// ServeBinkP listens on every distinct binkp_port configured among enabled
+// networks (a single port shared by several networks is handled — each
+// inbound connection's identity, from its M_ADR, is matched against every
+// enabled network's uplink and downlink addresses to find which one it
+// belongs to). The caller is authenticated by password: the downlink's own
+// configured password if it matched a Downlink, or the network's session
+// Password if it matched the network's own uplink address.
+//
+// After exchanging files, any received inbound is tossed immediately
+// (matching the "every poll completes with a toss" behaviour of the
+// outbound side — see PollAndToss).
+//
+// Returns a stop function that closes all listeners. Logs session activity
+// and errors with the standard logger; never returns an error itself once
+// listening has started (per-connection failures are logged, not fatal).
+func ServeBinkP(cfg *Config, store *messages.Store, confStore *conferences.Store) (stop func(), err error) {
+	portCandidates := map[int][]NetworkDef{}
+	for _, nd := range cfg.AllNetworks() {
+		if !nd.Enabled {
+			continue
+		}
+		portCandidates[nd.Port()] = append(portCandidates[nd.Port()], nd)
+	}
+	if len(portCandidates) == 0 {
+		return func() {}, nil
+	}
+
+	var listeners []net.Listener
+	for port, candidates := range portCandidates {
+		addr := fmt.Sprintf(":%d", port)
+		ln, lerr := net.Listen("tcp", addr)
+		if lerr != nil {
+			for _, l := range listeners {
+				l.Close()
+			}
+			return nil, fmt.Errorf("binkp listen %s: %w", addr, lerr)
+		}
+		listeners = append(listeners, ln)
+		log.Printf("BinkP listening on %s (%d network(s))", addr, len(candidates))
+		go binkpAcceptLoop(ln, candidates, store, confStore)
+	}
+
+	return func() {
+		for _, l := range listeners {
+			l.Close()
+		}
+	}, nil
+}
+
+func binkpAcceptLoop(ln net.Listener, candidates []NetworkDef, store *messages.Store, confStore *conferences.Store) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			return // listener closed
+		}
+		go binkpHandleIncoming(conn, candidates, store, confStore)
+	}
+}
+
+// binkpHandleIncoming answers one inbound BinkP connection: handshake,
+// identify and authenticate the caller, receive their files, send back
+// whatever is queued for them, then toss what was received.
+func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages.Store, confStore *conferences.Store) {
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Minute))
+	bp := &binkpConn{conn: conn}
+
+	_ = bp.sendCmd(bpM_NUL, "SYS VirtBBS")
+	if len(candidates) > 0 {
+		_ = bp.sendCmd(bpM_NUL, "ZYZ "+candidates[0].Address)
+		_ = bp.sendCmd(bpM_ADR, candidates[0].Address)
+	}
+
+	peerAddrs, err := binkpWaitForADRAddrs(bp)
+	if err != nil {
+		log.Printf("binkp server: handshake error from %s: %v", conn.RemoteAddr(), err)
+		return
+	}
+
+	nd, dl, isUplink := binkpMatchPeer(candidates, peerAddrs)
+	if nd == nil {
+		_ = bp.sendCmd(bpM_ERR, "unknown system")
+		log.Printf("binkp server: rejected unknown peer %v from %s", peerAddrs, conn.RemoteAddr())
+		return
+	}
+
+	wantPassword := nd.Password
+	if !isUplink && dl != nil {
+		wantPassword = dl.Password
+	}
+	if wantPassword != "" {
+		gotPwd, err := binkpWaitForPWD(bp)
+		if err != nil {
+			log.Printf("binkp server [%s]: password handshake error: %v", nd.Name, err)
+			return
+		}
+		if gotPwd != wantPassword {
+			_ = bp.sendCmd(bpM_ERR, "bad password")
+			log.Printf("binkp server [%s]: bad password from %v", nd.Name, peerAddrs)
+			return
+		}
+	}
+	if err := bp.sendCmd(bpM_OK, ""); err != nil {
+		return
+	}
+
+	if err := os.MkdirAll(nd.InboundDir, 0755); err != nil {
+		log.Printf("binkp server [%s]: %v", nd.Name, err)
+		return
+	}
+	received, err := bp.receiveUntilEOB(nd.InboundDir)
+	if err != nil {
+		log.Printf("binkp server [%s]: receive error: %v", nd.Name, err)
+		return
+	}
+
+	peerAddr, _ := ParseAddr(peerAddrs[0])
+	outFiles := binkpOutboundFilesFor(nd, dl, peerAddr)
+	var sent []string
+	for _, f := range outFiles {
+		if err := bp.sendFile(f); err != nil {
+			log.Printf("binkp server [%s]: send error: %v", nd.Name, err)
+			break
+		}
+		sent = append(sent, f)
+	}
+	_ = bp.sendCmd(bpM_EOB, "")
+	for _, f := range sent {
+		_ = os.Remove(f)
+	}
+
+	who := "uplink"
+	if !isUplink {
+		who = "downlink " + dl.Name
+	}
+	log.Printf("binkp server [%s]: session with %s (%v) complete — received %d, sent %d",
+		nd.Name, who, peerAddrs, len(received), len(sent))
+
+	if len(received) > 0 {
+		if tr, err := TossDir(nd, store, confStore); err != nil {
+			log.Printf("binkp server [%s]: auto-toss error: %v", nd.Name, err)
+		} else {
+			log.Printf("binkp server [%s]: auto-toss after incoming poll: %d imported, %d skipped",
+				nd.Name, tr.Imported, tr.Skipped)
+		}
+	}
+}
+
+// binkpWaitForADRAddrs reads frames until the caller's M_ADR arrives,
+// returning its space-separated address list.
+func binkpWaitForADRAddrs(b *binkpConn) ([]string, error) {
+	for {
+		isCmd, cmd, payload, err := b.recvFrame()
+		if err != nil {
+			return nil, err
+		}
+		if !isCmd {
+			continue
+		}
+		switch cmd {
+		case bpM_ADR:
+			return strings.Fields(string(payload)), nil
+		case bpM_ERR:
+			return nil, fmt.Errorf("remote M_ERR during handshake: %s", string(payload))
+		case bpM_BSY:
+			return nil, fmt.Errorf("remote busy")
+		}
+	}
+}
+
+// binkpWaitForPWD reads frames until the caller's M_PWD arrives.
+func binkpWaitForPWD(b *binkpConn) (string, error) {
+	for {
+		isCmd, cmd, payload, err := b.recvFrame()
+		if err != nil {
+			return "", err
+		}
+		if !isCmd {
+			continue
+		}
+		switch cmd {
+		case bpM_PWD:
+			return string(payload), nil
+		case bpM_ERR:
+			return "", fmt.Errorf("remote M_ERR: %s", string(payload))
+		}
+	}
+}
+
+// binkpMatchPeer finds which candidate network (and, if applicable, which
+// configured Downlink) a caller's announced addresses belong to: either
+// the network's own uplink address (isUplink=true), or one of its
+// configured downlinks (isUplink=false, dl set).
+func binkpMatchPeer(candidates []NetworkDef, peerAddrs []string) (nd *NetworkDef, dl *Downlink, isUplink bool) {
+	for i := range candidates {
+		c := candidates[i]
+		uplink := c.UplinkAddr()
+		for _, pa := range peerAddrs {
+			a, err := ParseAddr(pa)
+			if err != nil {
+				continue
+			}
+			if uplink != (Addr{}) && a.Zone == uplink.Zone && a.Net == uplink.Net && a.Node == uplink.Node {
+				return &c, nil, true
+			}
+			if found := c.DownlinkByAddr(a); found != nil {
+				return &c, found, false
+			}
+		}
+	}
+	return nil, nil, false
+}
+
+// binkpOutboundFilesFor returns the paths of files queued for a specific
+// peer: if dl is set (the peer is a known downlink), only files whose name
+// was tagged with that downlink's address by the AreaFix scan-time fan-out
+// (see scan.go's sanitizeAddrForFilename); otherwise (the peer is our
+// uplink) every file NOT specifically tagged for one of our own downlinks.
+// Either way, any crash-routed netmail queued in that peer's OutboundDir
+// subdirectory is included too.
+func binkpOutboundFilesFor(nd *NetworkDef, dl *Downlink, peerAddr Addr) []string {
+	var out []string
+	entries, _ := os.ReadDir(nd.OutboundDir)
+
+	if dl != nil {
+		tag := sanitizeAddrForFilename(peerAddr)
+		for _, e := range entries {
+			if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".pkt") {
+				continue
+			}
+			if strings.Contains(e.Name(), tag) {
+				out = append(out, filepath.Join(nd.OutboundDir, e.Name()))
+			}
+		}
+	} else {
+		for _, e := range entries {
+			if e.IsDir() || !strings.EqualFold(filepath.Ext(e.Name()), ".pkt") {
+				continue
+			}
+			taggedForADownlink := false
+			for _, other := range nd.Downlinks {
+				a, err := ParseAddr(other.Address)
+				if err != nil {
+					continue
+				}
+				if strings.Contains(e.Name(), sanitizeAddrForFilename(a)) {
+					taggedForADownlink = true
+					break
+				}
+			}
+			if !taggedForADownlink {
+				out = append(out, filepath.Join(nd.OutboundDir, e.Name()))
+			}
+		}
+	}
+
+	sub := fmt.Sprintf("%04X%04X.OUT", peerAddr.Zone*0x100+peerAddr.Net, peerAddr.Node)
+	crashDir := filepath.Join(nd.OutboundDir, sub)
+	if crashEntries, err := os.ReadDir(crashDir); err == nil {
+		for _, e := range crashEntries {
+			if !e.IsDir() {
+				out = append(out, filepath.Join(crashDir, e.Name()))
+			}
+		}
+	}
+	return out
 }
 
 // ─── Internal BinkP connection ─────────────────────────────────────────────────

@@ -1,8 +1,9 @@
 # VirtBBS — FidoNet Configuration Guide
 
 This guide covers every FidoNet setting in `VirtBBS.DAT`, how echomail/netmail
-routing works, how to add additional FidoNet-compatible networks, AreaFix,
-and the PING test utility. It covers VirtBBS **0.3.0**.
+routing works, the BinkP server, how to add additional FidoNet-compatible
+networks, AreaFix, FileFix, and the PING/TRACE test utilities. It covers
+VirtBBS **0.4.0**.
 
 ---
 
@@ -34,10 +35,12 @@ All FidoNet settings live under the `[fido]` table in `VirtBBS.DAT`:
 | `inbound_dir` | Directory `.pkt` files are read from when tossing (see §4). Created automatically if missing. |
 | `outbound_dir` | Directory `.pkt` files are written to when scanning/sending (see §5). Created automatically if missing. |
 | `nodelist_dir` | Directory containing `NODELIST.*` files for address lookups (sysop name, BBS name, phone, flags) shown in the in-BBS nodelist browser and used by `[I]Ping a node`. |
-| `binkp_port` | TCP port used when **polling** your uplink over BinkP. Defaults to `24554` if zero/unset. |
+| `binkp_port` | TCP port used both when **polling** your uplink over BinkP, and **listened on** for inbound BinkP connections from your uplink/downlinks (§6.1). Defaults to `24554` if zero/unset. |
 | `taglines_file` | Optional path to a text file, one tagline per line. A random line is inserted above the tear line on every outgoing echomail message. Leave blank to disable. |
 | `areafix_password` | Password **we** send when requesting areas from **our own uplink's** AreaFix — see §8.4. |
+| `filefix_password` | Password **we** send when requesting file areas from **our own uplink's** FileFix — see §9. |
 | `poll_interval_mins` | Overrides how often the automatic scheduler polls this network's uplink, in minutes. `0`/unset = 6 hours. Any value below 5 is clamped up to 5 — see §6.2. |
+| `[fido.file_areas]` | Maps FileFix tags to local file directory IDs — see §9.1. |
 | `[fido.areas]` | Maps echomail `AREA:` tags to local conference IDs — see §3. |
 | `[[fido.downlinks]]` | Systems that subscribe to our echomail areas via AreaFix — see §8.1. |
 
@@ -96,7 +99,8 @@ What happens during toss:
 - **Echomail** is routed via `[fido.areas]` (§3); unknown areas are skipped.
 - Each message's `^AMSGID`, `SEEN-BY:`, and `^APATH` are parsed out and stored as structured metadata (not shown in the message body) so they can be correctly re-emitted if you relay the message onward. The tear line (`--- ...`) and `* Origin: ...` line are **kept visible** in the stored body, matching how real FidoNet readers display them.
 - Duplicate packets (same `^AMSGID` re-processed twice, e.g. after a crash) are detected and skipped automatically.
-- A netmail with **Subject `PING`** triggers an automatic `PONG` reply — see §7.
+- A netmail with **Subject `PING`** triggers an automatic `PONG` reply (§10), and **Subject `TRACE`** triggers a routing-info reply (§11).
+- A netmail addressed to **"AreaFix"** (§8) or **"FileFix"** (§9) is processed by its responder.
 
 ---
 
@@ -145,17 +149,28 @@ Ways to trigger a poll:
 
 ### 6.1 BinkP server — do we listen for incoming connections?
 
-**No.** VirtBBS's BinkP implementation is dial-out only — `Poll()` connects
-*to* your uplink; there is no listener accepting inbound BinkP connections
-on `binkp_port`. Practically, this means:
+**Yes.** VirtBBS runs a BinkP server alongside the dial-out client, so other
+systems can poll *us* instead of only the reverse. It starts automatically
+whenever `[fido] enabled = true`, listening on every distinct `binkp_port`
+configured among your enabled networks (one network per port is typical,
+but several networks can share a port — the caller's announced address
+disambiguates which one they belong to).
 
-- Your uplink must accept polls from you (the normal FidoNet model) — that works fine.
-- A downlink subscribed via AreaFix (§8) **cannot dial in to fetch its mail** from this BBS; nothing is listening to answer that call. Until a BinkP server is implemented, downlinks need some other way to receive the packets VirtBBS writes for them (e.g. you periodically copying files out-of-band, or the downlink's own system polling you over a different already-existing mechanism it supports).
+How an inbound connection is handled:
 
-This is a real gap if you intend to feed echo areas to your own downlinks
-over BinkP specifically — let your sysop know if you'd like a BinkP server
-added; it's a separate, sizable feature (accepting connections, performing
-the receiving side of the M_NUL/M_ADR/M_PWD handshake, etc.) not yet built.
+1. The caller is identified by its `M_ADR` announcement and matched against every enabled network's configured `uplink` address and `[[fido.downlinks]]` list.
+2. An unrecognised address is rejected (`M_ERR`) and logged.
+3. If the matched link has a password (the network's own `password` if the caller is our uplink, or that specific downlink's `password`), the caller must supply it correctly via `M_PWD`, or the session is rejected.
+4. Whatever the caller sends is received into that network's `inbound_dir`.
+5. VirtBBS sends back whatever is queued for that specific caller:
+   - **If the caller is a downlink:** only files the AreaFix scan-time fan-out (§8.3) tagged with that downlink's address, plus anything queued for them via crash-routed netmail.
+   - **If the caller is our uplink:** everything in `outbound_dir` that *isn't* specifically tagged for one of our own downlinks, plus crash-routed netmail addressed to the uplink.
+6. Successfully sent files are deleted; received files are immediately tossed (matching the "every poll completes with a toss" rule in §6).
+
+Session activity and errors are written to the server's log, prefixed
+`binkp server: [<network name>]`.
+
+> **Limitation:** outbound routing is filename-based (matching the destination address tag scan.go embeds in the filename), not directory-based — there's no per-link outbound subdirectory structure (the BSO "outbound.flo" convention). This is sufficient for the AreaFix downlink fan-out this server was built to support, but isn't a full general-purpose FTN mailer's routing model.
 
 ### 6.2 Automatic scheduler
 
@@ -220,8 +235,9 @@ address, uplink, inbound/outbound directories, nodelist, and area map. Use
 a distinct `inbound_dir`/`outbound_dir` per network so packets don't collide.
 
 - **Scanning** (§5) iterates every enabled network and writes separate `.pkt` files for each — link a conference to a specific network via its `Network` field (§2) so the scanner knows which network's address/uplink to use for it.
-- **Tossing** (§4) currently only processes the **primary** network's `inbound_dir`. If you run additional networks, point your BinkP/mailer setup so each network's inbound mail lands in that network's own `inbound_dir`, and toss each directory separately (e.g. via a small wrapper script calling `virtbbs -fido-toss` with a per-network config, or via the API against each network).
-- **Polling** (§6) takes a `network` parameter specifically so you can poll each uplink independently.
+- **Tossing** (§4) — `[T]oss inbound`, `fido.toss`, and `-fido-toss` all toss **every enabled network's** `inbound_dir` in one pass; there's no need to toss each network separately.
+- **Polling** (§6) takes a `network` parameter specifically so you can poll each uplink independently, and the automatic scheduler (§6.2) runs one poll/toss cycle per network on its own schedule.
+- **AreaFix/FileFix downlinks** (§8/§9) are configured **per network** — a `[[fido.downlinks]]` entry under `[fido]` only applies to the primary network; add a separate `[[fido.networks.downlinks]]` list for each additional network's own downlinks. The same physical system can be a downlink of more than one of your networks with completely independent subscriptions/passwords for each.
 
 ---
 
@@ -321,11 +337,60 @@ subscriptions.
 ### 8.6 Limitations
 
 - AreaFix admin (add/remove downlinks, view subscriptions) is currently **in-BBS sysop menu only** — not yet exposed through the management API or the .NET GUI.
-- Toss (§4) only processes the **primary** network's inbound directory, so the responder currently only handles AreaFix requests arriving on the primary network — same limitation as multi-network toss in general (§7).
+- AreaFix works for every enabled network, not just primary — pick which one in the `[A]reaFix` menu (§8.5) when more than one is configured.
 
 ---
 
-## 9. PING — netmail connectivity test
+## 9. FileFix — file-area subscriptions
+
+FileFix is the file-echo equivalent of AreaFix (§8), with the identical
+command protocol (`+TAG`/`-TAG`/`%LIST`/`%QUERY`/`%HELP`, password-first),
+just addressed to **"FileFix"** instead of **"AreaFix"**, and operating on
+file areas instead of echomail conferences.
+
+### 9.1 Configuring file areas
+
+Map FileFix tags to local file directory IDs (`internal/files.Dir.ID`, see
+the sysop Files menu or `files.list` API for IDs):
+
+```toml
+[fido]
+  ...
+  [fido.file_areas]
+    GAMES = 1
+    UTILS = 2
+```
+
+Downlinks requesting file areas use the **same `[[fido.downlinks]]` list**
+AreaFix uses (§8.1) — there's no separate downlink list for FileFix, since
+it's the same remote system either way, just requesting a different kind
+of area. Add/remove downlinks via the `[A]reaFix` menu; manage their file
+subscriptions via the `[F]ileFix` menu.
+
+### 9.2 Sysop menu reference
+
+Sysop menu → FidoNet → `[F]ileFix`:
+
+| Key | Action |
+|---|---|
+| `[U]` | Send a FileFix subscribe/unsubscribe request to your own uplink. |
+
+The main listing shows each configured downlink (from the AreaFix list)
+alongside its current **file-area** subscriptions.
+
+### 9.3 Limitation — no file distribution pipeline yet
+
+**FileFix subscriptions are tracked but nothing currently acts on them.**
+VirtBBS has no TIC (FTS-5005) file-echo distribution pipeline — there is no
+"file scan" step that bundles new uploads into outbound announcements the
+way `scan.go` does for echomail (§5/§8.3). The request/response protocol
+works end-to-end (a downlink can subscribe and get a confirmation reply),
+and the subscription data is there for a future distribution step to use,
+but no files are actually sent based on these subscriptions today.
+
+---
+
+## 10. PING — netmail connectivity test
 
 VirtBBS implements the long-standing FidoNet "ping" netmail convention (not
 an official FTS standard, but widely supported by classic mailers): a
@@ -352,7 +417,26 @@ lookup + immediate send).
 
 ---
 
-## 10. Quick reference — all `[fido]` fields
+## 11. TRACE — routing diagnostics
+
+TRACE mirrors PING (§10) exactly — same convention, same loop-safety — but
+the automatic reply reports this system's own routing details (its
+address, its configured uplink, and the BBS software it's running) rather
+than just confirming receipt.
+
+- **Sending a trace:** Sysop menu → FidoNet → `[X]Trace a node`, then enter the destination address. Works identically to `[I]Ping a node`.
+- **Receiving a trace:** any inbound netmail with **Subject `TRACE`** gets an immediate **Subject `TRACE REPLY`** reply during toss, reporting this node's address and uplink.
+- **No loop risk:** same guarantee as PING/PONG — the auto-responder only triggers on Subject `TRACE` exactly, never on `TRACE REPLY`.
+
+> **Limitation:** this is a single-hop test, like PING — VirtBBS cannot
+> orchestrate a true multi-system traceroute, since that requires every
+> intermediate system along a route to cooperatively relay the TRACE
+> onward and report back. The reply only ever describes the system you
+> sent the TRACE directly to.
+
+---
+
+## 12. Quick reference — all `[fido]` fields
 
 ```toml
 [fido]
@@ -363,15 +447,19 @@ lookup + immediate send).
   inbound_dir      = "fido/inbound"     # where toss reads .pkt files from
   outbound_dir     = "fido/outbound"    # where scan/netmail writes .pkt files to
   nodelist_dir     = "fido/nodelist"    # NODELIST.* files for address lookups
-  binkp_port         = 24554            # BinkP port used when polling
+  binkp_port         = 24554            # BinkP port used when polling AND listened on for inbound polls
   taglines_file      = ""               # optional taglines, one per line
   areafix_password   = ""               # password WE send to OUR uplink's AreaFix
+  filefix_password   = ""               # password WE send to OUR uplink's FileFix
   poll_interval_mins = 0                # 0 = scheduler default (6h); else clamped to >=5
 
   [fido.areas]                       # AREA: tag → conference ID (inbound routing)
     TAG_NAME = 1
 
-  [[fido.downlinks]]                 # zero or more systems that subscribe to our areas
+  [fido.file_areas]                  # FileFix tag → file directory ID
+    GAMES = 1
+
+  [[fido.downlinks]]                 # zero or more systems that subscribe to our areas (AreaFix + FileFix)
     name     = "Bob's BBS"
     address  = "1:2/4"
     password = "letmein"
@@ -388,10 +476,14 @@ lookup + immediate send).
   binkp_port         = 24554
   taglines_file      = ""
   areafix_password   = ""
+  filefix_password   = ""
   poll_interval_mins = 0
 
   [fido.networks.areas]
     TAG_NAME = 3
+
+  [fido.networks.file_areas]
+    TAG_NAME = 2
 
   [[fido.networks.downlinks]]
     name     = "..."

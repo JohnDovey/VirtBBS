@@ -34,6 +34,10 @@
 //   v0.3.0  2026-06-25  TossDir/TossFile now take a *NetworkDef instead of
 //                        *Config, so any configured network can be tossed
 //                        (not just the primary) — needed by the scheduler
+//   v0.4.0  2026-06-25  Add TossAll, looping every enabled network (mirrors
+//                        ScanAll), used by the sysop/API/CLI toss commands so
+//                        AreaFix/FileFix/PING/TRACE work for every network,
+//                        not just primary
 // ============================================================================
 
 package fido
@@ -63,6 +67,31 @@ type TossResult struct {
 	Imported int // messages inserted
 	Skipped  int // messages ignored (unknown area, duplicate, etc.)
 	Errors   []string
+}
+
+// TossAll tosses every enabled network's inbound directory in turn,
+// aggregating the results. Disabled networks are skipped. Used wherever
+// "toss inbound mail" should mean *all* configured networks, not just the
+// primary one (sysop [T]oss menu, fido.toss API, -fido-toss CLI flag).
+func TossAll(cfg *Config, store *messages.Store, confStore *conferences.Store) *TossResult {
+	total := &TossResult{}
+	for _, nd := range cfg.AllNetworks() {
+		if !nd.Enabled {
+			continue
+		}
+		r, err := TossDir(&nd, store, confStore)
+		if err != nil {
+			total.Errors = append(total.Errors, fmt.Sprintf("[%s] %v", nd.Name, err))
+			continue
+		}
+		total.Packets += r.Packets
+		total.Imported += r.Imported
+		total.Skipped += r.Skipped
+		for _, e := range r.Errors {
+			total.Errors = append(total.Errors, fmt.Sprintf("[%s] %s", nd.Name, e))
+		}
+	}
+	return total
 }
 
 // TossDir reads every .PKT file in nd.InboundDir, imports all recognised
@@ -147,12 +176,26 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 				}
 			}
 
-			// AreaFix requests are handled by the responder and still
-			// stored as ordinary netmail below, so the sysop can audit
-			// what downlinks have requested.
+			// Same convention for TRACE — IsTrace only matches "TRACE"
+			// exactly, so a TRACE REPLY reaching us here never triggers
+			// another reply.
+			if IsTrace(pm.Subject) {
+				if err := AutoRespondTrace(nd, pm); err != nil {
+					errs = append(errs, fmt.Sprintf("trace auto-reply: %v", err))
+				}
+			}
+
+			// AreaFix/FileFix requests are handled by their responders and
+			// still stored as ordinary netmail below, so the sysop can
+			// audit what downlinks have requested.
 			if IsAreaFixRequest(pm.ToName) {
 				if err := ProcessAreaFixRequest(nd, store.DB(), confStore, nd.Name, pm); err != nil {
 					errs = append(errs, fmt.Sprintf("areafix: %v", err))
+				}
+			}
+			if IsFileFixRequest(pm.ToName) {
+				if err := ProcessFileFixRequest(nd, store.DB(), pm); err != nil {
+					errs = append(errs, fmt.Sprintf("filefix: %v", err))
 				}
 			}
 		} else {

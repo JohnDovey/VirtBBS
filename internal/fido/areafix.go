@@ -334,22 +334,22 @@ func replyAreaFix(nd *NetworkDef, our Addr, pm *Message, body string) error {
 
 // ── Requester (us subscribing to our own uplink's AreaFix) ─────────────────
 
-// RequestAreaFix composes and writes a netmail to "AreaFix" at our own
+// RequestAreaFix composes and writes a netmail to "AreaFix" at nd's own
 // uplink, requesting subscription changes (adds/removes are AREA: tags,
 // without +/- prefixes). Used when VirtBBS itself is a downlink of nd.
-func RequestAreaFix(cfg *Config, fromName string, adds, removes []string) (pktPath string, err error) {
-	our := cfg.NodeAddr()
+func RequestAreaFix(nd *NetworkDef, fromName string, adds, removes []string) (pktPath string, err error) {
+	our := nd.NodeAddr()
 	if our == (Addr{}) {
-		return "", fmt.Errorf("invalid local address %q", cfg.Address)
+		return "", fmt.Errorf("invalid local address %q", nd.Address)
 	}
-	uplink := cfg.UplinkAddr()
+	uplink := nd.UplinkAddr()
 	if uplink == (Addr{}) {
 		return "", fmt.Errorf("no uplink configured")
 	}
 
 	var body strings.Builder
-	if cfg.AreaFixPassword != "" {
-		fmt.Fprintf(&body, "%s\r\n", cfg.AreaFixPassword)
+	if nd.AreaFixPassword != "" {
+		fmt.Fprintf(&body, "%s\r\n", nd.AreaFixPassword)
 	}
 	for _, tag := range adds {
 		fmt.Fprintf(&body, "+%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
@@ -367,6 +367,6 @@ func RequestAreaFix(cfg *Config, fromName string, adds, removes []string) (pktPa
 		Body:     body.String(),
 	}
 
-	outDir := OutboundDir(cfg.OutboundDir, uplink, false)
-	return WritePKT(our, uplink, cfg.Password, outDir, []*NetmailMsg{msg})
+	outDir := OutboundDir(nd.OutboundDir, uplink, false)
+	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg})
 }

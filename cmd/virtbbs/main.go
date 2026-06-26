@@ -170,7 +170,6 @@ func main() {
 		}
 		defer msgStore.Close()
 		fidoCfg := &cfg.Fido
-		primaryNet := fidoCfg.AllNetworks()[0]
 
 		confStore, _ := conferences.Open(cfg.Paths.DB)
 		if confStore != nil {
@@ -178,10 +177,7 @@ func main() {
 		}
 
 		if *fidoToss {
-			result, err := fido.TossDir(&primaryNet, msgStore, confStore)
-			if err != nil {
-				log.Fatalf("fido-toss: %v", err)
-			}
+			result := fido.TossAll(fidoCfg, msgStore, confStore)
 			fmt.Printf("Toss complete: %d packets, %d imported, %d skipped\n",
 				result.Packets, result.Imported, result.Skipped)
 			for _, e := range result.Errors {
@@ -302,6 +298,12 @@ func main() {
 	// enabled network with a configured uplink — see internal/scheduler).
 	if cfg.Fido.Enabled {
 		scheduler.Start(msgStore, confStore)
+
+		// Start the BinkP server so other systems (our uplink, or our own
+		// downlinks) can poll THIS BBS instead of only the reverse.
+		if _, err := fido.ServeBinkP(&cfg.Fido, msgStore, confStore); err != nil {
+			log.Printf("BinkP server error: %v", err)
+		}
 	}
 
 	// Start management API
