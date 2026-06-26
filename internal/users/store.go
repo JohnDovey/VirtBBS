@@ -29,6 +29,8 @@
 //   v0.6.0  2026-06-26  Phase 0 (VirtAnd/VirtTerm): user_api_tokens table +
 //                        CreateAPIToken/AuthenticateToken/RevokeAPIToken/ListAPITokens
 //                        for the new user-facing userapi package.
+//   v0.9.0  2026-06-26  Sysop GUI gap-fill: ListAllAPITokens/RevokeAPITokenByID for
+//                        sysop-side token administration (internal/api, GUI tab).
 // ============================================================================
 
 // Package users manages the VirtBBS user database.
@@ -422,6 +424,47 @@ func (s *Store) RevokeAPIToken(userID, tokenID int64) error {
 		WHERE id=? AND user_id=? AND revoked_at IS NULL`,
 		time.Now().Format("2006-01-02 15:04:05"), tokenID, userID)
 	return err
+}
+
+// RevokeAPITokenByID marks a token revoked by its ID alone, with no userID
+// scoping check — for sysop-side administration (internal/api), where the
+// caller is trusted to revoke any user's token, not just their own.
+func (s *Store) RevokeAPITokenByID(tokenID int64) error {
+	_, err := s.db.Exec(`
+		UPDATE user_api_tokens SET revoked_at=?
+		WHERE id=? AND revoked_at IS NULL`,
+		time.Now().Format("2006-01-02 15:04:05"), tokenID)
+	return err
+}
+
+// APITokenAdmin is an APIToken annotated with its owning user's name, for
+// the sysop-side "all tokens" administrative view.
+type APITokenAdmin struct {
+	APIToken
+	UserName string
+}
+
+// ListAllAPITokens returns every issued token across all users (active and
+// revoked), newest first, for sysop administration.
+func (s *Store) ListAllAPITokens() ([]*APITokenAdmin, error) {
+	rows, err := s.db.Query(`
+		SELECT t.id, t.user_id, t.device_label, t.created_at, COALESCE(t.revoked_at, ''), u.name
+		FROM user_api_tokens t
+		JOIN users u ON u.id = t.user_id
+		ORDER BY t.created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*APITokenAdmin
+	for rows.Next() {
+		t := &APITokenAdmin{}
+		if err := rows.Scan(&t.ID, &t.UserID, &t.DeviceLabel, &t.CreatedAt, &t.RevokedAt, &t.UserName); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
 }
 
 // ListAPITokens returns all tokens (active and revoked) issued to userID,

@@ -108,10 +108,14 @@ public class BbsSection
 
 public class NetworkSection
 {
-    [JsonPropertyName("telnet_port")] public int    TelnetPort { get; set; }
-    [JsonPropertyName("ssh_port")]    public int    SshPort    { get; set; }
-    [JsonPropertyName("api_port")]    public int    ApiPort    { get; set; }
-    [JsonPropertyName("api_bind")]    public string ApiBind    { get; set; } = "";
+    [JsonPropertyName("telnet_port")]   public int    TelnetPort   { get; set; }
+    [JsonPropertyName("ssh_port")]      public int    SshPort      { get; set; }
+    [JsonPropertyName("api_port")]      public int    ApiPort      { get; set; }
+    [JsonPropertyName("api_bind")]      public string ApiBind      { get; set; } = "";
+    [JsonPropertyName("userapi_port")]  public int    UserApiPort  { get; set; }
+    [JsonPropertyName("userapi_bind")]  public string UserApiBind  { get; set; } = "";
+    [JsonPropertyName("virtterm_port")] public int    VirtTermPort { get; set; }
+    [JsonPropertyName("virtterm_bind")] public string VirtTermBind { get; set; } = "";
 }
 
 public class PathsSection
@@ -179,3 +183,24 @@ public record NodelistSearchResult
     [property: JsonPropertyName("page")]   int Page,
     [property: JsonPropertyName("pages")]  int Pages
 );
+
+public record NodelistVersion
+(
+    [property: JsonPropertyName("network")]     string Network,
+    [property: JsonPropertyName("imported_at")] string ImportedAt,
+    [property: JsonPropertyName("node_count")]  int    NodeCount
+);
+
+// ── API tokens (VirtAnd/VirtTerm device tokens, sysop administration) ────────
+
+public class ApiToken
+{
+    [JsonPropertyName("ID")]          public long   ID          { get; set; }
+    [JsonPropertyName("UserID")]      public long   UserID      { get; set; }
+    [JsonPropertyName("UserName")]    public string UserName    { get; set; } = "";
+    [JsonPropertyName("DeviceLabel")] public string DeviceLabel { get; set; } = "";
+    [JsonPropertyName("CreatedAt")]   public string CreatedAt   { get; set; } = "";
+    [JsonPropertyName("RevokedAt")]   public string RevokedAt   { get; set; } = "";
+
+    public bool IsActive => string.IsNullOrEmpty(RevokedAt);
+}

@@ -27,6 +27,8 @@
                 <TextBlock Text="Network:"/>
                 <TextBox Text="{Binding ImportNetwork}" PlaceholderText="network name"/>
                 <Button Content="Import" Command="{Binding ImportNodelistCommand}"/>
+                <Button Content="Check Last Import" Command="{Binding CheckVersionCommand}"/>
+                <TextBlock Text="{Binding VersionText}" Opacity="0.8"/>
 
                 <TextBlock Text="{Binding Status}" Opacity="0.8" TextWrapping="Wrap" Margin="0,12,0,0"/>
             </StackPanel>

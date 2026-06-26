@@ -53,6 +53,9 @@
             <TabItem Header="FidoNet">
                 <ContentControl Content="{Binding Fido}"/>
             </TabItem>
+            <TabItem Header="API Tokens">
+                <ContentControl Content="{Binding Tokens}"/>
+            </TabItem>
         </TabControl>
     </DockPanel>
 

@@ -26,6 +26,8 @@
 //
 // Change History:
 //   v0.0.8  2026-06-24  Avalonia GUI: FidoNet tab view model
+//   v0.9.0  2026-06-26  Sysop GUI gap-fill: CheckVersionCommand surfaces the
+//                        fido_nodelist_versions data added for VirtAnd/VirtTerm
 // ============================================================================
 
 using System;
@@ -71,6 +73,9 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
 
     // Toss/Scan/Poll.
     [ObservableProperty] private string _pollNetwork = "";
+
+    // Nodelist version (fido_nodelist_versions, written by ImportFile).
+    [ObservableProperty] private string _versionText = "";
 
     [RelayCommand]
     private async Task SearchNodesAsync(CancellationToken ct = default)
@@ -194,6 +199,20 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
         {
             await client.CallAsync("fido.poll", new { network = PollNetwork }, ct);
             Status = "Poll initiated.";
+        }
+        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private async Task CheckVersionAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var v = await client.CallAsync<NodelistVersion>("fido.nodelist.version",
+                new { network = ImportNetwork }, ct);
+            VersionText = v is null
+                ? $"No nodelist imported yet for '{ImportNetwork}'."
+                : $"{v.Network}: last imported {v.ImportedAt}, {v.NodeCount} node(s).";
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }

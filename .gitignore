@@ -11,9 +11,11 @@
 *.test
 *.out
 
-# .NET / Avalonia
+# .NET / Avalonia / WinForms
 gui-dotnet/**/bin/
 gui-dotnet/**/obj/
+dotnet-virtterm/**/bin/
+dotnet-virtterm/**/obj/
 
 # Runtime data
 /data/*.db

@@ -25,6 +25,7 @@ public partial class MainWindowViewModel : ViewModelBase
     public CallersViewModel     Callers      { get; }
     public ConfigViewModel      Config       { get; }
     public FidoViewModel        Fido         { get; }
+    public TokensViewModel      Tokens       { get; }
 
     public MainWindowViewModel()
     {
@@ -35,6 +36,7 @@ public partial class MainWindowViewModel : ViewModelBase
         Callers     = new CallersViewModel(Client);
         Config      = new ConfigViewModel(Client);
         Fido        = new FidoViewModel(Client);
+        Tokens      = new TokensViewModel(Client);
     }
 
     [RelayCommand]
@@ -60,7 +62,8 @@ public partial class MainWindowViewModel : ViewModelBase
                     Users.LoadAsync(ct),
                     Conferences.LoadAsync(ct),
                     Config.LoadAsync(ct),
-                    Callers.LoadAsync(ct)
+                    Callers.LoadAsync(ct),
+                    Tokens.LoadAsync(ct)
                 );
             }
             else

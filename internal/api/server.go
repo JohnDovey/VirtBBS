@@ -28,6 +28,8 @@
 //   v0.0.1  2026-06-24  Initial implementation
 //   v0.0.2  2026-06-24  Phase 10: Implement node.kick and node.broadcast endpoints
 //   v0.0.5  2026-06-24  Phase 14: callers.search, callers.stats endpoints
+//   v0.9.0  2026-06-26  Sysop GUI gap-fill: tokens.list/tokens.revoke for
+//                        administering VirtAnd/VirtTerm API tokens remotely
 // ============================================================================
 
 // Package api provides a JSON-over-TCP management API for remote sysop access.
@@ -381,6 +383,18 @@ func (s *Server) dispatch(req Request) (any, error) {
 		}
 		return fido.ImportFile(s.Deps.Messages.DB(), p.Path, p.Network)
 
+	// ── API token administration (VirtAnd/VirtTerm device tokens) ───────────
+
+	case "tokens.list":
+		return s.Deps.Users.ListAllAPITokens()
+
+	case "tokens.revoke":
+		var p struct{ ID int64 }
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, s.Deps.Users.RevokeAPITokenByID(p.ID)
+
 	case "fido.nodelist.fetch":
 		var p struct{ Network string }
 		_ = json.Unmarshal(req.Params, &p)
@@ -393,6 +407,13 @@ func (s *Server) dispatch(req Request) (any, error) {
 			return nil, fmt.Errorf("network %q not found", p.Network)
 		}
 		return fido.FetchAndImport(nd, s.Deps.Messages.DB())
+
+	case "fido.nodelist.version":
+		var p struct{ Network string }
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return fido.GetNodelistVersion(s.Deps.Messages.DB(), p.Network)
 
 	default:
 		return nil, fmt.Errorf("unknown method: %s", req.Method)

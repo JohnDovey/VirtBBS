@@ -18,10 +18,14 @@ public partial class ConfigViewModel(ApiClient client) : ViewModelBase
     [ObservableProperty] private int    _maxNodes  = 10;
 
     // Network section.
-    [ObservableProperty] private int    _telnetPort = 2323;
-    [ObservableProperty] private int    _sshPort    = 3232;
-    [ObservableProperty] private int    _apiPort    = 9999;
-    [ObservableProperty] private string _apiBind    = "0.0.0.0";
+    [ObservableProperty] private int    _telnetPort   = 2323;
+    [ObservableProperty] private int    _sshPort      = 3232;
+    [ObservableProperty] private int    _apiPort      = 9999;
+    [ObservableProperty] private string _apiBind      = "0.0.0.0";
+    [ObservableProperty] private int    _userApiPort  = 9998;
+    [ObservableProperty] private string _userApiBind  = "0.0.0.0";
+    [ObservableProperty] private int    _virtTermPort = 6323;
+    [ObservableProperty] private string _virtTermBind = "0.0.0.0";
 
     // Paths section.
     [ObservableProperty] private string _dbPath     = "./data/virtbbs.db";
@@ -51,6 +55,10 @@ public partial class ConfigViewModel(ApiClient client) : ViewModelBase
             SshPort         = cfg.Network.SshPort;
             ApiPort         = cfg.Network.ApiPort;
             ApiBind         = cfg.Network.ApiBind;
+            UserApiPort     = cfg.Network.UserApiPort;
+            UserApiBind     = cfg.Network.UserApiBind;
+            VirtTermPort    = cfg.Network.VirtTermPort;
+            VirtTermBind    = cfg.Network.VirtTermBind;
             DbPath          = cfg.Paths.Db;
             FilesPath       = cfg.Paths.Files;
             LogsPath        = cfg.Paths.Logs;
@@ -71,7 +79,11 @@ public partial class ConfigViewModel(ApiClient client) : ViewModelBase
         var patch = new
         {
             bbs     = new { name = BbsName,  max_nodes = MaxNodes },
-            network = new { telnet_port = TelnetPort, ssh_port = SshPort, api_port = ApiPort, api_bind = ApiBind },
+            network = new {
+                telnet_port = TelnetPort, ssh_port = SshPort, api_port = ApiPort, api_bind = ApiBind,
+                userapi_port = UserApiPort, userapi_bind = UserApiBind,
+                virtterm_port = VirtTermPort, virtterm_bind = VirtTermBind,
+            },
             paths   = new { db = DbPath, files = FilesPath, logs = LogsPath },
             session = new { time_per_call_mins = TimePerCallMins, idle_timeout_mins = IdleTimeoutMins,
                             max_failed_logins = MaxFailedLogins, new_user_security = NewUserSecurity },

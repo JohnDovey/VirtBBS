@@ -37,15 +37,17 @@ dotnet build
 dotnet run
 ```
 
-> **Note:** this project was written and reviewed without access to a
-> Windows machine or the .NET SDK in the development sandbox — there was no
-> way to `dotnet build`/`dotnet run` it here. The code has been written
-> carefully against the same patterns already proven in
-> `gui-dotnet/VirtBBS.GUI` (which *was* built successfully in this repo),
-> but **it has not actually been compiled or run**. Build it on a real
-> Windows + .NET 8 machine before relying on it, and expect to fix the
-> usual first-build nits (a missed `using`, a property name typo) that
-> only a real compiler catches.
+> **Note:** this project was originally written without a .NET SDK
+> available, so it couldn't be compiled at the time. The .NET 8 SDK is now
+> available (see `../global.json`/`../CLAUDE.md`), and on macOS/Linux it
+> compiles cleanly with `dotnet build -p:EnableWindowsTargeting=true`
+> (zero warnings, zero errors) — that flag only unblocks compilation against
+> the Windows reference assemblies, though; **it still cannot actually run**
+> outside Windows, since WinForms has no real macOS/Linux runtime. A type
+> check this way already caught and fixed one real bug (a blocking
+> TLS handshake on the UI thread in `MainForm.ConnectAsync`). Still verify a
+> real run on Windows before relying on it — type-checking proves the code
+> compiles, not that the UI behaves correctly.
 
 ## Fonts
 

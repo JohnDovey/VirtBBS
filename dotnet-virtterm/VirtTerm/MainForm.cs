@@ -87,7 +87,9 @@ public class MainForm : Form
         SetStatus($"Connecting to {_settings.Host}:{_settings.TerminalPort}...");
         try
         {
-            _conn.Connect(_settings.Host, _settings.TerminalPort);
+            // Connect() blocks on the TCP+TLS handshake — run it off the UI
+            // thread so the window doesn't freeze while it's in progress.
+            await Task.Run(() => _conn.Connect(_settings.Host, _settings.TerminalPort));
             SetStatus($"Connected to {_settings.Host}:{_settings.TerminalPort}");
         }
         catch (Exception ex)

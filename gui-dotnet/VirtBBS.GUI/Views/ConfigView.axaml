@@ -25,6 +25,14 @@
             <NumericUpDown Value="{Binding ApiPort}" Minimum="1" Maximum="65535"/>
             <TextBlock Text="API Bind:"/>
             <TextBox Text="{Binding ApiBind}"/>
+            <TextBlock Text="User API Port (VirtAnd/VirtTerm):"/>
+            <NumericUpDown Value="{Binding UserApiPort}" Minimum="1" Maximum="65535"/>
+            <TextBlock Text="User API Bind:"/>
+            <TextBox Text="{Binding UserApiBind}"/>
+            <TextBlock Text="VirtTerm Port (TLS):"/>
+            <NumericUpDown Value="{Binding VirtTermPort}" Minimum="1" Maximum="65535"/>
+            <TextBlock Text="VirtTerm Bind:"/>
+            <TextBox Text="{Binding VirtTermBind}"/>
 
             <TextBlock Text="Paths" FontWeight="Bold" Margin="0,12,0,0"/>
             <TextBlock Text="Database:"/>

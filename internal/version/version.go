@@ -110,6 +110,12 @@
 //                        auto-generated like the SSH host key) that hands
 //                        connections unmodified to the existing session.Run,
 //                        wired into main.go alongside Telnet/SSH/userapi.
+//   v0.9.0  2026-06-26  Sysop GUI gap-fill: tokens.list/tokens.revoke and
+//                        fido.nodelist.version added to internal/api so the
+//                        sysop GUI can administer VirtAnd/VirtTerm API tokens
+//                        and see nodelist import status — both previously
+//                        added server-side in Phases 0/2 but never surfaced
+//                        in the GUI.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -120,4 +126,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.8.0"
+const Version = "0.9.0"
