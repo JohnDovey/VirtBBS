@@ -30,6 +30,7 @@ public class DynamicMenuBuilder
     public event Action? LogoffRequested;
     public event Action? HelpRequested;
     public event Action? AboutRequested;
+    public event Action? OfflineMailRequested;
 
     private MenuItem? _bbsMenu;
     private MenuItem? _sysopItem;
@@ -92,6 +93,13 @@ public class DynamicMenuBuilder
         bbsMenu.Items.Add(goodbyeItem);
         menu.Items.Add(bbsMenu);
         _bbsMenu = bbsMenu;
+
+        // ── Mail menu: offline QWK reader (no live connection required) ─
+        var mailMenu = new MenuItem { Header = "_Mail" };
+        var offlineItem = new MenuItem { Header = "_Offline Mail Reader..." };
+        offlineItem.Click += (_, _) => OfflineMailRequested?.Invoke();
+        mailMenu.Items.Add(offlineItem);
+        menu.Items.Add(mailMenu);
 
         // ── Help menu (fixed: Help/About always present) ──────────────────
         var helpMenu = new MenuItem { Header = "_Help" };

@@ -48,12 +48,10 @@ blind the way the whole project would otherwise have to be.
   restrictions mean it won't run promptly (15-minute minimum interval,
   plus further OS deferral) — the primary flow is the user tapping
   Synchronize manually.
-- **`app/ui/MainActivity.kt`** — minimal Compose UI: a conference list /
-  message reader with offline reply composition (queues, doesn't send),
-  a file-area browser with download-queue and an upload picker
-  (`ActivityResultContracts.OpenDocument`, with a persisted URI
-  permission so the file is still readable whenever sync eventually
-  runs), and a settings screen for host/token/subscribed networks.
+- **`app/ui/`** — Compose UI with four tabs (Messages, Files, Queue,
+  Settings), message detail view, offline compose/reply, file search,
+  upload description prompt, queue management, connection test, and
+  FidoNet node lookup. The app bar shows `session.whoami` after sync.
 
 ## Building
 
@@ -111,13 +109,10 @@ The first real `:app:assembleDebug` also needed two small compile fixes
 `@OptIn(ExperimentalMaterial3Api::class)` for `TopAppBar` in `MainActivity.kt`).
 Runtime behaviour on a device/emulator still needs manual verification.
 
-## Known limitations (by design, see the plan)
+## Known limitations
 
-- No native UI for anything beyond the "more functionality TBD later"
-  baseline the plan specified: message reader/composer, file browser +
-  upload/download queue, settings. No threading, search, or rich text.
-- `internal/userapi` has no "who am I" endpoint, so VirtAnd has no way to
-  show the logged-in user's own name/security level in the UI today.
-- WorkManager background sync is best-effort only (see above) — there is
-  no push-notification path for "new mail arrived," by design, since the
-  plan treats manual "synchronize" as the primary flow.
+- WorkManager background sync is best-effort only (15-minute minimum
+  interval, plus OS deferral) — manual **Synchronize** is the primary flow.
+- No push notifications for new mail.
+- No rich text / ANSI rendering in the message reader.
+- File and node search require network access (not cached offline).

@@ -40,6 +40,8 @@ public partial class MainWindow : Window
     // so a fresh connection fetches whoami again.
     private bool _loggedIn;
 
+    private OfflineMailWindow? _offlineMailWindow;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -106,6 +108,7 @@ public partial class MainWindow : Window
         _menuBuilder.LogoffRequested += () => _conn.Disconnect();
         _menuBuilder.HelpRequested += ShowHelp;
         _menuBuilder.AboutRequested += () => new AboutWindow().ShowDialog(this);
+        _menuBuilder.OfflineMailRequested += ShowOfflineMail;
 
         var menu = _menuBuilder.Build();
         _menuBuilder.SetSysopVisible(_settings.IsSysop);
@@ -234,7 +237,25 @@ public partial class MainWindow : Window
             "The BBS menu (top) sends the same single keystroke as typing it\n" +
             "yourself, and is only enabled while the BBS is showing its main\n" +
             "\"Command:\" prompt — mid-flow prompts (composing a message, etc.)\n" +
-            "must be typed directly in the terminal pane.");
+            "must be typed directly in the terminal pane.\n\n" +
+            "Mail → Offline Mail Reader opens a graphical QWK offline\n" +
+            "mail client. It works without a live BBS connection — open a\n" +
+            ".QWK packet received via Zmodem or download from the BBS when\n" +
+            "connected, compose replies, and save/upload a REP packet.");
+    }
+
+    private void ShowOfflineMail()
+    {
+        if (_offlineMailWindow == null || !_offlineMailWindow.IsVisible)
+        {
+            _offlineMailWindow = new OfflineMailWindow(_settings);
+            _offlineMailWindow.Closed += (_, _) => _offlineMailWindow = null;
+            _offlineMailWindow.Show();
+        }
+        else
+        {
+            _offlineMailWindow.Activate();
+        }
     }
 
     private async Task ShowMessage(string title, string message)

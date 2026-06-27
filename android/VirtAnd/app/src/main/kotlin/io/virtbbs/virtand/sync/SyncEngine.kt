@@ -22,6 +22,7 @@ import io.virtbbs.virtand.core.UserApiClient
 import io.virtbbs.virtand.core.buildRepPacket
 import io.virtbbs.virtand.core.parseQwkPacket
 import io.virtbbs.virtand.data.AppDatabase
+import io.virtbbs.virtand.data.SessionInfo
 import io.virtbbs.virtand.data.entities.CachedMessageEntity
 import io.virtbbs.virtand.data.entities.ConferenceEntity
 import io.virtbbs.virtand.data.entities.FileDirEntity
@@ -46,6 +47,7 @@ data class SyncResult(
     val filesUploaded: Int,
     val filesDownloaded: Int,
     val nodelistsChanged: List<String>,
+    val sessionInfo: io.virtbbs.virtand.data.SessionInfo? = null,
     val error: String? = null,
 )
 
@@ -61,6 +63,7 @@ class SyncEngine(private val context: Context) {
         val api = UserApiClient(host = cfg.host, port = cfg.userApiPort, token = cfg.token)
 
         try {
+            val sessionInfo = refreshSessionInfo(api)
             refreshConferences(api)
             val newMessages = downloadAndImportQwk(api)
             refreshFileCatalog(api)
@@ -69,10 +72,21 @@ class SyncEngine(private val context: Context) {
             val nodelistsChanged = checkNodelists(api, cfg.subscribedNetworks)
             val repliesUploaded = uploadQueuedReplies(api)
 
-            SyncResult(newMessages, repliesUploaded, filesUploaded, filesDownloaded, nodelistsChanged)
+            SyncResult(newMessages, repliesUploaded, filesUploaded, filesDownloaded, nodelistsChanged, sessionInfo)
         } catch (e: Exception) {
             SyncResult(0, 0, 0, 0, emptyList(), error = e.message ?: e.toString())
         }
+    }
+
+    private fun refreshSessionInfo(api: UserApiClient): SessionInfo? {
+        val result = api.call("session.whoami") ?: return null
+        val o = result.jsonObject
+        return SessionInfo(
+            userName = o["name"]?.jsonPrimitive?.content ?: "",
+            bbsName = o["bbs_name"]?.jsonPrimitive?.content ?: "",
+            securityLevel = o["security_level"]?.jsonPrimitive?.int ?: 0,
+            sysop = o["sysop"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false,
+        )
     }
 
     private fun refreshConferences(api: UserApiClient) {

@@ -377,7 +377,7 @@ func (s *session) messagesMenu() {
 			netmailOpt = "   [K]NetMail"
 		}
 		s.writeln(ansi.Color(ansi.BrightWhite) +
-			"  [R]ead   [E]nter   [N]ew (since last)" + netmailOpt + "   [Q]uit" +
+			"  [R]ead   [E]nter   [N]ew (since last)   [O]ffline (QWK)" + netmailOpt + "   [Q]uit" +
 			ansi.Reset())
 		s.write(ansi.Prompt("Message command: "))
 		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
@@ -395,6 +395,8 @@ func (s *session) messagesMenu() {
 		case "N":
 			lastRead := s.deps.Users.GetLastRead(s.user.ID, s.conference)
 			s.readMessages(lastRead + 1)
+		case "O":
+			s.qwkMenu()
 		case "K":
 			if fidoEnabled {
 				s.netmailMenu()

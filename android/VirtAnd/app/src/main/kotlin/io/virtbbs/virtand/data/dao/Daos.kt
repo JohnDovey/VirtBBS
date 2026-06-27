@@ -34,6 +34,12 @@ interface MessageDao {
     @Query("SELECT * FROM cached_messages WHERE conferenceId = :conferenceId ORDER BY msgNumber DESC")
     fun observeByConference(conferenceId: Int): Flow<List<CachedMessageEntity>>
 
+    @Query("SELECT * FROM cached_messages WHERE localId = :localId")
+    suspend fun getByLocalId(localId: Long): CachedMessageEntity?
+
+    @Query("UPDATE cached_messages SET isRead = 1 WHERE localId = :localId")
+    suspend fun markRead(localId: Long)
+
     @Query("SELECT COALESCE(MAX(msgNumber), 0) FROM cached_messages WHERE conferenceId = :conferenceId")
     suspend fun highMsgNumber(conferenceId: Int): Int
 

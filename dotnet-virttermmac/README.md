@@ -27,8 +27,22 @@ non-UI logic was carried over **unmodified** (only namespaces changed):
 | `Menus/DynamicMenuBuilder.cs` | **Rewritten** — Avalonia `Menu`/`MenuItem` instead of WinForms `MenuStrip`/`ToolStripMenuItem`. (Namespace is `Menus`, not `Menu`, to avoid colliding with the `Avalonia.Controls.Menu` type name.) Same "remote control" single-keystroke design, same `Command:`-prompt enable/disable gate |
 | `Views/ConnectWindow.*`, `Views/AboutWindow.*` | **Rewritten** as Avalonia `Window`s (XAML + code-behind) replacing the WinForms `Form`s |
 | `Views/MainWindow.*` | **Rewritten** — same architecture as the WinForms `MainForm.cs` (built in code-behind, since the menu and terminal-grid size are both determined at runtime), just Avalonia controls and `Dispatcher.UIThread` instead of WinForms ones |
+| `Qwk/QwkPacket.cs`, `Qwk/QwkSession.cs` | **New** — QWK/REP parse and build (same format as `internal/qwk` and VirtAnd). Powers the offline mail reader |
+| `Views/OfflineMailWindow.*`, `Views/ComposeMessageWindow.*` | **New** — graphical offline QWK mail reader (TitanMail-style: conferences, message list, read/compose/reply, import `.QWK`, export `.REP`). Opens from **Mail → Offline Mail Reader** with no live connection required |
 
-## Building
+## Offline mail reader (QWK)
+
+Inspired by [TitanMail](https://gitlab.com/apamment/titanmail) (Qt QWK reader for
+Synchronet/Talisman BBS). VirtTermMac includes a built-in graphical offline mail
+client:
+
+- **Mail → Offline Mail Reader…** — always available, even when not connected
+- **File → Open QWK Packet** — load a `.QWK`/`.zip` from Zmodem or disk
+- Browse conferences and messages, mark read, reply or compose new
+- Queue replies and **Save REP Packet** for upload via BBS Messages → Offline (QWK)
+  or **Upload REP to BBS** when logged in with an API token
+- Optional **Download QWK from BBS** via `internal/userapi` when configured
+
 
 Requires the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 Unlike `dotnet-virtterm` (WinForms, Windows-only), this one is genuinely
