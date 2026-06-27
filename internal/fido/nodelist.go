@@ -56,6 +56,7 @@ package fido
 import (
 	"bufio"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -445,8 +446,14 @@ func (ndb *NodelistDB) LookupAddr(network string, a Addr) (*NodeEntry, error) {
 	row := ndb.db.QueryRow(`SELECT id, network, zone, net, node_num, point, name, location, sysop, phone, baud, flags, node_type, is_active
 		FROM fido_nodes WHERE zone=? AND net=? AND node_num=? AND point=?`+netCond, args...)
 	nodes, err := scanNodes(singleRow{row})
-	if err != nil || len(nodes) == 0 {
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
 		return nil, err
+	}
+	if len(nodes) == 0 {
+		return nil, nil
 	}
 	return nodes[0], nil
 }
@@ -486,14 +493,26 @@ func (ndb *NodelistDB) Count(network string) (int, error) {
 // singleRow adapts *sql.Row to the Scan interface used by scanNodes.
 type singleRow struct{ *sql.Row }
 
-func (r singleRow) Next() bool { return true }
-
 // scanner interface for both *sql.Rows and singleRow.
 type rowScanner interface {
 	Scan(...any) error
 }
 
 func scanNodes(rows interface{}) ([]*NodeEntry, error) {
+	// singleRow must be handled before the rowIter branch — singleRow used
+	// to define Next() which accidentally made it satisfy rowIter, causing
+	// a second Scan on an already-consumed *sql.Row (ErrNoRows).
+	if sr, ok := rows.(singleRow); ok {
+		n, err := scanOneNode(sr)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+		return []*NodeEntry{n}, nil
+	}
+
 	type rowIter interface {
 		Next() bool
 		Scan(...any) error
@@ -512,17 +531,6 @@ func scanNodes(rows interface{}) ([]*NodeEntry, error) {
 		return out, ri.Err()
 	}
 
-	// singleRow path
-	if sr, ok := rows.(singleRow); ok {
-		n, err := scanOneNode(sr)
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		if err != nil {
-			return nil, err
-		}
-		return []*NodeEntry{n}, nil
-	}
 	return nil, fmt.Errorf("unsupported rows type")
 }
 

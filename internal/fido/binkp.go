@@ -61,6 +61,8 @@ import (
 	"strings"
 	"time"
 
+	"database/sql"
+
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/messages"
 )
@@ -89,19 +91,24 @@ type PollResult struct {
 
 // Poll dials the uplink, exchanges M_NUL/M_ADR/M_PWD, sends all files
 // in outboundDir, receives any inbound files into inboundDir, then hangs up.
-func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string) *PollResult {
+// db is used to resolve FidoNet-address uplinks via the imported nodelist.
+func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB) *PollResult {
 	res := &PollResult{}
 
-	host := nd.Uplink
-	if host == "" {
+	if nd.Uplink == "" {
 		res.Error = fmt.Errorf("no uplink configured for network %s", nd.Name)
 		return res
 	}
 
-	// Strip point from uplink address for lookup — we just need host:port.
-	addr, _ := ParseAddr(host)
-	port := nd.Port()
-	target := net.JoinHostPort(addrToIP(addr, host), strconv.Itoa(port))
+	dialHost, dialPort, err := ResolveBinkpDialTarget(nd.Name, nd.Uplink, nd.Port(), db)
+	if err != nil {
+		res.Error = err
+		return res
+	}
+	if dialPort == 0 {
+		dialPort = nd.Port()
+	}
+	target := net.JoinHostPort(dialHost, strconv.Itoa(dialPort))
 
 	conn, err := net.DialTimeout("tcp", target, 30*time.Second)
 	if err != nil {
@@ -187,7 +194,7 @@ func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.S
 		}
 	}
 
-	pollResult := Poll(nd, outFiles, nd.InboundDir)
+	pollResult := Poll(nd, outFiles, nd.InboundDir, store.DB())
 	result := &PollAndTossResult{Poll: pollResult}
 	if pollResult.Error != nil {
 		return result
@@ -745,18 +752,4 @@ func (b *binkpConn) receiveUntilEOB(destDir string) ([]string, error) {
 			}
 		}
 	}
-}
-
-// addrToIP returns a host string to dial.
-// For numeric-looking addresses it uses the uplink string itself,
-// otherwise it returns the raw uplink field as a hostname.
-// In production this would do a NODELIST lookup — for now we just
-// return the uplink string stripped of the FidoNet address portion.
-func addrToIP(a Addr, raw string) string {
-	// If the raw uplink looks like "1:234/567@fidonet.org", extract the hostname.
-	if idx := strings.Index(raw, "@"); idx >= 0 {
-		return raw[idx+1:]
-	}
-	// Otherwise treat as DNS name / IP (common for configured uplinks).
-	return raw
 }
