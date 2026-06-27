@@ -98,7 +98,7 @@ func AutoRespondPing(nd *NetworkDef, pm *Message) error {
 	}
 
 	reply := BuildPongReply(our, "VirtBBS PingBot", pm)
-	outDir := OutboundDir(nd.OutboundDir, uplink, false)
+	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply})
 	return err
 }
@@ -130,6 +130,6 @@ func SendPing(nd *NetworkDef, fromName, toName, toAddr string) (pktPath string, 
 	if uplink == (Addr{}) {
 		return "", fmt.Errorf("no uplink configured")
 	}
-	outDir := OutboundDir(nd.OutboundDir, uplink, false)
+	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg})
 }

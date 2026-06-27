@@ -219,9 +219,17 @@ func buildBody(m *NetmailMsg, from, to Addr, localZone int) string {
 
 // RouteAddr returns the next-hop address for a netmail message:
 //   - Crash: direct to destination (strip point → boss node)
-//   - Otherwise: route through uplink
-//   - Point: strip point from destination address
-func RouteAddr(m *NetmailMsg, nd *NetworkDef) (Addr, error) {
+//   - A direct, configured Downlink: deliver straight to them
+//   - Otherwise, an indirect destination: consult the ROUTES.BBS-style
+//     routing table (routes.go) for a next-hop — e.g. a node behind a
+//     delegated sub-hub gets physically handed to that sub-hub
+//   - No route found: fall back to the uplink, as before
+//   - Point: stripped from the destination address throughout
+//
+// db may be nil (skips the routing-table lookup, falling straight to the
+// uplink) — kept optional so any future caller without a database handle
+// degrades to the pre-routing-table behavior rather than panicking.
+func RouteAddr(db *sql.DB, m *NetmailMsg, nd *NetworkDef) (Addr, error) {
 	dest, err := ParseAddr(m.ToAddr)
 	if err != nil {
 		return Addr{}, fmt.Errorf("invalid destination address %q: %w", m.ToAddr, err)
@@ -233,7 +241,19 @@ func RouteAddr(m *NetmailMsg, nd *NetworkDef) (Addr, error) {
 		return boss, nil
 	}
 
-	// Routed: go via uplink.
+	if dl := nd.DownlinkByAddr(dest); dl != nil {
+		// Already a direct, known member — no need to route further.
+		return Addr{Zone: dest.Zone, Net: dest.Net, Node: dest.Node}, nil
+	}
+
+	if db != nil {
+		if hop, ok, err := RouteFor(db, nd.Name, dest); err == nil && ok {
+			return hop, nil
+		}
+	}
+
+	// No direct match, no route: fall back to the uplink (unchanged
+	// pre-routing-table behavior).
 	uplink := nd.UplinkAddr()
 	if uplink.Zone == 0 {
 		return Addr{}, fmt.Errorf("no uplink configured for network %s", nd.Name)
@@ -241,10 +261,16 @@ func RouteAddr(m *NetmailMsg, nd *NetworkDef) (Addr, error) {
 	return uplink, nil
 }
 
-// OutboundDir returns the per-dest outbound subdirectory for crash netmail,
-// or the general outbound dir for routed netmail.
-func OutboundDir(baseOutbound string, nextHop Addr, crash bool) string {
-	if crash {
+// OutboundDir returns the per-next-hop outbound subdirectory whenever the
+// message must go directly to a specific peer rather than the generic
+// uplink-bound pool — true for crash netmail, and now also true whenever
+// RouteAddr resolved an indirect next-hop that isn't the uplink (e.g. a
+// node behind a delegated sub-hub gets handed to that sub-hub specifically,
+// not lumped in with everything else destined for the uplink). Otherwise
+// returns the general outbound dir.
+func OutboundDir(baseOutbound string, nextHop, uplink Addr, crash bool) string {
+	indirect := uplink != (Addr{}) && nextHop != uplink
+	if crash || indirect {
 		sub := fmt.Sprintf("%04X%04X.OUT", nextHop.Zone*0x100+nextHop.Net, nextHop.Node)
 		return filepath.Join(baseOutbound, sub)
 	}

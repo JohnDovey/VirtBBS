@@ -97,7 +97,7 @@ func SendNodeAnnounce(nd *NetworkDef, m *Member, changeType string) error {
 		Body:     b.String(),
 		Network:  nd.Name,
 	}
-	outDir := OutboundDir(nd.OutboundDir, uplink, false)
+	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg})
 	return err
 }
@@ -166,6 +166,11 @@ func ApplyNodeAnnounceInfo(nd *NetworkDef, db *sql.DB, confStore *conferences.St
 		changeType = "NEW"
 		if err := OpenAreaFixDB(db).Subscribe(nd.Name, saved.Addr4D(), nd.EffectiveNodelistEchoTag()); err != nil {
 			return fmt.Errorf("member created but failed to subscribe to nodelist updates: %w", err)
+		}
+	}
+	if saved.IsHost {
+		if err := SeedDefaultHubRoute(db, nd.Name, saved.Zone, saved.Net); err != nil {
+			return fmt.Errorf("member created but failed to seed default route: %w", err)
 		}
 	}
 

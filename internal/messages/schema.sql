@@ -211,3 +211,18 @@ CREATE TABLE IF NOT EXISTS fido_members_snapshot (
     flags       TEXT    NOT NULL DEFAULT '',
     UNIQUE(network, year, day_of_year, zone, net, node_num, point)
 );
+
+-- ROUTES.BBS-style static routing table (BinkleyTerm/FrontDoor convention):
+-- wildcard address patterns mapped to a "route via this address instead"
+-- next-hop, used when a destination isn't directly reachable — e.g. mail
+-- for a node behind a delegated sub-hub gets physically handed to that
+-- sub-hub. See internal/fido/routes.go.
+CREATE TABLE IF NOT EXISTS fido_routes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    network    TEXT    NOT NULL,
+    pattern    TEXT    NOT NULL,                  -- "*", "300:*", "300:1005/*", or an exact "300:1005/3"
+    route_to   TEXT    NOT NULL,                  -- address to actually hand the packet to
+    is_default INTEGER NOT NULL DEFAULT 0,         -- 1 = auto-seeded net->Host route, 0 = sysop/import-added
+    created_at TEXT    NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(network, pattern)
+);

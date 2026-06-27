@@ -338,6 +338,14 @@ func (mdb *MembersDB) ApproveJoinRequest(nd *NetworkDef, req *JoinRequest, net, 
 		}
 	}
 
+	if isHost {
+		// "The default routing of hubs": any net's Host automatically
+		// gets a ROUTES.BBS-style default route the moment it's created.
+		if err := SeedDefaultHubRoute(mdb.db, nd.Name, m.Zone, m.Net); err != nil {
+			return m, fmt.Errorf("member created but failed to seed default route: %w", err)
+		}
+	}
+
 	// Auto-subscribe to nodelist updates — the only "no opt-out" AreaFix
 	// subscription in the system; every other echo area still requires an
 	// explicit AreaFix +TAG request.

@@ -358,11 +358,11 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if nd == nil {
 			return map[string]int64{"id": id}, nil
 		}
-		nextHop, err := fido.RouteAddr(&m, nd)
+		nextHop, err := fido.RouteAddr(s.Deps.Messages.DB(), &m, nd)
 		if err != nil {
 			return map[string]int64{"id": id}, nil
 		}
-		outDir := fido.OutboundDir(nd.OutboundDir, nextHop, m.Crash)
+		outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), m.Crash)
 		origAddr, _ := fido.ParseAddr(nd.Address)
 		pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{&m})
 		if err != nil {

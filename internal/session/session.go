@@ -1188,7 +1188,7 @@ func (s *session) fidoRoutingTableMenu() {
 			s.writeln(fmt.Sprintf("  %-16s %-24s %-30s %s", m.Addr4D(), m.BBSName, m.BinkpHost, active))
 		}
 		s.writeln("")
-		s.writeln(ansi.Color(ansi.BrightYellow) + "  [X]port   [I]mport   [E]dit member   [Q]uit" + ansi.Reset())
+		s.writeln(ansi.Color(ansi.BrightYellow) + "  [X]port   [I]mport   [E]dit member   [V]iew routes   [Q]uit" + ansi.Reset())
 		s.write(ansi.Prompt("Command: "))
 		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
 		switch cmd {
@@ -1237,6 +1237,105 @@ func (s *session) fidoRoutingTableMenu() {
 			}
 		case "E":
 			s.fidoEditMemberInfo(target, mdb)
+		case "V":
+			s.fidoRoutesMenu(target)
+		case "Q", "":
+			return
+		}
+	}
+}
+
+// fidoRoutesMenu manages the ROUTES.BBS-style static routing table —
+// wildcard address patterns mapped to a "route via this address instead"
+// next-hop, distinct from the host:port/password table in
+// fidoRoutingTableMenu. Default net->Host (/0) routes appear here
+// auto-seeded (is_default=Yes) the moment a net gets a Host; the sysop can
+// add/remove explicit overrides and import/export the literal ROUTES.BBS
+// filename, matching real BinkleyTerm/FrontDoor convention.
+func (s *session) fidoRoutesMenu(target *fido.NetworkDef) {
+	for {
+		routes, err := fido.ListRoutes(s.deps.Messages.DB(), target.Name)
+		if err != nil {
+			s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
+			return
+		}
+		s.writeln(ansi.Header("Routing Table (ROUTES.BBS) — " + target.Name))
+		s.writeln(ansi.Color(ansi.BrightCyan) +
+			fmt.Sprintf("  %-20s %-20s %s", "Pattern", "Route-to", "Default") + ansi.Reset())
+		for _, r := range routes {
+			isDefault := "No"
+			if r.IsDefault {
+				isDefault = "Yes"
+			}
+			s.writeln(fmt.Sprintf("  %-20s %-20s %s", r.Pattern, r.RouteTo, isDefault))
+		}
+		s.writeln("")
+		s.writeln(ansi.Color(ansi.BrightYellow) + "  [+]Add   [-]Remove   [X]port ROUTES.BBS   [I]mport ROUTES.BBS   [Q]uit" + ansi.Reset())
+		s.write(ansi.Prompt("Command: "))
+		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
+		switch cmd {
+		case "+":
+			s.write(ansi.Prompt("Pattern (e.g. 300:1005/*, 300:*, or *): "))
+			pattern := strings.TrimSpace(s.readline())
+			s.write(ansi.Prompt("Route to (zone:net/node): "))
+			routeTo := strings.TrimSpace(s.readline())
+			if pattern == "" || routeTo == "" {
+				continue
+			}
+			if err := fido.AddRoute(s.deps.Messages.DB(), target.Name, pattern, routeTo); err != nil {
+				s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
+				continue
+			}
+			s.writeln(ansi.Colorize(ansi.BrightGreen, "Route added."))
+		case "-":
+			s.write(ansi.Prompt("Pattern to remove: "))
+			pattern := strings.TrimSpace(s.readline())
+			if pattern == "" {
+				continue
+			}
+			if err := fido.RemoveRoute(s.deps.Messages.DB(), target.Name, pattern); err != nil {
+				s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
+				continue
+			}
+			s.writeln(ansi.Colorize(ansi.BrightGreen, "Route removed."))
+		case "X":
+			s.write(ansi.Prompt("Export ROUTES.BBS to directory: "))
+			dir := strings.TrimSpace(s.readline())
+			if dir == "" {
+				continue
+			}
+			data, err := fido.ExportRoutesBBS(s.deps.Messages.DB(), target.Name)
+			if err != nil {
+				s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
+				continue
+			}
+			path := strings.TrimRight(dir, "/") + "/ROUTES.BBS"
+			if err := os.WriteFile(path, data, 0644); err != nil {
+				s.writeln(ansi.Colorize(ansi.Red, "Error writing file: "+err.Error()))
+				continue
+			}
+			s.writeln(ansi.Colorize(ansi.BrightGreen, "Exported to "+path))
+		case "I":
+			s.write(ansi.Prompt("Import ROUTES.BBS from directory: "))
+			dir := strings.TrimSpace(s.readline())
+			if dir == "" {
+				continue
+			}
+			path := strings.TrimRight(dir, "/") + "/ROUTES.BBS"
+			data, err := os.ReadFile(path)
+			if err != nil {
+				s.writeln(ansi.Colorize(ansi.Red, "Error reading file: "+err.Error()))
+				continue
+			}
+			result, err := fido.ImportRoutesBBS(s.deps.Messages.DB(), target.Name, data)
+			if err != nil {
+				s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
+				continue
+			}
+			s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("Added/updated %d route(s).", result.Added)))
+			for _, e := range result.Errors {
+				s.writeln(ansi.Colorize(ansi.Red, "  "+e))
+			}
 		case "Q", "":
 			return
 		}
@@ -1891,12 +1990,12 @@ func (s *session) netmailCompose() {
 
 	// Determine routing and write PKT.
 	nd := cfg.Fido.AllNetworks()[0]
-	nextHop, err := fido.RouteAddr(msg, &nd)
+	nextHop, err := fido.RouteAddr(s.deps.Messages.DB(), msg, &nd)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Routing error: "+err.Error()))
 		return
 	}
-	outDir := fido.OutboundDir(nd.OutboundDir, nextHop, crash)
+	outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), crash)
 	origAddr, _ := fido.ParseAddr(cfg.Fido.Address)
 
 	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg})

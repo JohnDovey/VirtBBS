@@ -210,6 +210,26 @@
 //                        primary one (incoming M_ADR parsing already
 //                        split on whitespace into a list — only the
 //                        sending/matching side was single-address).
+//   v0.14.0 2026-06-27  VirtNet: ROUTES.BBS-style static routing table —
+//                        wildcard address patterns (most specific wins:
+//                        exact node > zone:net/* > zone:* > *) mapped to a
+//                        "route via this address instead" next-hop, used
+//                        when a destination isn't a direct Downlink — e.g.
+//                        a node behind a delegated sub-hub gets physically
+//                        handed to that sub-hub. Default net->Host (/0)
+//                        routes auto-seed the moment a net gets a Host
+//                        (ApproveJoinRequest/ApplyNodeAnnounceInfo).
+//                        Exportable/importable as a literal ROUTES.BBS
+//                        file. Wired into real outbound routing:
+//                        RouteAddr now consults this table before falling
+//                        back to the uplink (unchanged for direct
+//                        Downlinks and the no-route-found case), and
+//                        OutboundDir now uses a per-next-hop subdirectory
+//                        whenever the resolved hop isn't the uplink, not
+//                        only for crash netmail — confirmed by inspection
+//                        that binkp.go's existing per-peer crash-
+//                        subdirectory lookup needs no changes to pick this
+//                        up automatically.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -220,4 +240,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.13.1"
+const Version = "0.14.0"
