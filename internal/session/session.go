@@ -2017,9 +2017,15 @@ func (s *session) sysopScanFiles() {
 		s.writeln(ansi.Colorize(ansi.Red, "Scan failed: "+err.Error()))
 		return
 	}
-	if totals.Dirs == 0 {
+	if totals.Dirs == 0 && totals.NewAreas == 0 {
 		s.writeln(ansi.Colorize(ansi.Yellow, "No file directories configured."))
 		return
+	}
+
+	if totals.NewAreas > 0 {
+		s.writeln(ansi.Colorize(ansi.BrightGreen,
+			fmt.Sprintf("  Registered %d new file area%s: %s",
+				totals.NewAreas, pluralS(totals.NewAreas), strings.Join(totals.NewAreaNames, ", "))))
 	}
 
 	for _, res := range totals.Results {
@@ -2037,8 +2043,8 @@ func (s *session) sysopScanFiles() {
 	s.rebuildLocalFile()
 	s.writeln("")
 	s.writeln(ansi.Colorize(ansi.BrightGreen,
-		fmt.Sprintf("Scan complete — %d director%s, %d file(s) added, %d marked missing.",
-			totals.Dirs, pluralS(totals.Dirs), totals.Added, totals.Missing)))
+		fmt.Sprintf("Scan complete — %d director%s, %d file area(s) added, %d file(s) added, %d marked missing.",
+			totals.Dirs, pluralS(totals.Dirs), totals.NewAreas, totals.Added, totals.Missing)))
 }
 
 func (s *session) sysopEditFileDesc() {

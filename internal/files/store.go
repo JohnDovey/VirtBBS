@@ -138,6 +138,22 @@ func (s *Store) GetDirByName(name string) (*Dir, error) {
 	return d, nil
 }
 
+// GetDirByPath finds an active directory by its relative path under the files
+// root (e.g. "general"), or nil if none exists.
+func (s *Store) GetDirByPath(path string) (*Dir, error) {
+	row := s.db.QueryRow(`SELECT id, name, description, path, sort_type, read_sec, upload_sec, active FROM file_dirs WHERE path=? AND active=1`, path)
+	d := &Dir{}
+	var active int
+	if err := row.Scan(&d.ID, &d.Name, &d.Description, &d.Path, &d.SortType, &d.ReadSec, &d.UploadSec, &active); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	d.Active = active != 0
+	return d, nil
+}
+
 // CreateDir adds a new file directory. path is relative to the files root
 // (see EnsureDirPath to create the on-disk directory afterward).
 func (s *Store) CreateDir(name, description, path string, readSec, uploadSec int) (*Dir, error) {

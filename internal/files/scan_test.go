@@ -92,3 +92,40 @@ func TestNormalizeDiz_truncates(t *testing.T) {
 		t.Fatalf("normalizeDiz len %d > %d", len(got), maxDizLen)
 	}
 }
+
+func TestDirDisplayName(t *testing.T) {
+	if got := dirDisplayName("my_games"); got != "My Games" {
+		t.Fatalf("dirDisplayName = %q", got)
+	}
+}
+
+func TestScanAll_discoversNewDirs(t *testing.T) {
+	root := t.TempDir()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &Store{db: db, filesRoot: root}
+	if err := os.MkdirAll(filepath.Join(root, "general"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "utilities"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	totals, err := store.ScanAll("Sysop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if totals.NewAreas != 1 || len(totals.NewAreaNames) != 1 || totals.NewAreaNames[0] != "Utilities" {
+		t.Fatalf("NewAreas = %+v, want [Utilities]", totals)
+	}
+	if totals.Dirs != 2 {
+		t.Fatalf("Dirs = %d, want 2", totals.Dirs)
+	}
+}

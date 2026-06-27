@@ -36,23 +36,35 @@ type ScanResult struct {
 
 // ScanTotals aggregates a full scan across directories.
 type ScanTotals struct {
-	Dirs    int
-	Added   int
-	Missing int
-	Results []ScanResult
+	Dirs         int
+	NewAreas     int
+	NewAreaNames []string
+	Added        int
+	Missing      int
+	Results      []ScanResult
 }
 
-// ScanAll walks every active file directory on disk and synchronises the catalog.
+// ScanAll discovers new on-disk subdirectories as file areas, then walks every
+// active file directory and synchronises the catalog.
 func (s *Store) ScanAll(uploader string) (*ScanTotals, error) {
-	dirs, err := s.ListDirs()
-	if err != nil {
-		return nil, err
-	}
 	if uploader == "" {
 		uploader = "Sysop"
 	}
 
-	totals := &ScanTotals{}
+	newAreas, err := s.discoverDirAreas()
+	if err != nil {
+		return nil, err
+	}
+
+	dirs, err := s.ListDirs()
+	if err != nil {
+		return nil, err
+	}
+
+	totals := &ScanTotals{
+		NewAreas:     len(newAreas),
+		NewAreaNames: newAreas,
+	}
 	for _, d := range dirs {
 		res, err := s.ScanDir(d.ID, uploader)
 		if err != nil {
@@ -64,6 +76,59 @@ func (s *Store) ScanAll(uploader string) (*ScanTotals, error) {
 		totals.Results = append(totals.Results, *res)
 	}
 	return totals, nil
+}
+
+// discoverDirAreas registers each subdirectory of the files root that is not
+// already a configured file area.
+func (s *Store) discoverDirAreas() ([]string, error) {
+	if err := os.MkdirAll(s.filesRoot, 0755); err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(s.filesRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	var added []string
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		relPath := e.Name()
+		existing, err := s.GetDirByPath(relPath)
+		if err != nil {
+			return added, err
+		}
+		if existing != nil {
+			continue
+		}
+		name := dirDisplayName(relPath)
+		if byName, err := s.GetDirByName(name); err != nil {
+			return added, err
+		} else if byName != nil && byName.Path != relPath {
+			name = relPath
+		}
+		if _, err := s.CreateDir(name, "", relPath, 10, 20); err != nil {
+			return added, err
+		}
+		added = append(added, name)
+	}
+	return added, nil
+}
+
+func dirDisplayName(path string) string {
+	s := strings.NewReplacer("_", " ", "-", " ").Replace(path)
+	words := strings.Fields(s)
+	for i, w := range words {
+		if len(w) == 0 {
+			continue
+		}
+		words[i] = strings.ToUpper(w[:1]) + strings.ToLower(w[1:])
+	}
+	if len(words) == 0 {
+		return path
+	}
+	return strings.Join(words, " ")
 }
 
 // ScanDir synchronises one file directory: registers new disk files and marks

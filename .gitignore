@@ -25,9 +25,8 @@ android/**/.gradle/
 android/**/.kotlin/
 android/**/local.properties
 
-# Runtime data
-/data/*.db
-/data/*.pem
+# Runtime data (local DB, TLS keys, SQLite WAL sidecars)
+/data/
 /logs/*.log
 /logs/*.DAT
 /files/
