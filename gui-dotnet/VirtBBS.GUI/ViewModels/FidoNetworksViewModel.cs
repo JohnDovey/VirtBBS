@@ -94,29 +94,30 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
         AkasText = string.Join("\n", src.AKAs ?? []);
 
         InboundAreas.Clear();
-        foreach (var kv in src.Areas)
+        foreach (var kv in src.Areas ?? [])
             InboundAreas.Add(new AreaMapRow { Tag = kv.Key, ConferenceId = kv.Value });
 
         FileAreaMaps.Clear();
-        foreach (var kv in src.FileAreas)
+        foreach (var kv in src.FileAreas ?? [])
             FileAreaMaps.Add(new FileAreaMapRow { Tag = kv.Key, DirId = kv.Value });
 
         Downlinks.Clear();
-        foreach (var dl in src.Downlinks)
+        foreach (var dl in src.Downlinks ?? [])
             Downlinks.Add(new FidoDownlink
             {
                 Name = dl.Name,
                 Address = dl.Address,
                 Password = dl.Password,
-                AKAs = new List<string>(dl.AKAs),
+                AKAs = new List<string>(dl.AKAs ?? []),
             });
     }
 
     private static FidoNetworkDef NetworkSource(BbsConfig cfg, string network)
     {
+        FidoNetworkDef src;
         if (network == PrimaryNetwork)
         {
-            return new FidoNetworkDef
+            src = new FidoNetworkDef
             {
                 Name = PrimaryNetwork,
                 Enabled = cfg.Fido.Enabled,
@@ -139,8 +140,17 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
                 Downlinks = cfg.Fido.Downlinks,
             };
         }
-        return cfg.Fido.Networks.FirstOrDefault(n => n.Name == network)
-            ?? new FidoNetworkDef { Name = network };
+        else
+        {
+            src = cfg.Fido.Networks?.FirstOrDefault(n => n.Name == network)
+                ?? new FidoNetworkDef { Name = network };
+        }
+
+        src.AKAs ??= [];
+        src.Areas ??= new Dictionary<string, int>();
+        src.FileAreas ??= new Dictionary<string, int>();
+        src.Downlinks ??= [];
+        return src;
     }
 
     [RelayCommand]
@@ -167,7 +177,7 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
             Name = dl.Name,
             Address = dl.Address,
             Password = dl.Password,
-            AKAs = new List<string>(dl.AKAs),
+            AKAs = new List<string>(dl.AKAs ?? []),
         }).ToList();
 
         var akas = AkasText.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
@@ -195,6 +205,7 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
         }
         else
         {
+            _cachedConfig.Fido.Networks ??= [];
             var nd = _cachedConfig.Fido.Networks.FirstOrDefault(n => n.Name == SelectedNetwork);
             if (nd is null)
             {
@@ -263,6 +274,7 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
     {
         var name = $"Network{(_cachedConfig?.Fido.Networks.Count ?? 0) + 1}";
         _cachedConfig ??= await client.CallAsync<BbsConfig>("config.get", null, ct) ?? new BbsConfig();
+        _cachedConfig.Fido.Networks ??= [];
         _cachedConfig.Fido.Networks.Add(new FidoNetworkDef { Name = name, Enabled = true });
         await SaveFullFidoAsync(ct);
         if (!NetworkNames.Contains(name)) NetworkNames.Add(name);
