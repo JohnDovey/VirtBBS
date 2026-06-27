@@ -56,26 +56,18 @@ import (
 
 // NetmailMsg holds the fields for one outbound netmail message.
 type NetmailMsg struct {
-	// Sender
-	FromName string
-	FromAddr string // e.g. "1:234/567"
+	FromName string `json:"FromName"`
+	FromAddr string `json:"FromAddr"`
+	ToName   string `json:"ToName"`
+	ToAddr   string `json:"ToAddr"`
+	Subject  string `json:"Subject"`
+	Body     string `json:"Body"`
 
-	// Recipient
-	ToName string
-	ToAddr string // e.g. "1:234/568" or "1:234/567.1" (point)
+	MsgID      string `json:"MsgID,omitempty"`
+	ReplyMsgID string `json:"ReplyMsgID,omitempty"`
 
-	Subject string
-	Body    string
-
-	// FidoNet threading (optional).
-	MsgID      string // ^AMSGID value; generated when blank
-	ReplyMsgID string // parent ^AMSGID for ^AREPLY kludge
-
-	// Crash = true: bypass routing, write PKT directly to dest outbound dir.
-	Crash bool
-
-	// Network name (blank = primary).
-	Network string
+	Crash   bool   `json:"Crash"`
+	Network string `json:"Network"`
 }
 
 // NetmailDB wraps the database for netmail queue operations.

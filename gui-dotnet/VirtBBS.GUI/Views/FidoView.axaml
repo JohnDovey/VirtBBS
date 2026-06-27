@@ -1,105 +1,71 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:VirtBBS.GUI.ViewModels"
-             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="600"
              x:Class="VirtBBS.GUI.Views.FidoView"
              x:DataType="vm:FidoViewModel">
 
-    <TabControl Margin="10">
+    <DockPanel Margin="10">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+            <TextBlock Text="Network:" VerticalAlignment="Center"/>
+            <ComboBox ItemsSource="{Binding NetworkNames}" SelectedItem="{Binding SelectedNetwork}" Width="180"/>
+            <Button Content="Reload Networks" Command="{Binding LoadNetworksCommand}"/>
+        </StackPanel>
 
-        <!-- Toss / Scan / Poll / Import -->
-        <TabItem Header="Operations">
-            <StackPanel Spacing="8" MaxWidth="500" Margin="10">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Button Content="Toss Inbound" Command="{Binding TossCommand}"/>
-                    <Button Content="Scan Outbound" Command="{Binding ScanCommand}"/>
+        <TabControl>
+            <TabItem Header="Mail Ops">
+                <StackPanel Spacing="8" MaxWidth="520" Margin="8">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Content="Toss Inbound" Command="{Binding TossCommand}"/>
+                        <Button Content="Scan Outbound" Command="{Binding ScanCommand}"/>
+                        <Button Content="Poll Uplink" Command="{Binding PollCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="Nodelist Import" FontWeight="Bold"/>
+                    <TextBox Text="{Binding ImportPath}" PlaceholderText="/path/to/NODELIST.170"/>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Content="Import File" Command="{Binding ImportNodelistCommand}"/>
+                        <Button Content="Fetch from URL" Command="{Binding FetchNodelistCommand}"/>
+                        <Button Content="Check Version" Command="{Binding CheckVersionCommand}"/>
+                    </StackPanel>
+                    <TextBlock Text="{Binding VersionText}" Opacity="0.8"/>
                 </StackPanel>
+            </TabItem>
 
-                <TextBlock Text="Poll Network" FontWeight="Bold" Margin="0,12,0,0"/>
-                <TextBox Text="{Binding PollNetwork}" PlaceholderText="network name"/>
-                <Button Content="Poll Uplink" Command="{Binding PollCommand}"/>
+            <TabItem Header="Nodelist">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                        <TextBox Text="{Binding NodeQuery}" Width="220" PlaceholderText="address or name"/>
+                        <Button Content="Search" Command="{Binding SearchNodesCommand}"/>
+                        <Button Content="◀" Command="{Binding PrevPageCommand}"/>
+                        <TextBlock Text="{Binding NodePage}" VerticalAlignment="Center"/>
+                        <TextBlock Text="/" VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding NodeTotalPages}" VerticalAlignment="Center"/>
+                        <Button Content="▶" Command="{Binding NextPageCommand}"/>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding NodeResults}" SelectedItem="{Binding SelectedNode}"
+                              IsReadOnly="True" AutoGenerateColumns="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="120"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="160"/>
+                            <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="160"/>
+                            <DataGridTextColumn Header="Sysop" Binding="{Binding Sysop}" Width="140"/>
+                            <DataGridTextColumn Header="Phone" Binding="{Binding Phone}" Width="120"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
 
-                <TextBlock Text="Import Nodelist" FontWeight="Bold" Margin="0,12,0,0"/>
-                <TextBlock Text="Path:"/>
-                <TextBox Text="{Binding ImportPath}" PlaceholderText="/path/to/NODELIST.170"/>
-                <TextBlock Text="Network:"/>
-                <TextBox Text="{Binding ImportNetwork}" PlaceholderText="network name"/>
-                <Button Content="Import" Command="{Binding ImportNodelistCommand}"/>
-                <Button Content="Check Last Import" Command="{Binding CheckVersionCommand}"/>
-                <TextBlock Text="{Binding VersionText}" Opacity="0.8"/>
-
-                <TextBlock Text="{Binding Status}" Opacity="0.8" TextWrapping="Wrap" Margin="0,12,0,0"/>
-            </StackPanel>
-        </TabItem>
-
-        <!-- Nodelist browser -->
-        <TabItem Header="Nodelist">
-            <DockPanel Margin="10">
-                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
-                    <TextBlock Text="Network:" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding NodeNetwork}" Width="100"/>
-                    <TextBlock Text="Search:" VerticalAlignment="Center"/>
-                    <TextBox Text="{Binding NodeQuery}" Width="220" PlaceholderText="address or name"/>
-                    <Button Content="Search" Command="{Binding SearchNodesCommand}"/>
-                    <Button Content="◀ Prev" Command="{Binding PrevPageCommand}"/>
-                    <TextBlock Text="{Binding NodePage}" VerticalAlignment="Center"/>
-                    <TextBlock Text="/" VerticalAlignment="Center"/>
-                    <TextBlock Text="{Binding NodeTotalPages}" VerticalAlignment="Center"/>
-                    <Button Content="Next ▶" Command="{Binding NextPageCommand}"/>
+            <TabItem Header="NetMail">
+                <StackPanel Spacing="6" MaxWidth="520" Margin="8">
+                    <TextBox Text="{Binding ToAddr}" PlaceholderText="To address (1:234/56)"/>
+                    <TextBox Text="{Binding ToName}" PlaceholderText="To name"/>
+                    <TextBox Text="{Binding NmSubject}" PlaceholderText="Subject"/>
+                    <TextBox Text="{Binding NmBody}" AcceptsReturn="True" Height="160" TextWrapping="Wrap" PlaceholderText="Body"/>
+                    <CheckBox Content="Crash (direct delivery)" IsChecked="{Binding Crash}"/>
+                    <Button Content="Send NetMail" Command="{Binding SendNetmailCommand}"/>
                 </StackPanel>
+            </TabItem>
+        </TabControl>
 
-                <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Margin="0,8,0,0" Opacity="0.8"/>
-
-                <DataGrid ItemsSource="{Binding NodeResults}" SelectedItem="{Binding SelectedNode}"
-                          IsReadOnly="True" GridLinesVisibility="Horizontal" AutoGenerateColumns="False">
-                    <DataGrid.Columns>
-                        <DataGridTextColumn Header="Address"  Binding="{Binding Address}"  Width="120"/>
-                        <DataGridTextColumn Header="Name"     Binding="{Binding Name}"     Width="160"/>
-                        <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="160"/>
-                        <DataGridTextColumn Header="Sysop"    Binding="{Binding Sysop}"     Width="140"/>
-                        <DataGridTextColumn Header="Phone"    Binding="{Binding Phone}"     Width="120"/>
-                        <DataGridTextColumn Header="Flags"    Binding="{Binding Flags}"     Width="*"/>
-                    </DataGrid.Columns>
-                </DataGrid>
-            </DockPanel>
-        </TabItem>
-
-        <!-- Netmail compose -->
-        <TabItem Header="NetMail">
-            <StackPanel Spacing="6" MaxWidth="500" Margin="10">
-                <TextBlock Text="To Address:"/>
-                <TextBox Text="{Binding ToAddr}" PlaceholderText="1:234/56"/>
-                <TextBlock Text="To Name:"/>
-                <TextBox Text="{Binding ToName}"/>
-                <TextBlock Text="Subject:"/>
-                <TextBox Text="{Binding NmSubject}"/>
-                <TextBlock Text="Body:"/>
-                <TextBox Text="{Binding NmBody}" AcceptsReturn="True" Height="160" TextWrapping="Wrap"/>
-                <CheckBox Content="Crash (send direct, bypass uplink)" IsChecked="{Binding Crash}"/>
-                <Button Content="Send" Command="{Binding SendNetmailCommand}"/>
-                <TextBlock Text="{Binding Status}" Opacity="0.8" TextWrapping="Wrap"/>
-            </StackPanel>
-        </TabItem>
-
-        <!-- Echo flags -->
-        <TabItem Header="Echo Flags">
-            <StackPanel Spacing="6" MaxWidth="500" Margin="10">
-                <TextBlock Text="Conference ID:"/>
-                <NumericUpDown Value="{Binding EconfId}" Minimum="0" Maximum="999"/>
-                <CheckBox Content="Active" IsChecked="{Binding EconfActive}"/>
-                <TextBlock Text="Area Tag:"/>
-                <TextBox Text="{Binding EconfAreaTag}"/>
-                <TextBlock Text="Uplink Address:"/>
-                <TextBox Text="{Binding EconfUplinkAddr}"/>
-                <TextBlock Text="Network:"/>
-                <TextBox Text="{Binding EconfNetwork}"/>
-                <Button Content="Save" Command="{Binding SaveEchoFlagsCommand}"/>
-                <TextBlock Text="{Binding Status}" Opacity="0.8" TextWrapping="Wrap"/>
-            </StackPanel>
-        </TabItem>
-
-    </TabControl>
-
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Opacity="0.8" TextWrapping="Wrap" Margin="0,8,0,0"/>
+    </DockPanel>
 </UserControl>

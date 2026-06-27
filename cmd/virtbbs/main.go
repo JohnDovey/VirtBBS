@@ -346,6 +346,7 @@ func main() {
 		Nodes:       nodeStore,
 		Callers:     callersLog,
 		Conferences: confStore,
+		Files:       fileStore,
 	}
 	apiSrv := &api.Server{Addr: apiAddr, Deps: apiDeps}
 

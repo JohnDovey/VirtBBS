@@ -24,8 +24,9 @@ public partial class MainWindowViewModel : ViewModelBase
     public ConferencesViewModel Conferences  { get; }
     public CallersViewModel     Callers      { get; }
     public ConfigViewModel      Config       { get; }
-    public FidoViewModel        Fido         { get; }
-    public TokensViewModel      Tokens       { get; }
+    public FidoHubViewModel    Fido         { get; }
+    public FileAreasViewModel  FileAreas    { get; }
+    public TokensViewModel     Tokens       { get; }
 
     public MainWindowViewModel()
     {
@@ -35,7 +36,8 @@ public partial class MainWindowViewModel : ViewModelBase
         Conferences = new ConferencesViewModel(Client);
         Callers     = new CallersViewModel(Client);
         Config      = new ConfigViewModel(Client);
-        Fido        = new FidoViewModel(Client);
+        Fido        = new FidoHubViewModel(Client);
+        FileAreas   = new FileAreasViewModel(Client);
         Tokens      = new TokensViewModel(Client);
     }
 
@@ -63,7 +65,9 @@ public partial class MainWindowViewModel : ViewModelBase
                     Conferences.LoadAsync(ct),
                     Config.LoadAsync(ct),
                     Callers.LoadAsync(ct),
-                    Tokens.LoadAsync(ct)
+                    Tokens.LoadAsync(ct),
+                    Fido.LoadAllAsync(ct),
+                    FileAreas.LoadAsync(ct)
                 );
             }
             else

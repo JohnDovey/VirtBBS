@@ -45,12 +45,12 @@
             <TextBlock Text="Sysop Security:"/>
             <NumericUpDown Value="{Binding EditSysopSec}" Minimum="0" Maximum="999"/>
             <CheckBox Content="Echo (FidoNet)" IsChecked="{Binding EditEcho}"/>
-            <TextBlock Text="Echo Tag:"/>
+            <TextBlock Text="Echo Tag (AREA:):"/>
             <TextBox Text="{Binding EditEchoTag}"/>
-            <TextBlock Text="Uplink Addr:"/>
+            <TextBlock Text="Uplink Addr (override):"/>
             <TextBox Text="{Binding EditUplinkAddr}"/>
             <TextBlock Text="Network:"/>
-            <TextBox Text="{Binding EditNetwork}"/>
+            <ComboBox ItemsSource="{Binding NetworkNames}" SelectedItem="{Binding EditNetwork}"/>
             <Button Content="Save" Command="{Binding SaveCommand}"/>
             <TextBlock Text="{Binding Status}" Opacity="0.8" TextWrapping="Wrap"/>
         </StackPanel>

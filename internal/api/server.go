@@ -48,6 +48,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/users"
@@ -79,6 +80,7 @@ type Deps struct {
 	Nodes       *node.Store
 	Callers     *callers.Log
 	Conferences *conferences.Store
+	Files       *files.Store
 	// MsgStore is the same as Messages — kept for fido toss/scan which needs *messages.Store.
 }
 
@@ -414,6 +416,126 @@ func (s *Server) dispatch(req Request) (any, error) {
 			return nil, err
 		}
 		return fido.GetNodelistVersion(s.Deps.Messages.DB(), p.Network)
+
+	// ── File areas ──────────────────────────────────────────────────────────
+
+	case "files.list":
+		if s.Deps.Files == nil {
+			return nil, fmt.Errorf("files store not available")
+		}
+		return s.Deps.Files.ListAllDirs()
+
+	case "files.create":
+		if s.Deps.Files == nil {
+			return nil, fmt.Errorf("files store not available")
+		}
+		var p struct {
+			Name        string
+			Description string
+			Path        string
+			ReadSec     int
+			UploadSec   int
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return s.Deps.Files.CreateDir(p.Name, p.Description, p.Path, p.ReadSec, p.UploadSec)
+
+	case "files.update":
+		if s.Deps.Files == nil {
+			return nil, fmt.Errorf("files store not available")
+		}
+		var p files.Dir
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		return nil, s.Deps.Files.UpdateDir(&p)
+
+	// ── FidoNet routing & members ───────────────────────────────────────────
+
+	case "fido.networks.list":
+		cfg := config.Get()
+		names := []string{fido.PrimaryNetworkName}
+		for _, nd := range cfg.Fido.Networks {
+			if nd.Name != "" && nd.Name != fido.PrimaryNetworkName {
+				names = append(names, nd.Name)
+			}
+		}
+		return names, nil
+
+	case "fido.routes.list":
+		var p struct{ Network string }
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		return fido.ListRoutes(s.Deps.Messages.DB(), p.Network)
+
+	case "fido.routes.add":
+		var p struct {
+			Network string
+			Pattern string
+			RouteTo string
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		return nil, fido.AddRoute(s.Deps.Messages.DB(), p.Network, p.Pattern, p.RouteTo)
+
+	case "fido.routes.remove":
+		var p struct {
+			Network string
+			Pattern string
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		return nil, fido.RemoveRoute(s.Deps.Messages.DB(), p.Network, p.Pattern)
+
+	case "fido.members.list":
+		var p struct{ Network string }
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		mdb := fido.OpenMembersDB(s.Deps.Messages.DB())
+		return mdb.ListMembers(p.Network)
+
+	case "fido.areafix.subscriptions":
+		var p struct{ Network string }
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		cfg := config.Get()
+		nd := cfg.Fido.NetworkByName(p.Network)
+		if nd == nil {
+			return nil, fmt.Errorf("network %q not found", p.Network)
+		}
+		areafixDB := fido.OpenAreaFixDB(s.Deps.Messages.DB())
+		type subEntry struct {
+			Downlink string   `json:"Downlink"`
+			Name     string   `json:"Name"`
+			Areas    []string `json:"Areas"`
+		}
+		var out []subEntry
+		for _, dl := range nd.Downlinks {
+			areas, _ := areafixDB.SubscriptionsFor(p.Network, dl.Address)
+			out = append(out, subEntry{Downlink: dl.Address, Name: dl.Name, Areas: areas})
+		}
+		return out, nil
 
 	default:
 		return nil, fmt.Errorf("unknown method: %s", req.Method)

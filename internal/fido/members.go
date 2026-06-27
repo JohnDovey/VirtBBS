@@ -63,22 +63,22 @@ type JoinRequest struct {
 
 // Member is one approved (or remotely-announced) node of a hub network.
 type Member struct {
-	ID          int64
-	Network     string
-	Zone        int
-	Net         int
-	NodeNum     int
-	Point       int
-	BBSName     string
-	SysopName   string
-	Location    string
-	Contact     string
-	BinkpHost   string
-	Password    string
-	IsHost      bool
-	IsActive    bool
-	IsDelegated bool
-	JoinedAt    string
+	ID          int64  `json:"ID"`
+	Network     string `json:"Network"`
+	Zone        int    `json:"Zone"`
+	Net         int    `json:"Net"`
+	NodeNum     int    `json:"NodeNum"`
+	Point       int    `json:"Point"`
+	BBSName     string `json:"BBSName"`
+	SysopName   string `json:"SysopName"`
+	Location    string `json:"Location"`
+	Contact     string `json:"Contact"`
+	BinkpHost   string `json:"BinkpHost"`
+	Password    string `json:"Password"`
+	IsHost      bool   `json:"IsHost"`
+	IsActive    bool   `json:"IsActive"`
+	IsDelegated bool   `json:"IsDelegated"`
+	JoinedAt    string `json:"JoinedAt"`
 }
 
 // Addr returns the member's address as an Addr.

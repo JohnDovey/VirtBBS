@@ -26,6 +26,7 @@ public partial class ConferencesViewModel(ApiClient client) : ViewModelBase
     [ObservableProperty] private string _editNetwork     = "";
 
     public ObservableCollection<BbsConference> Conferences { get; } = [];
+    public ObservableCollection<string> NetworkNames { get; } = [];
 
     partial void OnSelectedChanged(BbsConference? value)
     {
@@ -50,6 +51,12 @@ public partial class ConferencesViewModel(ApiClient client) : ViewModelBase
             var list = await client.CallAsync<BbsConference[]>("conferences.list", null, ct) ?? [];
             Conferences.Clear();
             foreach (var c in list) Conferences.Add(c);
+
+            var names = await client.CallAsync<string[]>("fido.networks.list", null, ct) ?? ["FidoNet"];
+            NetworkNames.Clear();
+            NetworkNames.Add(""); // blank = primary
+            foreach (var n in names) NetworkNames.Add(n);
+
             Status = $"{Conferences.Count} conference(s) loaded.";
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
@@ -93,6 +100,10 @@ public partial class ConferencesViewModel(ApiClient client) : ViewModelBase
             ReadSec     = EditReadSec,
             WriteSec    = EditWriteSec,
             SysopSec    = EditSysopSec,
+            Echo        = EditEcho,
+            EchoTag     = EditEchoTag,
+            UplinkAddr  = EditUplinkAddr,
+            Network     = EditNetwork,
         };
         try
         {

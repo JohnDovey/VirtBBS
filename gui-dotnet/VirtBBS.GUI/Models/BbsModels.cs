@@ -74,6 +74,20 @@ public class BbsConference
     [JsonPropertyName("Network")]     public string Network     { get; set; } = "";
 }
 
+// ── File areas ────────────────────────────────────────────────────────────────
+
+public class FileDir
+{
+    [JsonPropertyName("ID")]          public long  ID          { get; set; }
+    [JsonPropertyName("Name")]        public string Name        { get; set; } = "";
+    [JsonPropertyName("Description")] public string Description { get; set; } = "";
+    [JsonPropertyName("Path")]        public string Path        { get; set; } = "";
+    [JsonPropertyName("SortType")]    public int    SortType    { get; set; }
+    [JsonPropertyName("ReadSec")]     public int    ReadSec     { get; set; }
+    [JsonPropertyName("UploadSec")]   public int    UploadSec   { get; set; }
+    [JsonPropertyName("Active")]      public bool   Active      { get; set; } = true;
+}
+
 // ── Callers ───────────────────────────────────────────────────────────────────
 
 public record CallerEntry
@@ -150,6 +164,91 @@ public class FidoSection
     [JsonPropertyName("nodelist_dir")] public string NodelistDir { get; set; } = "";
     [JsonPropertyName("binkp_port")]   public int    BinkpPort   { get; set; }
     [JsonPropertyName("areas")]        public Dictionary<string, int> Areas { get; set; } = new();
+    [JsonPropertyName("akas")]         public List<string> AKAs { get; set; } = new();
+    [JsonPropertyName("taglines_file")] public string TaglinesFile { get; set; } = "";
+    [JsonPropertyName("downlinks")]    public List<FidoDownlink> Downlinks { get; set; } = new();
+    [JsonPropertyName("areafix_password")] public string AreaFixPassword { get; set; } = "";
+    [JsonPropertyName("poll_interval_mins")] public int PollIntervalMins { get; set; }
+    [JsonPropertyName("file_areas")]   public Dictionary<string, int> FileAreas { get; set; } = new();
+    [JsonPropertyName("filefix_password")] public string FileFixPassword { get; set; } = "";
+    [JsonPropertyName("nodelist_url")]  public string NodelistURL { get; set; } = "";
+    [JsonPropertyName("nodelist_update_interval_hours")] public int NodelistUpdateIntervalHours { get; set; }
+    [JsonPropertyName("networks")]     public List<FidoNetworkDef> Networks { get; set; } = new();
+}
+
+public class FidoNetworkDef
+{
+    [JsonPropertyName("name")]        public string Name        { get; set; } = "";
+    [JsonPropertyName("enabled")]       public bool   Enabled     { get; set; }
+    [JsonPropertyName("address")]       public string Address     { get; set; } = "";
+    [JsonPropertyName("uplink")]        public string Uplink      { get; set; } = "";
+    [JsonPropertyName("password")]      public string Password    { get; set; } = "";
+    [JsonPropertyName("inbound_dir")]   public string InboundDir  { get; set; } = "";
+    [JsonPropertyName("outbound_dir")]  public string OutboundDir { get; set; } = "";
+    [JsonPropertyName("nodelist_dir")]  public string NodelistDir { get; set; } = "";
+    [JsonPropertyName("binkp_port")]    public int    BinkpPort   { get; set; }
+    [JsonPropertyName("areas")]         public Dictionary<string, int> Areas { get; set; } = new();
+    [JsonPropertyName("akas")]          public List<string> AKAs { get; set; } = new();
+    [JsonPropertyName("taglines_file")] public string TaglinesFile { get; set; } = "";
+    [JsonPropertyName("downlinks")]     public List<FidoDownlink> Downlinks { get; set; } = new();
+    [JsonPropertyName("areafix_password")] public string AreaFixPassword { get; set; } = "";
+    [JsonPropertyName("poll_interval_mins")] public int PollIntervalMins { get; set; }
+    [JsonPropertyName("file_areas")]    public Dictionary<string, int> FileAreas { get; set; } = new();
+    [JsonPropertyName("filefix_password")] public string FileFixPassword { get; set; } = "";
+    [JsonPropertyName("nodelist_url")]  public string NodelistURL { get; set; } = "";
+    [JsonPropertyName("nodelist_update_interval_hours")] public int NodelistUpdateIntervalHours { get; set; }
+    [JsonPropertyName("nodelist_echo_tag")] public string NodelistEchoTag { get; set; } = "";
+}
+
+public class FidoDownlink
+{
+    [JsonPropertyName("name")]     public string Name     { get; set; } = "";
+    [JsonPropertyName("address")]  public string Address  { get; set; } = "";
+    [JsonPropertyName("password")] public string Password { get; set; } = "";
+    [JsonPropertyName("akas")]     public List<string> AKAs { get; set; } = new();
+}
+
+public class FidoRoute
+{
+    [JsonPropertyName("ID")]        public long  ID        { get; set; }
+    [JsonPropertyName("Network")]   public string Network   { get; set; } = "";
+    [JsonPropertyName("Pattern")]   public string Pattern   { get; set; } = "";
+    [JsonPropertyName("RouteTo")]   public string RouteTo   { get; set; } = "";
+    [JsonPropertyName("IsDefault")] public bool  IsDefault { get; set; }
+    [JsonPropertyName("CreatedAt")] public string CreatedAt { get; set; } = "";
+}
+
+public class FidoMember
+{
+    [JsonPropertyName("ID")]          public long  ID          { get; set; }
+    [JsonPropertyName("Network")]     public string Network     { get; set; } = "";
+    [JsonPropertyName("Zone")]        public int   Zone        { get; set; }
+    [JsonPropertyName("Net")]         public int   Net         { get; set; }
+    [JsonPropertyName("NodeNum")]     public int   NodeNum     { get; set; }
+    [JsonPropertyName("Point")]       public int   Point       { get; set; }
+    [JsonPropertyName("BBSName")]     public string BBSName     { get; set; } = "";
+    [JsonPropertyName("SysopName")]   public string SysopName   { get; set; } = "";
+    [JsonPropertyName("Location")]    public string Location    { get; set; } = "";
+    [JsonPropertyName("Contact")]     public string Contact     { get; set; } = "";
+    [JsonPropertyName("BinkpHost")]   public string BinkpHost   { get; set; } = "";
+    [JsonPropertyName("Password")]    public string Password    { get; set; } = "";
+    [JsonPropertyName("IsHost")]      public bool  IsHost      { get; set; }
+    [JsonPropertyName("IsActive")]    public bool  IsActive    { get; set; }
+    [JsonPropertyName("IsDelegated")] public bool  IsDelegated { get; set; }
+    [JsonPropertyName("JoinedAt")]    public string JoinedAt    { get; set; } = "";
+
+    public string Address => Point != 0
+        ? $"{Zone}:{Net}/{NodeNum}.{Point}"
+        : $"{Zone}:{Net}/{NodeNum}";
+}
+
+public class AreaFixSubscription
+{
+    [JsonPropertyName("Downlink")] public string Downlink { get; set; } = "";
+    [JsonPropertyName("Name")]     public string Name     { get; set; } = "";
+    [JsonPropertyName("Areas")]    public List<string> Areas { get; set; } = new();
+
+    public string AreasText => string.Join(", ", Areas);
 }
 
 // ── FidoNet ───────────────────────────────────────────────────────────────────

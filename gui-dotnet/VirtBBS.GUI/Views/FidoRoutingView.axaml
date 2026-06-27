@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:VirtBBS.GUI.ViewModels"
+             x:Class="VirtBBS.GUI.Views.FidoRoutingView"
+             x:DataType="vm:FidoRoutingViewModel">
+
+    <DockPanel Margin="10">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+            <TextBlock Text="Network:" VerticalAlignment="Center"/>
+            <ComboBox ItemsSource="{Binding NetworkNames}" SelectedItem="{Binding SelectedNetwork}" Width="180"/>
+            <Button Content="Reload" Command="{Binding LoadCommand}"/>
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Opacity="0.8" Margin="0,8,0,0"/>
+
+        <Grid RowDefinitions="Auto,*,Auto,*" RowSpacing="8">
+            <TextBlock Grid.Row="0" Text="ROUTES.BBS Static Routes" FontWeight="Bold"/>
+            <DataGrid Grid.Row="1" ItemsSource="{Binding Routes}" SelectedItem="{Binding SelectedRoute}"
+                      IsReadOnly="True" AutoGenerateColumns="False">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Pattern" Binding="{Binding Pattern}" Width="180"/>
+                    <DataGridTextColumn Header="Route To" Binding="{Binding RouteTo}" Width="180"/>
+                    <DataGridCheckBoxColumn Header="Default" Binding="{Binding IsDefault}" Width="70"/>
+                    <DataGridTextColumn Header="Created" Binding="{Binding CreatedAt}" Width="*"/>
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
+                <TextBox Text="{Binding NewPattern}" Width="160" PlaceholderText="pattern"/>
+                <TextBox Text="{Binding NewRouteTo}" Width="160" PlaceholderText="route to"/>
+                <Button Content="Add Route" Command="{Binding AddRouteCommand}"/>
+                <Button Content="Remove Selected" Command="{Binding RemoveRouteCommand}"/>
+            </StackPanel>
+
+            <DockPanel Grid.Row="3">
+                <TextBlock DockPanel.Dock="Top" Text="Member Routing Table (VirtNet hub)" FontWeight="Bold" Margin="0,8,0,4"/>
+                <DataGrid ItemsSource="{Binding Members}" SelectedItem="{Binding SelectedMember}"
+                          IsReadOnly="True" AutoGenerateColumns="False">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="110"/>
+                        <DataGridTextColumn Header="BBS" Binding="{Binding BBSName}" Width="140"/>
+                        <DataGridTextColumn Header="Sysop" Binding="{Binding SysopName}" Width="120"/>
+                        <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="120"/>
+                        <DataGridTextColumn Header="BinkP Host" Binding="{Binding BinkpHost}" Width="*"/>
+                        <DataGridCheckBoxColumn Header="Host" Binding="{Binding IsHost}" Width="50"/>
+                        <DataGridCheckBoxColumn Header="Active" Binding="{Binding IsActive}" Width="55"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

@@ -54,12 +54,12 @@ import (
 
 // Route is one routing-table entry.
 type Route struct {
-	ID        int64
-	Network   string
-	Pattern   string
-	RouteTo   string
-	IsDefault bool
-	CreatedAt string
+	ID        int64  `json:"ID"`
+	Network   string `json:"Network"`
+	Pattern   string `json:"Pattern"`
+	RouteTo   string `json:"RouteTo"`
+	IsDefault bool   `json:"IsDefault"`
+	CreatedAt string `json:"CreatedAt"`
 }
 
 // SeedDefaultHubRoute ensures a default route exists for net's Host:

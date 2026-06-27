@@ -1,37 +1,6 @@
-// ============================================================================
-// VirtBBS — A modern BBS server inspired by PCBoard BBS
-//           (Clark Development Company, 1987-1996)
-//
-// Copyright (c) 2026 John Dovey <dovey.john@gmail.com>
-//
-// MIT License
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation
-// the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the
-// Software is furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
-// THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
-// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-// DEALINGS IN THE SOFTWARE.
-//
-// Change History:
-//   v0.0.8  2026-06-24  Avalonia GUI: FidoNet tab view model
-//   v0.9.0  2026-06-26  Sysop GUI gap-fill: CheckVersionCommand surfaces the
-//                        fido_nodelist_versions data added for VirtAnd/VirtTerm
-// ============================================================================
-
 using System;
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -43,39 +12,42 @@ namespace VirtBBS.GUI.ViewModels;
 public partial class FidoViewModel(ApiClient client) : ViewModelBase
 {
     [ObservableProperty] private string _status = "";
+    [ObservableProperty] private string _selectedNetwork = FidoNetworksViewModel.PrimaryNetwork;
 
     // Nodelist search.
-    [ObservableProperty] private string _nodeQuery      = "";
-    [ObservableProperty] private string _nodeNetwork    = "";
-    [ObservableProperty] private int    _nodePage       = 1;
-    [ObservableProperty] private int    _nodeTotalPages = 1;
+    [ObservableProperty] private string _nodeQuery = "";
+    [ObservableProperty] private int _nodePage = 1;
+    [ObservableProperty] private int _nodeTotalPages = 1;
     [ObservableProperty] private FidoNode? _selectedNode;
 
+    public ObservableCollection<string> NetworkNames { get; } = [];
     public ObservableCollection<FidoNode> NodeResults { get; } = [];
 
     // Netmail compose.
-    [ObservableProperty] private string _toAddr    = "";
-    [ObservableProperty] private string _toName    = "";
+    [ObservableProperty] private string _toAddr = "";
+    [ObservableProperty] private string _toName = "";
     [ObservableProperty] private string _nmSubject = "";
-    [ObservableProperty] private string _nmBody    = "";
-    [ObservableProperty] private bool   _crash     = false;
-
-    // Echo flags (conference).
-    [ObservableProperty] private int    _econfId         = 0;
-    [ObservableProperty] private bool   _econfActive     = false;
-    [ObservableProperty] private string _econfAreaTag    = "";
-    [ObservableProperty] private string _econfUplinkAddr = "";
-    [ObservableProperty] private string _econfNetwork    = "";
+    [ObservableProperty] private string _nmBody = "";
+    [ObservableProperty] private bool _crash;
 
     // Nodelist import.
-    [ObservableProperty] private string _importPath    = "";
-    [ObservableProperty] private string _importNetwork = "";
-
-    // Toss/Scan/Poll.
-    [ObservableProperty] private string _pollNetwork = "";
-
-    // Nodelist version (fido_nodelist_versions, written by ImportFile).
+    [ObservableProperty] private string _importPath = "";
     [ObservableProperty] private string _versionText = "";
+
+    [RelayCommand]
+    public async Task LoadNetworksAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var names = await client.CallAsync<string[]>("fido.networks.list", null, ct)
+                ?? [FidoNetworksViewModel.PrimaryNetwork];
+            NetworkNames.Clear();
+            foreach (var n in names) NetworkNames.Add(n);
+            if (!NetworkNames.Contains(SelectedNetwork))
+                SelectedNetwork = NetworkNames.FirstOrDefault() ?? FidoNetworksViewModel.PrimaryNetwork;
+        }
+        catch { /* ignore */ }
+    }
 
     [RelayCommand]
     private async Task SearchNodesAsync(CancellationToken ct = default)
@@ -106,17 +78,13 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
 
     private async Task PageSearchAsync(CancellationToken ct)
     {
-        try
-        {
-            var r = await client.CallAsync<NodelistSearchResult>("fido.nodes.search",
-                new { network = NodeNetwork, query = NodeQuery, page = NodePage, page_size = 25 }, ct);
-            if (r is null) return;
-            NodeResults.Clear();
-            foreach (var n in r.Nodes) NodeResults.Add(n);
-            NodeTotalPages = r.Pages;
-            Status = $"{r.Total} node(s) found.";
-        }
-        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+        var r = await client.CallAsync<NodelistSearchResult>("fido.nodes.search",
+            new { network = SelectedNetwork, query = NodeQuery, page = NodePage, size = 25 }, ct);
+        if (r is null) return;
+        NodeResults.Clear();
+        foreach (var n in r.Nodes) NodeResults.Add(n);
+        NodeTotalPages = r.Pages;
+        Status = $"{r.Total} node(s) found.";
     }
 
     [RelayCommand]
@@ -125,34 +93,21 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
         if (string.IsNullOrWhiteSpace(ToAddr)) { Status = "Destination address required."; return; }
         try
         {
+            var cfg = await client.CallAsync<BbsConfig>("config.get", null, ct);
+            var fromAddr = cfg?.Fido.Address ?? "";
             await client.CallAsync("fido.netmail.send", new
             {
-                to_addr = ToAddr,
-                to_name = ToName,
-                subject = NmSubject,
-                body    = NmBody,
-                crash   = Crash,
+                FromName = "Sysop",
+                FromAddr = fromAddr,
+                ToAddr = ToAddr,
+                ToName = ToName,
+                Subject = NmSubject,
+                Body = NmBody,
+                Crash = Crash,
+                Network = SelectedNetwork == FidoNetworksViewModel.PrimaryNetwork ? "" : SelectedNetwork,
             }, ct);
             Status = "Netmail queued.";
             ToAddr = ToName = NmSubject = NmBody = "";
-        }
-        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
-    }
-
-    [RelayCommand]
-    private async Task SaveEchoFlagsAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            await client.CallAsync("conferences.update", new
-            {
-                id          = EconfId,
-                active      = EconfActive,
-                area_tag    = EconfAreaTag,
-                uplink_addr = EconfUplinkAddr,
-                network     = EconfNetwork,
-            }, ct);
-            Status = "Echo flags saved.";
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -164,8 +119,19 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
         try
         {
             await client.CallAsync("fido.import.nodelist",
-                new { path = ImportPath, network = ImportNetwork }, ct);
-            Status = "Nodelist import started.";
+                new { path = ImportPath, network = SelectedNetwork }, ct);
+            Status = "Nodelist imported.";
+        }
+        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private async Task FetchNodelistAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            await client.CallAsync("fido.nodelist.fetch", new { network = SelectedNetwork }, ct);
+            Status = "Nodelist fetched and imported.";
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -197,8 +163,8 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
     {
         try
         {
-            await client.CallAsync("fido.poll", new { network = PollNetwork }, ct);
-            Status = "Poll initiated.";
+            await client.CallAsync("fido.poll", new { network = SelectedNetwork }, ct);
+            Status = "Poll complete.";
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -209,9 +175,9 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
         try
         {
             var v = await client.CallAsync<NodelistVersion>("fido.nodelist.version",
-                new { network = ImportNetwork }, ct);
+                new { network = SelectedNetwork }, ct);
             VersionText = v is null
-                ? $"No nodelist imported yet for '{ImportNetwork}'."
+                ? $"No nodelist imported yet for '{SelectedNetwork}'."
                 : $"{v.Network}: last imported {v.ImportedAt}, {v.NodeCount} node(s).";
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }

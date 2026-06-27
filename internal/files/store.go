@@ -49,15 +49,15 @@ var schema string
 
 // Dir represents a file directory (section).
 type Dir struct {
-	ID           int64
-	Name         string
-	Description  string
-	Path         string // relative to files root
-	SortType     int
-	ReadSec      int
-	UploadSec    int
-	ConferenceID *int
-	Active       bool
+	ID           int64  `json:"ID"`
+	Name         string `json:"Name"`
+	Description  string `json:"Description"`
+	Path         string `json:"Path"` // relative to files root
+	SortType     int    `json:"SortType"`
+	ReadSec      int    `json:"ReadSec"`
+	UploadSec    int    `json:"UploadSec"`
+	ConferenceID *int   `json:"ConferenceID,omitempty"`
+	Active       bool   `json:"Active"`
 }
 
 // File represents an entry in a file directory.
@@ -92,7 +92,21 @@ func (s *Store) Close() error { return nil }
 
 // ListDirs returns all active file directories.
 func (s *Store) ListDirs() ([]*Dir, error) {
-	rows, err := s.db.Query(`SELECT id, name, description, path, sort_type, read_sec, upload_sec, active FROM file_dirs WHERE active=1 ORDER BY id`)
+	return s.listDirs(true)
+}
+
+// ListAllDirs returns every file directory, including inactive ones.
+func (s *Store) ListAllDirs() ([]*Dir, error) {
+	return s.listDirs(false)
+}
+
+func (s *Store) listDirs(activeOnly bool) ([]*Dir, error) {
+	q := `SELECT id, name, description, path, sort_type, read_sec, upload_sec, active FROM file_dirs`
+	if activeOnly {
+		q += ` WHERE active=1`
+	}
+	q += ` ORDER BY id`
+	rows, err := s.db.Query(q)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +168,18 @@ func (s *Store) GetDirByPath(path string) (*Dir, error) {
 	return d, nil
 }
 
-// CreateDir adds a new file directory. path is relative to the files root
+// UpdateDir saves changes to an existing file directory.
+func (s *Store) UpdateDir(d *Dir) error {
+	active := 0
+	if d.Active {
+		active = 1
+	}
+	_, err := s.db.Exec(`UPDATE file_dirs SET name=?, description=?, path=?, sort_type=?, read_sec=?, upload_sec=?, active=? WHERE id=?`,
+		d.Name, d.Description, d.Path, d.SortType, d.ReadSec, d.UploadSec, active, d.ID)
+	return err
+}
+
+// CreateDir adds a new file directory.
 // (see EnsureDirPath to create the on-disk directory afterward).
 func (s *Store) CreateDir(name, description, path string, readSec, uploadSec int) (*Dir, error) {
 	res, err := s.db.Exec(`INSERT INTO file_dirs (name, description, path, sort_type, read_sec, upload_sec, active)

@@ -44,10 +44,13 @@
             <TabItem Header="Conferences">
                 <ContentControl Content="{Binding Conferences}"/>
             </TabItem>
+            <TabItem Header="File Areas">
+                <ContentControl Content="{Binding FileAreas}"/>
+            </TabItem>
             <TabItem Header="Callers">
                 <ContentControl Content="{Binding Callers}"/>
             </TabItem>
-            <TabItem Header="Config">
+            <TabItem Header="BBS Config">
                 <ContentControl Content="{Binding Config}"/>
             </TabItem>
             <TabItem Header="FidoNet">
