@@ -120,7 +120,7 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string) *PollResult
 	if err := bp.sendCmd(bpM_NUL, "ZYZ "+nd.Address); err != nil {
 		res.Error = err; return res
 	}
-	if err := bp.sendCmd(bpM_ADR, nd.Address); err != nil {
+	if err := bp.sendCmd(bpM_ADR, strings.Join(nd.AllAddrsString(), " ")); err != nil {
 		res.Error = err; return res
 	}
 
@@ -277,7 +277,7 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	_ = bp.sendCmd(bpM_NUL, "SYS VirtBBS")
 	if len(candidates) > 0 {
 		_ = bp.sendCmd(bpM_NUL, "ZYZ "+candidates[0].Address)
-		_ = bp.sendCmd(bpM_ADR, candidates[0].Address)
+		_ = bp.sendCmd(bpM_ADR, strings.Join(candidates[0].AllAddrsString(), " "))
 	}
 
 	peerAddrs, err := binkpWaitForADRAddrs(bp)

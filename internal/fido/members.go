@@ -327,6 +327,12 @@ func (mdb *MembersDB) ApproveJoinRequest(nd *NetworkDef, req *JoinRequest, net, 
 
 	if saveDownlink != nil {
 		dl := Downlink{Name: m.BBSName, Address: m.Addr4D(), Password: password}
+		if isHost {
+			// A net's Host is, by the standard BinkleyTerm/FrontDoor
+			// convention, also addressable at zone:net/0 — see
+			// NetworkDef.AllAddrs' doc comment for the full rationale.
+			dl.AKAs = []string{fmt.Sprintf("%d:%d/0", m.Zone, m.Net)}
+		}
 		if err := saveDownlink(nd.Name, dl); err != nil {
 			return m, fmt.Errorf("member created but failed to authorize BinkP: %w", err)
 		}

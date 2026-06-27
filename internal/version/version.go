@@ -194,6 +194,22 @@
 //                        (full/hubs-only/per-hub — a Go rewrite of
 //                        github.com/ftoledo's node2dot.py gist), all zipped
 //                        with a FILE_ID.DIZ into the Nodelist Files area.
+//   v0.13.1 2026-06-27  VirtNet: multiple addresses (AKAs) per network/
+//                        downlink, the standard BinkleyTerm/FrontDoor
+//                        convention (FTS-1026's M_ADR command always lists
+//                        every address a system answers to, space-
+//                        separated). A hub network now automatically also
+//                        answers to zone:net/0 (e.g. 300:1/1 also answers
+//                        to 300:1/0) without needing it configured
+//                        explicitly, and any net's Host member gets the
+//                        same zone:net/0 alias on their Downlink — "to
+//                        make any host a hub, they need the additional /0
+//                        address." New NetworkDef.AKAs/AllAddrs and
+//                        Downlink.AKAs/MatchesAddr; binkp.go's two M_ADR
+//                        sends now advertise every address, not just the
+//                        primary one (incoming M_ADR parsing already
+//                        split on whitespace into a list — only the
+//                        sending/matching side was single-address).
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -204,4 +220,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.13.0"
+const Version = "0.13.1"

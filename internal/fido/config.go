@@ -53,6 +53,14 @@ type Config struct {
 	BinkpPort   int            `toml:"binkp_port"   json:"binkp_port"`   // default 24554
 	Areas       map[string]int `toml:"areas"        json:"areas"`
 
+	// AKAs lists additional addresses ("Also Known As") this BBS also
+	// answers to on this network, besides Address — see NetworkDef.AKAs'
+	// doc comment for the full BinkleyTerm/FTS-1026 convention this
+	// follows. For a hub network (Uplink==""), AllAddrs() also
+	// auto-includes zone:net/0 — the network's own net's Host alias —
+	// without needing to list it here explicitly.
+	AKAs []string `toml:"akas" json:"akas"`
+
 	// TaglinesFile is an optional path to a text file with one tagline per
 	// line. A line is chosen at random and inserted above the tear line on
 	// each outgoing echomail message. Empty/unset means no taglines.
@@ -114,6 +122,39 @@ type Downlink struct {
 	Name     string `toml:"name"     json:"name"`     // sysop/system name, for display only
 	Address  string `toml:"address"  json:"address"`  // zone:net/node of the downlink
 	Password string `toml:"password" json:"password"` // password the downlink must supply
+
+	// AKAs lists additional addresses ("Also Known As", the standard
+	// BinkleyTerm/FrontDoor term — see FTS-1026's M_ADR, which always
+	// carries a space-separated list of every address a system answers
+	// to) this downlink is also recognized under, besides Address. Used
+	// for a net's Host member, who is also addressable at zone:net/0 —
+	// see NetworkDef.AllAddrs' doc comment for the full convention.
+	AKAs []string `toml:"akas" json:"akas"`
+}
+
+// AllAddrs parses Address plus every entry in AKAs into Addrs, skipping
+// any that fail to parse.
+func (d *Downlink) AllAddrs() []Addr {
+	var out []Addr
+	if a, err := ParseAddr(d.Address); err == nil {
+		out = append(out, a)
+	}
+	for _, s := range d.AKAs {
+		if a, err := ParseAddr(s); err == nil {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// MatchesAddr reports whether a matches Address or any AKA (ignoring point).
+func (d *Downlink) MatchesAddr(a Addr) bool {
+	for _, known := range d.AllAddrs() {
+		if known.Zone == a.Zone && known.Net == a.Net && known.Node == a.Node {
+			return true
+		}
+	}
+	return false
 }
 
 // NetworkDef describes one additional FidoNet-compatible network.
@@ -148,6 +189,9 @@ type NetworkDef struct {
 	// distributed under — see internal/fido/nodelistecho.go. Defaults to
 	// DefaultNodelistEchoTag if unset.
 	NodelistEchoTag string `toml:"nodelist_echo_tag" json:"nodelist_echo_tag"`
+
+	// AKAs — see Config.AKAs.
+	AKAs []string `toml:"akas" json:"akas"`
 }
 
 // DefaultConfig returns a Config with sensible disabled defaults.
@@ -185,11 +229,7 @@ func (c *Config) UplinkAddr() Addr {
 // or nil if addr isn't a known downlink.
 func (c *Config) DownlinkByAddr(addr Addr) *Downlink {
 	for i := range c.Downlinks {
-		a, err := ParseAddr(c.Downlinks[i].Address)
-		if err != nil {
-			continue
-		}
-		if a.Zone == addr.Zone && a.Net == addr.Net && a.Node == addr.Node {
+		if c.Downlinks[i].MatchesAddr(addr) {
 			return &c.Downlinks[i]
 		}
 	}
@@ -236,6 +276,7 @@ func (c *Config) AllNetworks() []NetworkDef {
 		FileFixPassword:             c.FileFixPassword,
 		NodelistURL:                 c.NodelistURL,
 		NodelistUpdateIntervalHours: c.NodelistUpdateIntervalHours,
+		AKAs:                        c.AKAs,
 	}
 	result := []NetworkDef{primary}
 	result = append(result, c.Networks...)
@@ -281,6 +322,55 @@ func (n *NetworkDef) NodeAddr() Addr {
 	}
 	a, _ := ParseAddr(n.Address)
 	return a
+}
+
+// AllAddrs returns every address this BBS answers to on this network: its
+// primary Address, every configured AKA, and — for a hub network
+// (IsHub()) — the implicit zone:net/0 "Host of this net" address per the
+// standard BinkleyTerm/FrontDoor convention (FTS-1026's M_ADR command
+// always lists every address ["AKA"] a system answers to; a net's
+// coordinator is conventionally also known by zone:net/0 in addition to
+// whatever node number its own listing actually carries). This is what we
+// advertise in our own M_ADR line and what callers/our own outbound
+// session can claim to be.
+func (n *NetworkDef) AllAddrs() []Addr {
+	our := n.NodeAddr()
+	if our == (Addr{}) {
+		return nil
+	}
+	out := []Addr{our}
+	for _, s := range n.AKAs {
+		if a, err := ParseAddr(s); err == nil {
+			out = append(out, a)
+		}
+	}
+	if n.IsHub() && our.Node != 0 {
+		hostAddr := Addr{Zone: our.Zone, Net: our.Net, Node: 0}
+		if !addrListHas(out, hostAddr) {
+			out = append(out, hostAddr)
+		}
+	}
+	return out
+}
+
+func addrListHas(list []Addr, a Addr) bool {
+	for _, x := range list {
+		if x.Zone == a.Zone && x.Net == a.Net && x.Node == a.Node {
+			return true
+		}
+	}
+	return false
+}
+
+// AllAddrsString returns AllAddrs as a slice of 3D address strings, ready
+// to join into a space-separated BinkP M_ADR line.
+func (n *NetworkDef) AllAddrsString() []string {
+	addrs := n.AllAddrs()
+	out := make([]string, len(addrs))
+	for i, a := range addrs {
+		out[i] = a.String()
+	}
+	return out
 }
 
 func (n *NetworkDef) UplinkAddr() Addr {
@@ -390,11 +480,7 @@ func (n *NetworkDef) IsHub() bool {
 // or nil if addr isn't a known downlink for this network.
 func (n *NetworkDef) DownlinkByAddr(addr Addr) *Downlink {
 	for i := range n.Downlinks {
-		a, err := ParseAddr(n.Downlinks[i].Address)
-		if err != nil {
-			continue
-		}
-		if a.Zone == addr.Zone && a.Net == addr.Net && a.Node == addr.Node {
+		if n.Downlinks[i].MatchesAddr(addr) {
 			return &n.Downlinks[i]
 		}
 	}
