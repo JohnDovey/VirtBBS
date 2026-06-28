@@ -40,7 +40,7 @@
             <li><h6 class="dropdown-header">{{$net.Name}}</h6></li>
             <li><a class="dropdown-item" href="/networks/about?network={{$net.Name | urlquery}}">{{t $.Locale "networks.nav.about"}}</a></li>
             <li><a class="dropdown-item" href="/nodelist?network={{$net.Name | urlquery}}">{{t $.Locale "networks.nav.nodelist"}}</a></li>
-            {{if $net.IsHub}}<li><a class="dropdown-item" href="/networks/map?network={{$net.Name | urlquery}}">{{t $.Locale "networks.nav.map"}}</a></li>{{end}}
+            <li><a class="dropdown-item" href="/networks/map?network={{$net.Name | urlquery}}">{{t $.Locale "networks.nav.map"}}</a></li>
             {{if lt (add $i 1) (len $.NavNetworks)}}<li><hr class="dropdown-divider"></li>{{end}}
             {{end}}
           </ul>

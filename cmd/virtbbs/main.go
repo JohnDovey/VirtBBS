@@ -83,8 +83,8 @@ func main() {
 	fidoToss          := flag.Bool("fido-toss",            false, "toss all inbound .PKT files and exit")
 	fidoScan          := flag.Bool("fido-scan",            false, "scan echo messages to outbound .PKT and exit")
 	fidoFileScan      := flag.Bool("fido-filescan",        false, "scan file areas to outbound TIC and exit")
-	fidoRebuildMaps   := flag.Bool("fido-rebuild-maps",    false, "rebuild VirtNet network map diagrams (VirtDiag.zip) and exit")
-	fidoRebuildMapsNet := flag.String("fido-rebuild-maps-net", "", "network name for --fido-rebuild-maps (default: first hub network)")
+	fidoRebuildMaps   := flag.Bool("fido-rebuild-maps",    false, "rebuild network map diagrams (<Network>_diags.zip) and exit")
+	fidoRebuildMapsNet := flag.String("fido-rebuild-maps-net", "", "network name for --fido-rebuild-maps (default: first enabled network)")
 	importNodelist    := flag.String("import-nodelist",    "",    "import a NODELIST.xxx file (or dir) and exit")
 	importNodelistNet := flag.String("import-nodelist-net","FidoNet", "network name for --import-nodelist")
 	flag.Parse()
@@ -234,21 +234,21 @@ func main() {
 				}
 			} else {
 				for _, n := range fidoCfg.AllNetworks() {
-					if n.Enabled && n.IsHub() {
+					if n.Enabled {
 						ndCopy := n
 						nd = &ndCopy
 						break
 					}
 				}
 				if nd == nil {
-					log.Fatal("fido-rebuild-maps: no enabled hub network found — set --fido-rebuild-maps-net")
+					log.Fatal("fido-rebuild-maps: no enabled network found — set --fido-rebuild-maps-net")
 				}
 			}
 			count, warns := fido.RebuildNetworkDiagrams(nd, sqlDB, fileArea, cfg.BBS.Name, cfg.Sysop.Name)
 			if count == 0 && len(warns) > 0 {
 				log.Fatalf("fido-rebuild-maps: %s", strings.Join(warns, "; "))
 			}
-			fmt.Printf("Network maps rebuilt for %s: %d diagram(s) in VirtDiag.zip\n", nd.Name, count)
+			fmt.Printf("Network maps rebuilt for %s: %d diagram(s) in %s\n", nd.Name, count, fido.NetworkDiagZipName(nd.Name))
 			for _, w := range warns {
 				fmt.Fprintln(os.Stderr, "  WARNING:", w)
 			}

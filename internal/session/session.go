@@ -1480,9 +1480,9 @@ func (s *session) fidoEditMemberInfo(target *fido.NetworkDef, mdb *fido.MembersD
 	s.writeln(ansi.Colorize(ansi.BrightGreen, "Member info updated."))
 }
 
-// fidoRebuildNetworkMaps regenerates VirtDiag.zip for a hosted hub network.
+// fidoRebuildNetworkMaps regenerates <Network>_diags.zip for the selected network.
 func (s *session) fidoRebuildNetworkMaps() {
-	target := s.pickHubNetwork("rebuild network maps for")
+	target := s.pickFidoNetwork("rebuild network maps for")
 	if target == nil {
 		return
 	}
@@ -1494,7 +1494,7 @@ func (s *session) fidoRebuildNetworkMaps() {
 		return
 	}
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
-		"Network maps rebuilt: %d diagram(s) written to VirtDiag.zip.", count)))
+		"Network maps rebuilt: %d diagram(s) written to %s.", count, fido.NetworkDiagZipName(target.Name))))
 	for _, w := range warns {
 		s.writeln(ansi.Colorize(ansi.Yellow, "  Warning: "+w))
 	}

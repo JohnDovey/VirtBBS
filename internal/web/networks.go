@@ -137,33 +137,34 @@ func (s *Server) handleNetworkMap(w http.ResponseWriter, r *http.Request) {
 	var diagrams []NetworkDiagramView
 	var mapError string
 	locale := localeFromRequest(r)
-	if nd.IsHub() {
-		cfg := config.Get()
-		members, err := fido.OpenMembersDB(s.Deps.Messages.DB()).ListMembers(nd.Name)
-		if err != nil {
-			mapError = err.Error()
-		} else if len(members) == 0 {
-			mapError = tr(locale, "networks.map.no_members")
-		} else {
-			our := nd.NodeAddr()
-			pngs, warnings := fido.GenerateDiagrams(our, cfg.BBS.Name, cfg.Sysop.Name, members)
-			if len(pngs) == 0 && len(warnings) > 0 {
-				mapError = strings.Join(warnings, "; ")
-			}
-			diagrams = networkDiagramViews(our.Zone, pngs)
+	cfg := config.Get()
+	prefix := fido.NetworkDiagPrefix(nd.Name)
+
+	nodes, err := fido.OpenNodelistDB(s.Deps.Messages.DB()).ListAll(nd.Name)
+	if err != nil {
+		mapError = err.Error()
+	} else if len(nodes) == 0 {
+		mapError = tr(locale, "networks.map.no_nodes")
+	} else {
+		pngs, warnings := fido.GenerateDiagramsFromNodes(nd.Name, nd, cfg.BBS.Name, cfg.Sysop.Name, nodes)
+		if len(pngs) == 0 && len(warnings) > 0 {
+			mapError = strings.Join(warnings, "; ")
 		}
+		zone := nd.NodeAddr().Zone
+		if zone == 0 && len(nodes) > 0 {
+			zone = nodes[0].Zone
+		}
+		diagrams = networkDiagramViews(zone, prefix, pngs)
 	}
 	data := struct {
 		pageData
 		Network   string
-		IsHub     bool
 		Diagrams  []NetworkDiagramView
 		MapError  string
 		QueryNet  string
 	}{
 		pageData: s.page(r),
 		Network:  nd.Name,
-		IsHub:    nd.IsHub(),
 		Diagrams: diagrams,
 		MapError: mapError,
 		QueryNet: url.QueryEscape(nd.Name),
@@ -171,12 +172,12 @@ func (s *Server) handleNetworkMap(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "network_map.html", data)
 }
 
-func networkDiagramViews(zone int, pngs map[string][]byte) []NetworkDiagramView {
+func networkDiagramViews(zone int, prefix string, pngs map[string][]byte) []NetworkDiagramView {
 	var out []NetworkDiagramView
-	if _, ok := pngs["VirtNet_Full.png"]; ok {
+	if _, ok := pngs[prefix+"_Full.png"]; ok {
 		out = append(out, NetworkDiagramView{Key: "full", TitleKey: "networks.map.full"})
 	}
-	if _, ok := pngs["VirtNet_Hubs.png"]; ok {
+	if _, ok := pngs[prefix+"_Hubs.png"]; ok {
 		out = append(out, NetworkDiagramView{Key: "hubs", TitleKey: "networks.map.hubs"})
 	}
 	var nets []int
@@ -217,23 +218,24 @@ func (s *Server) handleNetworkDiagram(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !nd.IsHub() {
-		http.NotFound(w, r)
-		return
-	}
 	diagram := strings.TrimSpace(r.URL.Query().Get("diagram"))
 	if diagram == "" {
 		http.Error(w, "diagram required", http.StatusBadRequest)
 		return
 	}
 	cfg := config.Get()
-	members, err := fido.OpenMembersDB(s.Deps.Messages.DB()).ListMembers(nd.Name)
-	if err != nil || len(members) == 0 {
+	prefix := fido.NetworkDiagPrefix(nd.Name)
+	nodes, err := fido.OpenNodelistDB(s.Deps.Messages.DB()).ListAll(nd.Name)
+	if err != nil || len(nodes) == 0 {
 		http.NotFound(w, r)
 		return
 	}
-	pngs, _ := fido.GenerateDiagrams(nd.NodeAddr(), cfg.BBS.Name, cfg.Sysop.Name, members)
-	filename := diagramFilename(nd.NodeAddr().Zone, diagram, pngs)
+	pngs, _ := fido.GenerateDiagramsFromNodes(nd.Name, nd, cfg.BBS.Name, cfg.Sysop.Name, nodes)
+	zone := nd.NodeAddr().Zone
+	if zone == 0 && len(nodes) > 0 {
+		zone = nodes[0].Zone
+	}
+	filename := diagramFilename(zone, prefix, diagram, pngs)
 	if filename == "" {
 		http.NotFound(w, r)
 		return
@@ -248,14 +250,18 @@ func (s *Server) handleNetworkDiagram(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
-func diagramFilename(zone int, key string, pngs map[string][]byte) string {
+func diagramFilename(zone int, prefix, key string, pngs map[string][]byte) string {
 	switch key {
 	case "full":
-		return "VirtNet_Full.png"
+		name := prefix + "_Full.png"
+		if _, ok := pngs[name]; ok {
+			return name
+		}
 	case "hubs":
-		return "VirtNet_Hubs.png"
-	case "hub":
-		return ""
+		name := prefix + "_Hubs.png"
+		if _, ok := pngs[name]; ok {
+			return name
+		}
 	}
 	if strings.HasPrefix(key, "hub-") {
 		netStr := strings.TrimPrefix(key, "hub-")

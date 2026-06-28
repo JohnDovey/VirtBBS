@@ -156,7 +156,7 @@ A **hub network** has no uplink (`NetworkDef.IsHub()` → `uplink = ""`). When a
 | `VirtNode.D###` | Text diff vs yesterday's `fido_members_snapshot` (adds/changes as full lines; removals as `-Zone:Net/Node`) |
 | Member snapshot | Today's `fido_members` copied to `fido_members_snapshot` for tomorrow's diff |
 | `NodeChgs.zip` | Zip of `NodeChgs.txt` change log |
-| `VirtDiag.zip` | Optional node topology PNG diagrams (requires `dot` on PATH) |
+| `VirtNet_diags.zip` | Optional node topology PNG diagrams (requires `dot` on PATH) |
 
 Files are written to `nodelist_dir` and registered in the auto-created file area **`"<NetworkName> Nodelist Files"`**.
 
@@ -181,7 +181,7 @@ For each enabled network **without uplink**:
 | **Every 24h** | `RunDayRollover(publish=true)` — full daily publish including echo posts |
 | **Every 1 min** | `ProcessPendingNodelistEchoesForNetwork` — drain inbound nodelist echo queue for this hub network (see §5) |
 
-**Manual rebuild:** Sysop can regenerate `VirtDiag.zip` without a full rollover:
+**Manual rebuild:** Sysop can regenerate `<Network>_diags.zip` without a full rollover:
 
 - **Web admin:** `/admin/fido/ops` → **Rebuild network maps** (hub networks only)
 - **In-BBS:** Sysop FidoNet menu → `[M] Rebuild maps`

@@ -55,7 +55,8 @@ func TestProcessPendingNodelistEchoesForNetworkFiltersByNetwork(t *testing.T) {
 		}
 	}
 
-	errs := ProcessPendingNodelistEchoesForNetwork(db, fileArea, "AlphaNet")
+	nd := &NetworkDef{Name: "AlphaNet"}
+	errs := ProcessPendingNodelistEchoesForNetwork(db, fileArea, nd, "", "")
 	if len(errs) != 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}

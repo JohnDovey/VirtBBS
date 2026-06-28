@@ -4,11 +4,9 @@
   <div class="card-header"><h2 class="h5 mb-0">{{tf .Locale "networks.map.title" .Network}}</h2></div>
   <div class="card-body">
   <p class="meta"><a href="/networks/about?network={{.QueryNet}}">{{t .Locale "networks.map.back_about"}}</a> · <a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
-  {{if not .IsHub}}
-  <p class="meta">{{t .Locale "networks.map.hub_only"}}</p>
-  <p><a class="btn btn-primary btn-sm" href="/nodelist?network={{.QueryNet}}">{{t .Locale "networks.nav.nodelist"}}</a></p>
-  {{else if .MapError}}
+  {{if .MapError}}
   <p class="alert alert-warning">{{.MapError}}</p>
+  <p><a class="btn btn-primary btn-sm" href="/nodelist?network={{.QueryNet}}">{{t .Locale "networks.nav.nodelist"}}</a></p>
   {{else if not .Diagrams}}
   <p class="meta">{{t .Locale "networks.map.none"}}</p>
   {{else}}

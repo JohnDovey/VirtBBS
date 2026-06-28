@@ -18,7 +18,7 @@
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="poll"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.poll_uplink"}}</button></form>
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="fetch"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.fetch_nodelist"}}</button></form>
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="export_local"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.export_local"}}</button></form>
-    {{if .IsHub}}<form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="rebuild_maps"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.rebuild_maps"}}</button></form>{{end}}
+    {{if .Network}}<form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="rebuild_maps"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.rebuild_maps"}}</button></form>{{end}}
   </div>
 
   <h3 class="section-head">{{t .Locale "admin_fido_ops.import_nodelist"}}</h3>

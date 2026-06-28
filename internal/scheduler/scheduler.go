@@ -83,7 +83,7 @@ func Start(store *messages.Store, confStore *conferences.Store, fileStore *files
 		if nd.Uplink != "" {
 			go runNetwork(name, store, confStore, fileStore, stopCh)
 			if nd.NodelistFetchEnabled() {
-				go runNodelistFetch(name, store, stopCh)
+				go runNodelistFetch(name, store, fileStore, stopCh)
 			} else {
 				log.Printf("nodelist scheduler: %s — automatic fetch disabled (no nodelist_url configured)", name)
 			}
@@ -150,7 +150,17 @@ func drainPendingNodelistEchoes(networkName string, store *messages.Store, fileS
 	if fileStore == nil {
 		return
 	}
-	for _, w := range fido.ProcessPendingNodelistEchoesForNetwork(store.DB(), fileStore, networkName) {
+	cfg := config.Get()
+	nd := cfg.Fido.NetworkByName(networkName)
+	var ndPtr *fido.NetworkDef
+	bbsName, sysopName := "", ""
+	if nd != nil {
+		ndCopy := *nd
+		ndPtr = &ndCopy
+		bbsName = cfg.BBS.Name
+		sysopName = cfg.Sysop.Name
+	}
+	for _, w := range fido.ProcessPendingNodelistEchoesForNetwork(store.DB(), fileStore, ndPtr, bbsName, sysopName) {
 		log.Printf("nodelist echo [%s]: %s", networkName, w)
 	}
 }
@@ -224,10 +234,10 @@ func runNetwork(networkName string, store *messages.Store, confStore *conference
 
 // runNodelistFetch downloads and imports a fresh nodelist for one network
 // on its own ticker until stop is closed, re-reading live config every
-// tick (see fido.FetchAndImport). Independent of the poll ticker above —
-// a network without an uplink configured can still want a current
-// nodelist for address lookups.
-func runNodelistFetch(networkName string, store *messages.Store, stop <-chan struct{}) {
+// tick (see fido.FetchAndImport). After a successful import, network
+// diagrams are regenerated into <Network>_diags.zip when a file store is
+// available.
+func runNodelistFetch(networkName string, store *messages.Store, fileStore *files.Store, stop <-chan struct{}) {
 	nd := config.Get().Fido.NetworkByName(networkName)
 	if nd == nil {
 		return
@@ -271,6 +281,16 @@ func runNodelistFetch(networkName string, store *messages.Store, stop <-chan str
 				networkName, result.Inserted, result.Updated, result.Skipped)
 			for _, e := range result.Errors {
 				log.Printf("nodelist scheduler: %s import error: %s", networkName, e)
+			}
+			if fileStore != nil && result.Inserted+result.Updated > 0 {
+				cfg := config.Get()
+				count, warns := fido.RebuildNetworkDiagrams(nd, store.DB(), fileStore, cfg.BBS.Name, cfg.Sysop.Name)
+				if count > 0 {
+					log.Printf("nodelist scheduler: %s — rebuilt %d network diagram(s)", networkName, count)
+				}
+				for _, w := range warns {
+					log.Printf("nodelist scheduler: %s diagram: %s", networkName, w)
+				}
 			}
 		}
 	}

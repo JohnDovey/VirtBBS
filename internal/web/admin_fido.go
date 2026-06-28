@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -113,7 +114,7 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 			} else if count, warns := fido.RebuildNetworkDiagrams(nd, db, s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name); count == 0 && len(warns) > 0 {
 				data.Error = strings.Join(warns, "; ")
 			} else {
-				data.Flash = fmt.Sprintf("Network maps rebuilt — %d diagram(s) in VirtDiag.zip", count)
+				data.Flash = fmt.Sprintf("Network maps rebuilt — %d diagram(s) in %s", count, fido.NetworkDiagZipName(nd.Name))
 				if len(warns) > 0 {
 					data.Error = strings.Join(warns, "; ")
 				}
@@ -145,6 +146,13 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 				data.Error = err.Error()
 			} else {
 				data.Flash = "Nodelist fetched and imported."
+				count, warns := fido.RebuildNetworkDiagrams(nd, db, s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name)
+				if count > 0 {
+					data.Flash += fmt.Sprintf(" %d diagram(s) in %s.", count, fido.NetworkDiagZipName(nd.Name))
+				}
+				if len(warns) > 0 {
+					data.Error = strings.Join(warns, "; ")
+				}
 			}
 		case "import":
 			path := strings.TrimSpace(r.FormValue("import_path"))
@@ -154,6 +162,15 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 				data.Error = err.Error()
 			} else {
 				data.Flash = "Nodelist imported from " + path
+				if nd := cfg.Fido.NetworkByName(network); nd != nil {
+					count, warns := fido.RebuildNetworkDiagrams(nd, db, s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name)
+					if count > 0 {
+						data.Flash += fmt.Sprintf(" — %d diagram(s) in %s", count, fido.NetworkDiagZipName(nd.Name))
+					}
+					if len(warns) > 0 {
+						data.Error = strings.Join(warns, "; ")
+					}
+				}
 			}
 		case "netmail":
 			nd := cfg.Fido.NetworkByName(network)
@@ -708,6 +725,12 @@ func (s *Server) handleAdminFidoImportUpload(w http.ResponseWriter, r *http.Requ
 	if _, err := fido.ImportFile(s.Deps.Messages.DB(), tmpPath, network); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if nd, err := networkDefByName(network); err == nil && nd != nil {
+		cfg := config.Get()
+		if _, warns := fido.RebuildNetworkDiagrams(nd, s.Deps.Messages.DB(), s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name); len(warns) > 0 {
+			log.Printf("admin nodelist upload: diagram rebuild: %s", strings.Join(warns, "; "))
+		}
 	}
 	_ = header
 	http.Redirect(w, r, "/admin/fido/nodelist?network="+network, http.StatusSeeOther)

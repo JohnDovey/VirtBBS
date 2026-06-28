@@ -138,16 +138,21 @@ func ApplyPendingNodelistEcho(db *sql.DB, p *PendingNodelistEcho, fileArea FileA
 // toss (TossDir) and from the scheduler's 1-minute echo ticker on hub and
 // member networks.
 func ProcessPendingNodelistEchoes(db *sql.DB, fileArea FileArea) []string {
-	return processPendingNodelistEchoes(db, fileArea, "")
+	return processPendingNodelistEchoes(db, fileArea, "", nil, "", "")
 }
 
 // ProcessPendingNodelistEchoesForNetwork drains queued nodelist echoes for
-// one logical network name only.
-func ProcessPendingNodelistEchoesForNetwork(db *sql.DB, fileArea FileArea, network string) []string {
-	return processPendingNodelistEchoes(db, fileArea, network)
+// one logical network name only. When nd and bbsName/sysopName are set and a
+// full nodelist (.Z) is applied, network diagrams are regenerated afterward.
+func ProcessPendingNodelistEchoesForNetwork(db *sql.DB, fileArea FileArea, nd *NetworkDef, bbsName, sysopName string) []string {
+	network := ""
+	if nd != nil {
+		network = nd.Name
+	}
+	return processPendingNodelistEchoes(db, fileArea, network, nd, bbsName, sysopName)
 }
 
-func processPendingNodelistEchoes(db *sql.DB, fileArea FileArea, network string) []string {
+func processPendingNodelistEchoes(db *sql.DB, fileArea FileArea, network string, nd *NetworkDef, bbsName, sysopName string) []string {
 	if fileArea == nil {
 		return []string{"file area store not available"}
 	}
@@ -156,16 +161,28 @@ func processPendingNodelistEchoes(db *sql.DB, fileArea FileArea, network string)
 	if err != nil {
 		return []string{err.Error()}
 	}
+	nodelistImported := false
 	for _, p := range pending {
 		if network != "" && p.Network != network {
 			continue
 		}
+		filename := nodelistFilenameFromSubject(p.Subject)
 		if err := ApplyPendingNodelistEcho(db, p, fileArea); err != nil {
 			errs = append(errs, fmt.Sprintf("echo %d: %v", p.ID, err))
 			continue
 		}
+		if strings.Contains(filename, ".Z") {
+			nodelistImported = true
+		}
 		if err := ClearPendingNodelistEcho(db, p.ID); err != nil {
 			errs = append(errs, fmt.Sprintf("echo %d: clear: %v", p.ID, err))
+		}
+	}
+	if nodelistImported && nd != nil && bbsName != "" {
+		if _, warns := RebuildNetworkDiagrams(nd, db, fileArea, bbsName, sysopName); len(warns) > 0 {
+			for _, w := range warns {
+				errs = append(errs, "diagram: "+w)
+			}
 		}
 	}
 	return errs

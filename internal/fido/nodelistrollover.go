@@ -180,7 +180,8 @@ func RunDayRollover(nd *NetworkDef, db *sql.DB, confStore *conferences.Store, ms
 		warn("zip NodeChgs.txt: %v", err)
 	}
 
-	diagCount, diagWarnings := rebuildNetworkDiagramZip(nd, db, fileArea, dirID, dirPath, hubBBSName, hubSysopName)
+	nodes, _ := OpenNodelistDB(db).ListAll(nd.Name)
+	diagCount, diagWarnings := rebuildNetworkDiagramZip(nd, nodes, fileArea, dirID, dirPath, hubBBSName, hubSysopName)
 	_ = diagCount
 	for _, w := range diagWarnings {
 		warn("%s", w)
@@ -189,46 +190,46 @@ func RunDayRollover(nd *NetworkDef, db *sql.DB, confStore *conferences.Store, ms
 	return warnings
 }
 
-// RebuildNetworkDiagrams regenerates VirtDiag.zip for hub network nd from
-// current fido_members and registers it in "<NetworkName> Nodelist Files".
+// RebuildNetworkDiagrams regenerates <Network>_diags.zip for network nd from
+// current fido_nodes and registers it in "<NetworkName> Nodelist Files".
 // Returns the number of PNG diagrams written and any non-fatal warnings
-// (e.g. graphviz dot missing). Hub-only — member/downlink networks have no
-// member registry to diagram.
-func RebuildNetworkDiagrams(nd *NetworkDef, db *sql.DB, fileArea FileArea, hubBBSName, hubSysopName string) (int, []string) {
-	if !nd.IsHub() {
-		return 0, []string{fmt.Sprintf("network %q is not a hub", nd.Name)}
+// (e.g. graphviz dot missing).
+func RebuildNetworkDiagrams(nd *NetworkDef, db *sql.DB, fileArea FileArea, bbsName, sysopName string) (int, []string) {
+	if nd == nil || !nd.Enabled {
+		return 0, []string{"network disabled"}
 	}
 	if fileArea == nil {
 		return 0, []string{"file area store not available"}
 	}
-	if nd.NodeAddr() == (Addr{}) {
-		return 0, []string{fmt.Sprintf("invalid network address %q", nd.Address)}
+	if db == nil {
+		return 0, []string{"database not available"}
+	}
+	nodes, err := OpenNodelistDB(db).ListAll(nd.Name)
+	if err != nil {
+		return 0, []string{err.Error()}
+	}
+	if len(nodes) == 0 {
+		return 0, []string{"no nodelist nodes — import or generate a nodelist first"}
 	}
 	dirID, dirPath, err := fileArea.EnsureDir(nd.Name+" Nodelist Files", nd.Name+" Nodelist Files (auto-created)")
 	if err != nil {
 		return 0, []string{err.Error()}
 	}
-	return rebuildNetworkDiagramZip(nd, db, fileArea, dirID, dirPath, hubBBSName, hubSysopName)
+	return rebuildNetworkDiagramZip(nd, nodes, fileArea, dirID, dirPath, bbsName, sysopName)
 }
 
-func rebuildNetworkDiagramZip(nd *NetworkDef, db *sql.DB, fileArea FileArea, dirID int64, dirPath, hubBBSName, hubSysopName string) (int, []string) {
-	mdb := OpenMembersDB(db)
-	members, err := mdb.ListMembers(nd.Name)
-	if err != nil {
-		return 0, []string{err.Error()}
-	}
-	if len(members) == 0 {
-		return 0, []string{"no members — add network members before generating maps"}
-	}
-	pngs, warnings := GenerateDiagrams(nd.NodeAddr(), hubBBSName, hubSysopName, members)
+func rebuildNetworkDiagramZip(nd *NetworkDef, nodes []NodeEntry, fileArea FileArea, dirID int64, dirPath, bbsName, sysopName string) (int, []string) {
+	pngs, warnings := GenerateDiagramsFromNodes(nd.Name, nd, bbsName, sysopName, nodes)
 	if len(pngs) == 0 {
 		if len(warnings) == 0 {
 			warnings = append(warnings, "no diagrams generated")
 		}
 		return 0, warnings
 	}
-	if err := writeMultiZipAndRegister(dirPath, dirID, fileArea, "VirtDiag.zip", pngs, "Node Diagrams for VirtNet"); err != nil {
-		return len(pngs), append(warnings, fmt.Sprintf("zip VirtDiag.zip: %v", err))
+	zipName := NetworkDiagZipName(nd.Name)
+	diz := fmt.Sprintf("Node diagrams for %s", nd.Name)
+	if err := writeMultiZipAndRegister(dirPath, dirID, fileArea, zipName, pngs, diz); err != nil {
+		return len(pngs), append(warnings, fmt.Sprintf("zip %s: %v", zipName, err))
 	}
 	return len(pngs), warnings
 }

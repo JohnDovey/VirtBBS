@@ -4,7 +4,7 @@
 
 - macOS 12+, Linux (kernel 4.x+), or Windows 10+
 - The `virtbbs` server ships as a self-contained binary — no additional runtime required
-- **[Graphviz](https://graphviz.org/)** (optional) — required on the **server** host if you run VirtNet nodelist day-rollover and want `VirtDiag.zip` to include PNG network diagrams. Without the `dot` binary on PATH, rollover still publishes the nodelist and change log; diagram generation is skipped with a warning in the server log.
+- **[Graphviz](https://graphviz.org/)** (optional) — required on the **server** host if you want network topology diagrams in `<Network>_diags.zip` (after nodelist import or VirtNet day-rollover). Without the `dot` binary on PATH, nodelist import and rollover still succeed; diagram generation is skipped with a warning in the server log.
 
 ### Installing Graphviz
 

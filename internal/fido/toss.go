@@ -172,7 +172,7 @@ func TossDir(nd *NetworkDef, store *messages.Store, confStore *conferences.Store
 		for _, e := range ticRes.Errors {
 			result.Errors = append(result.Errors, "tic: "+e)
 		}
-		for _, e := range ProcessPendingNodelistEchoesForNetwork(store.DB(), fileArea, nd.Name) {
+		for _, e := range ProcessPendingNodelistEchoesForNetwork(store.DB(), fileArea, nd, "", "") {
 			result.Errors = append(result.Errors, "nodelist echo: "+e)
 		}
 	}

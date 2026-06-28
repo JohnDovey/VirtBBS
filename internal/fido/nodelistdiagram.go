@@ -35,6 +35,8 @@
 //                        script — neither it nor Go has a built-in
 //                        Graphviz renderer, so writing one from scratch
 //                        isn't justified).
+//   v1.6.1  2026-06-28  Diagram all networks from fido_nodes; zip as
+//                        <Network>_diags.zip with matching PNG prefixes.
 // ============================================================================
 
 // Package fido — nodelistdiagram.go
@@ -44,6 +46,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -59,46 +62,78 @@ const (
 	DiagramPerHub
 )
 
-// buildDOT renders members (already filtered to a single net for
-// DiagramPerHub) into Graphviz DOT text, mirroring node2dot.py's
-// conventions: lightblue zone node, palegreen host nodes, lightpink member
-// nodes, labels of "addr\nbbs_name\nsysop_name".
-func buildDOT(zoneAddr Addr, hubBBSName, hubSysopName string, byNet map[int][]*Member, scope DiagramScope, onlyNet int) string {
+// NetworkDiagZipName returns the registered zip filename for a network's diagrams.
+func NetworkDiagZipName(network string) string {
+	return NetworkDiagPrefix(network) + "_diags.zip"
+}
+
+// NetworkDiagPrefix returns the filename prefix used for diagram PNGs inside the zip.
+func NetworkDiagPrefix(network string) string {
+	return sanitizeNetworkFileToken(network)
+}
+
+func sanitizeNetworkFileToken(network string) string {
+	s := strings.TrimSpace(network)
+	if s == "" {
+		return "Network"
+	}
 	var b strings.Builder
-	b.WriteString("digraph VirtNet {\r\n")
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ', r == '-':
+			b.WriteRune('_')
+		}
+	}
+	if b.Len() == 0 {
+		return "Network"
+	}
+	return b.String()
+}
+
+// buildDOT renders nodelist entries (grouped by net for DiagramPerHub) into
+// Graphviz DOT text, mirroring node2dot.py's conventions.
+func buildDOT(network string, zoneAddr Addr, zoneName, zoneSysop string, byNet map[int][]NodeEntry, scope DiagramScope, onlyNet int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "digraph %s {\r\n", dotEscape(sanitizeNetworkFileToken(network)))
 	b.WriteString("  node [shape=box, style=filled];\r\n")
 
 	zoneID := "zone"
 	fmt.Fprintf(&b, "  %s [label=\"%d\\n%s\\n%s\", fillcolor=lightblue];\r\n",
-		zoneID, zoneAddr.Zone, dotEscape(hubBBSName), dotEscape(hubSysopName))
+		zoneID, zoneAddr.Zone, dotEscape(zoneName), dotEscape(zoneSysop))
 
-	nets := sortedNets(byNet)
+	nets := sortedNetKeys(byNet)
 	for _, net := range nets {
 		if scope == DiagramPerHub && net != onlyNet {
 			continue
 		}
-		members := byNet[net]
-		host := findHost(members)
+		entries := byNet[net]
+		host := findNetHost(entries)
 
 		hostID := fmt.Sprintf("host_%d", net)
-		hostName, hostSysop := hubBBSName, hubSysopName
+		hostName, hostSysop := zoneName, zoneSysop
+		hostNode := "1"
 		if host != nil {
-			hostName, hostSysop = host.BBSName, host.SysopName
+			hostName, hostSysop = host.Name, host.Sysop
+			if host.Node != 0 {
+				hostNode = fmt.Sprintf("%d", host.Node)
+			}
 		}
 		fmt.Fprintf(&b, "  %s [label=\"%d:%d/%s\\n%s\\n%s\", fillcolor=palegreen];\r\n",
-			hostID, zoneAddr.Zone, net, hostNodeNum(host), dotEscape(hostName), dotEscape(hostSysop))
+			hostID, zoneAddr.Zone, net, hostNode, dotEscape(hostName), dotEscape(hostSysop))
 		fmt.Fprintf(&b, "  %s -> %s;\r\n", zoneID, hostID)
 
 		if scope == DiagramHubsOnly {
 			continue
 		}
-		for _, m := range members {
-			if host != nil && m.ID == host.ID {
+		for i, e := range entries {
+			if !isDiagramMember(&e, host) {
 				continue
 			}
-			memberID := fmt.Sprintf("m_%d", m.ID)
+			memberID := fmt.Sprintf("m_%d_%d", net, i)
 			fmt.Fprintf(&b, "  %s [label=\"%s\\n%s\\n%s\", fillcolor=lightpink];\r\n",
-				memberID, dotEscape(m.Addr4D()), dotEscape(m.BBSName), dotEscape(m.SysopName))
+				memberID, dotEscape(e.Addr4D()), dotEscape(e.Name), dotEscape(e.Sysop))
 			fmt.Fprintf(&b, "  %s -> %s;\r\n", hostID, memberID)
 		}
 	}
@@ -107,21 +142,86 @@ func buildDOT(zoneAddr Addr, hubBBSName, hubSysopName string, byNet map[int][]*M
 	return b.String()
 }
 
-func hostNodeNum(host *Member) string {
-	if host == nil {
-		return "1"
-	}
-	return fmt.Sprintf("%d", host.NodeNum)
-}
-
 func dotEscape(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`)
+}
+
+func groupNodesByNet(nodes []NodeEntry) map[int][]NodeEntry {
+	out := map[int][]NodeEntry{}
+	for _, n := range nodes {
+		if n.Type == "Zone" {
+			continue
+		}
+		out[n.Net] = append(out[n.Net], n)
+	}
+	return out
+}
+
+func sortedNetKeys(byNet map[int][]NodeEntry) []int {
+	nets := make([]int, 0, len(byNet))
+	for n := range byNet {
+		nets = append(nets, n)
+	}
+	sort.Ints(nets)
+	return nets
+}
+
+func findNetHost(entries []NodeEntry) *NodeEntry {
+	for i := range entries {
+		e := &entries[i]
+		if e.Node == 0 && (e.Type == "Host" || e.Type == "Region") {
+			return e
+		}
+	}
+	for i := range entries {
+		e := &entries[i]
+		if e.Type == "Host" {
+			return e
+		}
+	}
+	return nil
+}
+
+func isDiagramMember(e *NodeEntry, host *NodeEntry) bool {
+	if host != nil && e.ID == host.ID {
+		return false
+	}
+	if e.Node == 0 && (e.Type == "Host" || e.Type == "Region") {
+		return false
+	}
+	return true
+}
+
+func zoneLabelForDiagram(nd *NetworkDef, nodes []NodeEntry, bbsName, sysopName string) (Addr, string, string) {
+	zone := nd.NodeAddr().Zone
+	if zone == 0 {
+		for _, n := range nodes {
+			if n.Zone != 0 {
+				zone = n.Zone
+				break
+			}
+		}
+	}
+	zName, zSysop := bbsName, sysopName
+	if zName == "" {
+		zName = "VirtBBS"
+	}
+	if zSysop == "" {
+		zSysop = "Sysop"
+	}
+	for _, n := range nodes {
+		if n.Zone == zone && n.Type == "Zone" && n.Node == 0 {
+			zName, zSysop = n.Name, n.Sysop
+			break
+		}
+	}
+	return Addr{Zone: zone}, zName, zSysop
 }
 
 // RenderPNG writes dot to a temp .dot file and shells out to the `dot` CLI
 // to render it to outPath as a PNG. If `dot` isn't found on PATH, returns
 // a descriptive error rather than panicking — the caller should log it and
-// skip that diagram, not fail the whole regeneration (see GenerateDiagrams).
+// skip that diagram, not fail the whole regeneration (see GenerateDiagramsFromNodes).
 func RenderPNG(dot, outPath string) error {
 	dotBin, err := exec.LookPath("dot")
 	if err != nil {
@@ -146,13 +246,14 @@ func RenderPNG(dot, outPath string) error {
 	return nil
 }
 
-// GenerateDiagrams builds the full, hubs-only, and one-per-net DOT graphs
-// for network from members, renders each to a PNG (skipping any that fail
-// — e.g. `dot` not installed — with the returned warnings), and returns a
-// map of {filename: pngBytes} ready for files.WriteMultiZipWithDiz, plus
-// any non-fatal warnings encountered along the way.
-func GenerateDiagrams(zoneAddr Addr, hubBBSName, hubSysopName string, members []*Member) (map[string][]byte, []string) {
-	byNet := groupByNet(members)
+// GenerateDiagramsFromNodes builds full, hubs-only, and per-net DOT graphs
+// for network from fido_nodes rows, renders each to PNG, and returns a map
+// of {filename: pngBytes} ready for writeMultiZipAndRegister.
+func GenerateDiagramsFromNodes(network string, nd *NetworkDef, bbsName, sysopName string, nodes []NodeEntry) (map[string][]byte, []string) {
+	byNet := groupNodesByNet(nodes)
+	prefix := NetworkDiagPrefix(network)
+	zoneAddr, zoneName, zoneSysop := zoneLabelForDiagram(nd, nodes, bbsName, sysopName)
+
 	pngs := map[string][]byte{}
 	var warnings []string
 
@@ -176,12 +277,36 @@ func GenerateDiagrams(zoneAddr Addr, hubBBSName, hubSysopName string, members []
 		pngs[name] = data
 	}
 
-	render("VirtNet_Full.png", buildDOT(zoneAddr, hubBBSName, hubSysopName, byNet, DiagramFull, 0))
-	render("VirtNet_Hubs.png", buildDOT(zoneAddr, hubBBSName, hubSysopName, byNet, DiagramHubsOnly, 0))
-	for _, net := range sortedNets(byNet) {
+	render(prefix+"_Full.png", buildDOT(network, zoneAddr, zoneName, zoneSysop, byNet, DiagramFull, 0))
+	render(prefix+"_Hubs.png", buildDOT(network, zoneAddr, zoneName, zoneSysop, byNet, DiagramHubsOnly, 0))
+	for _, net := range sortedNetKeys(byNet) {
 		name := fmt.Sprintf("Hub_%d-%d.png", zoneAddr.Zone, net)
-		render(name, buildDOT(zoneAddr, hubBBSName, hubSysopName, byNet, DiagramPerHub, net))
+		render(name, buildDOT(network, zoneAddr, zoneName, zoneSysop, byNet, DiagramPerHub, net))
 	}
 
 	return pngs, warnings
+}
+
+// GenerateDiagrams builds diagrams from hub member rows (legacy wrapper).
+func GenerateDiagrams(zoneAddr Addr, hubBBSName, hubSysopName string, members []*Member) (map[string][]byte, []string) {
+	network := "VirtNet"
+	nodes := make([]NodeEntry, 0, len(members))
+	for _, m := range members {
+		if network == "VirtNet" && m.Network != "" {
+			network = m.Network
+		}
+		t := "Node"
+		if m.IsHost {
+			t = "Host"
+		}
+		nodes = append(nodes, NodeEntry{
+			ID: m.ID, Zone: m.Zone, Net: m.Net, Node: m.NodeNum, Point: m.Point,
+			Name: m.BBSName, Sysop: m.SysopName, Type: t, Active: m.IsActive,
+		})
+	}
+	nd := &NetworkDef{Name: network, Address: zoneAddr.String()}
+	if nd.NodeAddr().Zone == 0 && zoneAddr.Zone != 0 {
+		nd.Address = fmt.Sprintf("%d:0/0", zoneAddr.Zone)
+	}
+	return GenerateDiagramsFromNodes(network, nd, hubBBSName, hubSysopName, nodes)
 }

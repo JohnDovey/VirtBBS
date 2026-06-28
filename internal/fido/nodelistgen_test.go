@@ -66,10 +66,19 @@ func TestRebuildHubNodelistDB_preservesImportedFidoNet(t *testing.T) {
 	}
 }
 
-func TestRebuildNetworkDiagrams_nonHub(t *testing.T) {
-	nd := &NetworkDef{Name: "FidoNet", Uplink: "1:105/1"}
+func TestRebuildNetworkDiagrams_noNodes(t *testing.T) {
+	nd := &NetworkDef{Name: "FidoNet", Uplink: "1:105/1", Enabled: true}
 	count, warns := RebuildNetworkDiagrams(nd, nil, nil, "BBS", "Sysop")
 	if count != 0 || len(warns) == 0 {
-		t.Fatalf("non-hub: got count=%d warns=%v, want 0 warns", count, warns)
+		t.Fatalf("no nodes: got count=%d warns=%v", count, warns)
+	}
+}
+
+func TestNetworkDiagZipName(t *testing.T) {
+	if got := NetworkDiagZipName("VirtNet"); got != "VirtNet_diags.zip" {
+		t.Fatalf("VirtNet: got %q", got)
+	}
+	if got := NetworkDiagZipName("Fido Net"); got != "Fido_Net_diags.zip" {
+		t.Fatalf("Fido Net: got %q", got)
 	}
 }
