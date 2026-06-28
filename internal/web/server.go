@@ -134,6 +134,7 @@ func (s *Server) templates() (*template.Template, error) {
 			"tf": func(locale, key string, args ...any) string { return trf(locale, key, args...) },
 			"formatSize": func(locale string, bytes int64) string { return formatDataSize(bytes, locale) },
 			"chartData": func(c StatsCharts) template.JS { return template.JS(c.ChartJSON()) },
+			"chartJSON": func(s string) template.JS { return template.JS(s) },
 			"webOp": func(locale, op string) string { return translateWebOp(locale, op) },
 			"safeHTML": func(s string) template.HTML { return template.HTML(s) },
 		}

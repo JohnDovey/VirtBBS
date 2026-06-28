@@ -48,6 +48,10 @@ func (s *Server) renderBinkpStatsBulletin(w http.ResponseWriter, r *http.Request
 		}
 		if series, err := fido.QueryBinkpDailySeries(db, n.Network, binkpChartDays); err == nil {
 			view.ChartJSON = binkpChartJSON(series)
+			view.ChartHasPolls = binkpSeriesHasAny(series.PollsOK, series.PollsFail)
+			view.ChartHasFiles = binkpSeriesHasAny(series.FilesSent, series.FilesRecv)
+			view.ChartHasMail = binkpSeriesHasAny(series.NetmailSent, series.NetmailRecv, series.EchomailSent, series.EchomailRecv)
+			view.ChartHasToss = binkpSeriesHasAny(series.TossImported)
 		}
 		views = append(views, view)
 	}

@@ -134,19 +134,55 @@
       <div class="row g-3">
         <div class="col-12 col-lg-6">
           <h6 class="small text-muted">{{t $.Locale "admin_binkp.chart.polls"}}</h6>
-          <div class="stats-chart-wrap"><canvas id="chart-polls-{{.ChartID}}"></canvas></div>
+          <div class="stats-chart-wrap">
+            {{if .ChartHasPolls}}
+            <canvas id="chart-polls-{{.ChartID}}"></canvas>
+            {{else}}
+            <div class="stats-chart-empty" role="status">
+              <p class="stats-chart-empty-title">{{t $.Locale "admin_binkp.chart.polls"}}</p>
+              <p class="stats-chart-empty-note">{{t $.Locale "stats.chart_insufficient"}}</p>
+            </div>
+            {{end}}
+          </div>
         </div>
         <div class="col-12 col-lg-6">
           <h6 class="small text-muted">{{t $.Locale "admin_binkp.chart.files"}}</h6>
-          <div class="stats-chart-wrap"><canvas id="chart-files-{{.ChartID}}"></canvas></div>
+          <div class="stats-chart-wrap">
+            {{if .ChartHasFiles}}
+            <canvas id="chart-files-{{.ChartID}}"></canvas>
+            {{else}}
+            <div class="stats-chart-empty" role="status">
+              <p class="stats-chart-empty-title">{{t $.Locale "admin_binkp.chart.files"}}</p>
+              <p class="stats-chart-empty-note">{{t $.Locale "stats.chart_insufficient"}}</p>
+            </div>
+            {{end}}
+          </div>
         </div>
         <div class="col-12 col-lg-6">
           <h6 class="small text-muted">{{t $.Locale "admin_binkp.chart.mail"}}</h6>
-          <div class="stats-chart-wrap"><canvas id="chart-mail-{{.ChartID}}"></canvas></div>
+          <div class="stats-chart-wrap">
+            {{if .ChartHasMail}}
+            <canvas id="chart-mail-{{.ChartID}}"></canvas>
+            {{else}}
+            <div class="stats-chart-empty" role="status">
+              <p class="stats-chart-empty-title">{{t $.Locale "admin_binkp.chart.mail"}}</p>
+              <p class="stats-chart-empty-note">{{t $.Locale "stats.chart_insufficient"}}</p>
+            </div>
+            {{end}}
+          </div>
         </div>
         <div class="col-12 col-lg-6">
           <h6 class="small text-muted">{{t $.Locale "admin_binkp.chart.toss"}}</h6>
-          <div class="stats-chart-wrap"><canvas id="chart-toss-{{.ChartID}}"></canvas></div>
+          <div class="stats-chart-wrap">
+            {{if .ChartHasToss}}
+            <canvas id="chart-toss-{{.ChartID}}"></canvas>
+            {{else}}
+            <div class="stats-chart-empty" role="status">
+              <p class="stats-chart-empty-title">{{t $.Locale "admin_binkp.chart.toss"}}</p>
+              <p class="stats-chart-empty-note">{{t $.Locale "stats.chart_insufficient"}}</p>
+            </div>
+            {{end}}
+          </div>
         </div>
       </div>
       {{end}}
@@ -161,7 +197,9 @@
   </div>
 </div>
 
-{{if .NetworkViews}}
+{{$needCharts := false}}
+{{range .NetworkViews}}{{if .NeedsChartScript}}{{$needCharts = true}}{{end}}{{end}}
+{{if $needCharts}}
 <script src="/static/chart.umd.min.js"></script>
 <script>
 (function () {
@@ -204,25 +242,25 @@
   }
   {{range .NetworkViews}}{{if .ChartJSON}}
   (function () {
-    var data = {{.ChartJSON}};
+    var data = {{chartJSON .ChartJSON}};
     var id = '{{.ChartID}}';
-    barChart('chart-polls-' + id, data.labels, [
+    {{if .ChartHasPolls}}barChart('chart-polls-' + id, data.labels, [
       { label: 'OK', data: data.datasets.pollsOK, backgroundColor: 'rgba(72, 187, 120, 0.7)' },
       { label: 'Fail', data: data.datasets.pollsFail, backgroundColor: 'rgba(245, 101, 101, 0.7)' }
-    ]);
-    lineChart('chart-files-' + id, data.labels, [
+    ]);{{end}}
+    {{if .ChartHasFiles}}lineChart('chart-files-' + id, data.labels, [
       { label: 'Sent', data: data.datasets.filesSent, borderColor: 'rgba(99, 179, 237, 1)', tension: 0.25 },
       { label: 'Recv', data: data.datasets.filesRecv, borderColor: 'rgba(129, 230, 217, 1)', tension: 0.25 }
-    ]);
-    lineChart('chart-mail-' + id, data.labels, [
+    ]);{{end}}
+    {{if .ChartHasMail}}lineChart('chart-mail-' + id, data.labels, [
       { label: 'Netmail sent', data: data.datasets.netmailSent, borderColor: 'rgba(246, 173, 85, 1)', tension: 0.25 },
       { label: 'Netmail recv', data: data.datasets.netmailRecv, borderColor: 'rgba(237, 137, 54, 1)', tension: 0.25 },
       { label: 'Echo sent', data: data.datasets.echomailSent, borderColor: 'rgba(183, 148, 244, 1)', tension: 0.25 },
       { label: 'Echo recv', data: data.datasets.echomailRecv, borderColor: 'rgba(159, 122, 234, 1)', tension: 0.25 }
-    ]);
-    lineChart('chart-toss-' + id, data.labels, [
+    ]);{{end}}
+    {{if .ChartHasToss}}lineChart('chart-toss-' + id, data.labels, [
       { label: 'Imported', data: data.datasets.tossImported, borderColor: 'rgba(252, 211, 77, 1)', fill: true, backgroundColor: 'rgba(252, 211, 77, 0.15)', tension: 0.25 }
-    ]);
+    ]);{{end}}
   })();
   {{end}}{{end}}
 })();

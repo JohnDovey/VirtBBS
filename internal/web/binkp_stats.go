@@ -12,11 +12,20 @@ const binkpChartDays = 30
 
 // BinkpNetworkView is one network block on the BinkP stats page.
 type BinkpNetworkView struct {
-	Network  string
-	Stats    fido.BinkpStatsRow
-	Links    []fido.BinkpLinkStatsRow
-	ChartID  string
-	ChartJSON string
+	Network       string
+	Stats         fido.BinkpStatsRow
+	Links         []fido.BinkpLinkStatsRow
+	ChartID       string
+	ChartJSON     string
+	ChartHasPolls bool
+	ChartHasFiles bool
+	ChartHasMail  bool
+	ChartHasToss  bool
+}
+
+// NeedsChartScript reports whether any chart for this network has data to render.
+func (v BinkpNetworkView) NeedsChartScript() bool {
+	return v.ChartHasPolls || v.ChartHasFiles || v.ChartHasMail || v.ChartHasToss
 }
 
 type binkpStatsPageData struct {
@@ -65,6 +74,10 @@ func (s *Server) gatherBinkpStatsPage(r *http.Request, flash, errMsg string) bin
 			}
 			if series, err := fido.QueryBinkpDailySeries(db, n.Network, binkpChartDays); err == nil {
 				view.ChartJSON = binkpChartJSON(series)
+				view.ChartHasPolls = binkpSeriesHasAny(series.PollsOK, series.PollsFail)
+				view.ChartHasFiles = binkpSeriesHasAny(series.FilesSent, series.FilesRecv)
+				view.ChartHasMail = binkpSeriesHasAny(series.NetmailSent, series.NetmailRecv, series.EchomailSent, series.EchomailRecv)
+				view.ChartHasToss = binkpSeriesHasAny(series.TossImported)
 			}
 			data.NetworkViews = append(data.NetworkViews, view)
 		}
@@ -78,6 +91,17 @@ func binkpPeriodLabel(locale, period string) string {
 		return label
 	}
 	return period
+}
+
+func binkpSeriesHasAny(slices ...[]int) bool {
+	for _, sl := range slices {
+		for _, v := range sl {
+			if v > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func binkpChartJSON(s *fido.BinkpDailySeries) string {

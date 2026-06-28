@@ -149,19 +149,12 @@ func ImportFile(db *sql.DB, path, network string) (*ImportResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if result != nil {
-			_ = tx.Commit()
-		} else {
-			_ = tx.Rollback()
-		}
-	}()
+	defer func() { _ = tx.Rollback() }()
 
 	stmt, err := tx.Prepare(`INSERT OR REPLACE INTO fido_nodes
 		(network, zone, net, node_num, point, name, location, sysop, phone, baud, flags, node_type, is_active)
 		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)`)
 	if err != nil {
-		_ = tx.Rollback()
 		return nil, err
 	}
 	defer stmt.Close()
@@ -258,6 +251,9 @@ func ImportFile(db *sql.DB, path, network string) (*ImportResult, error) {
 
 	_ = ndb // suppress unused warning
 
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	if err := RecordNodelistVersion(db, network, result.Inserted); err != nil {
 		return result, err
 	}
