@@ -203,10 +203,10 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 	if !confSelected {
 		data := struct {
 			pageData
-			Conferences []*conferences.Conference
+			Rows []ConferenceListRow
 		}{
 			pageData: s.page(r),
-			Conferences: visible,
+			Rows:     s.buildConferenceListRows(u, visible),
 		}
 		s.render(w, "messages.html", data)
 		return
@@ -588,7 +588,7 @@ func (s *Server) handleNodelist(w http.ResponseWriter, r *http.Request) {
 	}
 	networks := nodelistNetworkNames()
 	network := strings.TrimSpace(r.URL.Query().Get("network"))
-	if network == "" {
+	if network == "" && len(networks) > 0 {
 		network = networks[0]
 	}
 	query := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -596,21 +596,25 @@ func (s *Server) handleNodelist(w http.ResponseWriter, r *http.Request) {
 	if page < 1 {
 		page = 1
 	}
-	ndb := fido.OpenNodelistDB(s.Deps.Messages.DB())
-	if nd, err := networkDefByName(network); err == nil && nd.IsHub() {
-		cfg := config.Get()
-		if err := fido.RebuildHubNodelistDB(s.Deps.Messages.DB(), nd, cfg.BBS.Name, cfg.Sysop.Name); err != nil {
+	var results *fido.SearchResult
+	if network != "" {
+		ndb := fido.OpenNodelistDB(s.Deps.Messages.DB())
+		if nd, err := networkDefByName(network); err == nil && nd.IsHub() {
+			cfg := config.Get()
+			if err := fido.RebuildHubNodelistDB(s.Deps.Messages.DB(), nd, cfg.BBS.Name, cfg.Sysop.Name); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		var err error
+		results, err = ndb.Search(network, query, page, 25)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-	}
-	results, err := ndb.Search(network, query, page, 25)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if results != nil {
-		fido.LinkHostAKAsPtrs(results.Nodes)
+		if results != nil {
+			fido.LinkHostAKAsPtrs(results.Nodes)
+		}
 	}
 	data := struct {
 		pageData

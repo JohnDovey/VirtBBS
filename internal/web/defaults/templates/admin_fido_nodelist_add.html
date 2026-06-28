@@ -1,0 +1,42 @@
+{{define "admin_fido_nodelist_add.html"}}
+{{template "header" .}}
+<div class="card mb-3 sysop-panel">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "admin_fido_nodelist.add_title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/admin/fido/nodelist?network={{.Network | urlquery}}">{{t .Locale "admin_fido_nodelist.back"}}</a></p>
+  {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
+  <form method="post" class="admin-form">
+    <label>{{t .Locale "common.network"}}
+      <select class="form-select" name="network">
+        {{range .Networks}}<option value="{{.}}" {{if eq $.Network .}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    <label>{{t .Locale "nodelist.col.address"}} <input class="form-control" name="address" placeholder="1:234/567" required></label>
+    <label>{{t .Locale "common.name"}} <input class="form-control" name="name" value="{{.Node.Name}}"></label>
+    <label>{{t .Locale "nodelist.col.location"}} <input class="form-control" name="location" value="{{.Node.Location}}"></label>
+    <label>{{t .Locale "nodelist.col.sysop"}} <input class="form-control" name="sysop" value="{{.Node.Sysop}}"></label>
+    <label>{{t .Locale "nodelist.col.phone"}} <input class="form-control" name="phone" value="{{.Node.Phone}}"></label>
+    <label>{{t .Locale "nodelist.col.baud"}} <input class="form-control" type="number" name="baud" value="{{.Node.Baud}}"></label>
+    <label>{{t .Locale "nodelist.col.type"}}
+      <select class="form-select" name="type">
+        <option value="Node" {{if eq .Node.Type "Node"}}selected{{end}}>Node</option>
+        <option value="Host" {{if eq .Node.Type "Host"}}selected{{end}}>Host</option>
+        <option value="Hub" {{if eq .Node.Type "Hub"}}selected{{end}}>Hub</option>
+        <option value="Zone" {{if eq .Node.Type "Zone"}}selected{{end}}>Zone</option>
+        <option value="Region" {{if eq .Node.Type "Region"}}selected{{end}}>Region</option>
+        <option value="Boss" {{if eq .Node.Type "Boss"}}selected{{end}}>Boss</option>
+        <option value="Pvt" {{if eq .Node.Type "Pvt"}}selected{{end}}>Pvt</option>
+        <option value="Hold" {{if eq .Node.Type "Hold"}}selected{{end}}>Hold</option>
+        <option value="Down" {{if eq .Node.Type "Down"}}selected{{end}}>Down</option>
+      </select>
+    </label>
+    <label>{{t .Locale "common.flags"}} <textarea class="form-control" name="flags" rows="3">{{.Node.Flags}}</textarea>
+    <span class="form-text">{{t .Locale "nodelist.flags_help"}}</span></label>
+    <label class="form-check"><input type="checkbox" name="active" value="1" class="form-check-input" {{if .Node.Active}}checked{{end}}> {{t .Locale "common.active"}}</label>
+    <label class="form-check"><input type="checkbox" name="commit" value="1" class="form-check-input"> {{t .Locale "admin_fido_nodelist.commit_checkbox"}}</label>
+    <button type="submit" class="btn btn-primary">{{t .Locale "admin_fido_nodelist.add_submit"}}</button>
+  </form>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

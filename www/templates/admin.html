@@ -45,11 +45,17 @@
       <a href="/admin/binkp">{{t .Locale "admin.binkp"}}</a>
       <p>{{t .Locale "admin.binkp_desc"}}</p>
     </div></div></div>
-    {{end}}
+    <div class="col"><div class="card h-100 text-center"><div class="card-body">
+      <a href="/admin/fido/nodelist">{{t .Locale "admin_fido.nodelist"}}</a>
+      <p>{{t .Locale "admin_fido.nodelist_desc"}}</p>
+      <p class="mb-0"><a class="btn btn-sm btn-primary" href="/admin/fido/nodelist/add">{{t .Locale "admin_fido_nodelist.add_node"}}</a></p>
+    </div></div></div>
+    {{else}}
     <div class="col"><div class="card h-100 text-center"><div class="card-body">
       <a href="/nodelist">{{t .Locale "nav.nodelist"}}</a>
       <p>{{t .Locale "admin.nodelist_desc"}}</p>
     </div></div></div>
+    {{end}}
     <div class="col"><div class="card h-100 text-center"><div class="card-body">
       <a href="/stats">{{t .Locale "admin.stats"}}</a>
       <p>{{t .Locale "admin.stats_desc"}}</p>

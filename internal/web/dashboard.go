@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/display"
 	"github.com/virtbbs/virtbbs/internal/node"
@@ -15,6 +16,14 @@ type NewMessageLine struct {
 	ConferenceID int
 	Name         string
 	Count        int
+}
+
+// ConferenceListRow is one message area on the conference picker with read stats.
+type ConferenceListRow struct {
+	Conference *conferences.Conference
+	Total      int // highest message number in the area
+	Unread     int // messages since last read
+	LastRead   int // last message number read by this user
 }
 
 // DashboardStats mirrors the terminal main-menu Stats screen (session.gatherStats).
@@ -112,6 +121,22 @@ func (s *Server) gatherNewMessageLines(u *users.User) []NewMessageLine {
 		lines = append(lines, NewMessageLine{ConferenceID: confID, Name: name, Count: n})
 	}
 	return lines
+}
+
+func (s *Server) buildConferenceListRows(u *users.User, confs []*conferences.Conference) []ConferenceListRow {
+	unread, _ := s.Deps.Users.NewMessageCounts(u.ID)
+	highMap, _ := s.Deps.Messages.HighMsgNumberByConference()
+	lastMap := s.Deps.Users.LastReadMap(u.ID)
+	rows := make([]ConferenceListRow, 0, len(confs))
+	for _, c := range confs {
+		rows = append(rows, ConferenceListRow{
+			Conference: c,
+			Total:      highMap[c.ID],
+			Unread:     unread[c.ID],
+			LastRead:   lastMap[c.ID],
+		})
+	}
+	return rows
 }
 
 func (s *Server) listBulletins() []BulletinView {

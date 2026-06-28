@@ -173,12 +173,30 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 					Active:   r.FormValue(fmt.Sprintf("active_%d", i)) == "1",
 				})
 			}
-			deleteAddrs := strings.Split(strings.TrimSpace(r.FormValue("delete_addrs")), "\n")
-			params := fido.LocalNodelistCommitParams{Network: network, Upsert: upsert, Delete: deleteAddrs}
+			params := fido.LocalNodelistCommitParams{Network: network, Upsert: upsert}
 			if res, err := fido.CommitLocalNodelist(db, nd, cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort, params); err != nil {
 				data.Error = err.Error()
 			} else {
 				data.Flash = res.Message
+			}
+		case "delete_checked":
+			nd, err := networkDefByName(network)
+			if err != nil {
+				data.Error = err.Error()
+				break
+			}
+			deleteAddrs := r.Form["delete_addr"]
+			if len(deleteAddrs) == 0 {
+				data.Error = tr(localeFromRequest(r), "admin_fido_ops.error.no_delete_selected")
+				break
+			}
+			params := fido.LocalNodelistCommitParams{Network: network, Delete: deleteAddrs}
+			if res, err := fido.CommitLocalNodelist(db, nd, cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort, params); err != nil {
+				data.Error = err.Error()
+			} else if res.Message != "" {
+				data.Flash = res.Message
+			} else {
+				data.Flash = tr(localeFromRequest(r), "admin_fido_ops.flash_deleted")
 			}
 		case "export_local":
 			nd, err := networkDefByName(network)
@@ -662,5 +680,5 @@ func (s *Server) handleAdminFidoImportUpload(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	_ = header
-	http.Redirect(w, r, "/admin/fido/ops?network="+network, http.StatusSeeOther)
+	http.Redirect(w, r, "/admin/fido/nodelist?network="+network, http.StatusSeeOther)
 }

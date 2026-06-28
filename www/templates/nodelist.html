@@ -1,0 +1,114 @@
+{{define "nodelist.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "nav.nodelist"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
+
+  {{if not .Networks}}
+  <p class="meta">{{t .Locale "nodelist.no_networks"}}</p>
+  {{else}}
+  <form method="get" action="/nodelist" class="search-form d-flex flex-wrap gap-2 align-items-center mb-3">
+    {{if gt (len .Networks) 1}}
+    <label class="d-flex align-items-center gap-2">{{t .Locale "common.network"}}
+      <select class="form-select form-select-sm" name="network" onchange="this.form.submit()">
+        {{range .Networks}}<option value="{{.}}" {{if eq $.Network .}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+    {{else}}
+    <input type="hidden" name="network" value="{{index .Networks 0}}">
+    {{end}}
+    <input type="search" name="q" value="{{.Query}}" placeholder="{{t .Locale "nodelist.search_placeholder"}}" class="form-control">
+    <button type="submit" class="btn btn-primary">{{t .Locale "common.search"}}</button>
+  </form>
+
+  {{if .Results}}
+  <p class="meta">{{tf .Locale "nodelist.results" .Results.Total}}</p>
+  <div class="table-responsive">
+  <table class="table table-dark table-striped table-hover align-middle mb-0">
+    <thead>
+      <tr>
+        <th>{{t .Locale "nodelist.col.address"}}</th>
+        <th>{{t .Locale "nodelist.col.aka"}}</th>
+        <th>{{t .Locale "common.name"}}</th>
+        <th>{{t .Locale "nodelist.col.location"}}</th>
+        <th>{{t .Locale "nodelist.col.sysop"}}</th>
+        <th>{{t .Locale "nodelist.col.type"}}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Results.Nodes}}
+    <tr>
+      <td>{{.Addr4D}}</td>
+      <td>{{if .AKA}}{{.AKA}}{{else}}—{{end}}</td>
+      <td>{{.Name}}</td>
+      <td>{{.Location}}</td>
+      <td>{{.Sysop}}</td>
+      <td>{{.Type}}</td>
+      <td class="text-end">
+        <button type="button" class="btn btn-sm btn-outline-secondary nodelist-view-btn" data-network="{{$.Network}}" data-addr="{{.Addr4D}}">{{t $.Locale "nodelist.view_btn"}}</button>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="7" class="meta">{{t .Locale "nodelist.empty"}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if gt .Results.Pages 1}}
+  <p class="meta pagination">
+    {{t .Locale "common.page"}} {{.Results.Page}} {{t .Locale "common.of"}} {{.Results.Pages}}
+    {{if gt .Results.Page 1}}<a href="/nodelist?network={{.Network | urlquery}}&amp;q={{.Query | urlquery}}&amp;page={{sub .Results.Page 1}}">{{t .Locale "common.previous"}}</a>{{end}}
+    {{if lt .Results.Page .Results.Pages}}<a href="/nodelist?network={{.Network | urlquery}}&amp;q={{.Query | urlquery}}&amp;page={{add .Results.Page 1}}">{{t .Locale "common.next"}}</a>{{end}}
+  </p>
+  {{end}}
+
+  <h3 class="section-head">{{t .Locale "nodelist.export_title"}}</h3>
+  <form method="post" action="/nodelist/export" class="d-flex flex-wrap gap-2 align-items-center">
+    <input type="hidden" name="network" value="{{.Network}}">
+    <input type="hidden" name="q" value="{{.Query}}">
+    <label class="d-flex align-items-center gap-2">
+      <select class="form-select form-select-sm" name="scope">
+        <option value="search">{{t .Locale "nodelist.export_search"}}</option>
+        <option value="all">{{tf .Locale "nodelist.export_all" .Network}}</option>
+      </select>
+    </label>
+    <button type="submit" class="btn btn-secondary btn-sm">{{t .Locale "nodelist.export_btn"}}</button>
+  </form>
+  {{end}}
+  {{end}}
+  </div>
+</div>
+
+{{template "nodelist_modal.html" .}}
+<script>
+window.nodelistPage = {
+  apiUrl: '/nodelist/node',
+  editable: false,
+  i18n: {
+    address: {{printf "%q" (t .Locale "nodelist.col.address")}},
+    aka: {{printf "%q" (t .Locale "nodelist.col.aka")}},
+    network: {{printf "%q" (t .Locale "common.network")}},
+    name: {{printf "%q" (t .Locale "common.name")}},
+    location: {{printf "%q" (t .Locale "nodelist.col.location")}},
+    sysop: {{printf "%q" (t .Locale "nodelist.col.sysop")}},
+    phone: {{printf "%q" (t .Locale "nodelist.col.phone")}},
+    baud: {{printf "%q" (t .Locale "nodelist.col.baud")}},
+    type: {{printf "%q" (t .Locale "nodelist.col.type")}},
+    active: {{printf "%q" (t .Locale "common.active")}},
+    flags: {{printf "%q" (t .Locale "common.flags")}},
+    capabilities: {{printf "%q" (t .Locale "nodelist.col.capabilities")}},
+    yes: {{printf "%q" (t .Locale "common.yes")}},
+    no: {{printf "%q" (t .Locale "common.no")}},
+    close: {{printf "%q" (t .Locale "common.close")}},
+    edit: {{printf "%q" (t .Locale "common.edit")}},
+    save: {{printf "%q" (t .Locale "common.save")}},
+    loading: {{printf "%q" (t .Locale "common.loading")}},
+    load_error: {{printf "%q" (t .Locale "nodelist.load_error")}}
+  }
+};
+</script>
+<script src="/static/nodelist.js"></script>
+{{template "footer" .}}
+{{end}}

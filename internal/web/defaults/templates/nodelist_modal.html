@@ -1,0 +1,14 @@
+{{define "nodelist_modal.html"}}
+<div class="modal fade" id="nodelist-detail-modal" tabindex="-1" aria-labelledby="nodelist-detail-title" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="nodelist-detail-title">{{t .Locale "nodelist.detail_title"}}</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t .Locale "common.close"}}"></button>
+      </div>
+      <div class="modal-body" id="nodelist-detail-body"></div>
+      <div class="modal-footer" id="nodelist-detail-footer"></div>
+    </div>
+  </div>
+</div>
+{{end}}

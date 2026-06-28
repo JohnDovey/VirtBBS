@@ -1,0 +1,131 @@
+{{define "admin_fido_nodelist.html"}}
+{{template "header" .}}
+<div class="card mb-3 sysop-panel">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <h2 class="h5 mb-0">{{t .Locale "admin_fido_nodelist.title"}}</h2>
+    <a class="btn btn-sm btn-primary" href="/admin/fido/nodelist/add?network={{.Network | urlquery}}">{{t .Locale "admin_fido_nodelist.add_node"}}</a>
+  </div>
+  <div class="card-body">
+  <p><a href="/admin/fido">{{t .Locale "common.fido_back"}}</a></p>
+  {{if .Flash}}<p class="alert alert-success">{{.Flash}}</p>{{end}}
+  {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
+  <form method="get" class="inline-form mb-3">
+    <label>{{t .Locale "common.network"}} <select class="form-select" name="network" onchange="this.form.submit()">{{range .Networks}}<option {{if eq $.Network .}}selected{{end}}>{{.}}</option>{{end}}</select></label>
+  </form>
+  {{if .VersionText}}<p class="meta">{{tf .Locale "admin_fido_ops.nodelist_version" .VersionText}}</p>{{end}}
+
+  <h3 class="section-head">{{t .Locale "admin_fido_ops.import_nodelist"}}</h3>
+  <div class="row g-3 mb-4">
+    <div class="col-md-6">
+      <form method="post" action="/admin/fido/import" enctype="multipart/form-data">
+        <input type="hidden" name="network" value="{{.Network}}">
+        <label class="form-label">{{t .Locale "admin_fido_nodelist.upload_file"}}</label>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <input class="form-control" type="file" name="nodelist" accept=".txt,.nodelist" required>
+          <button class="btn btn-primary" type="submit">{{t .Locale "admin_fido_ops.upload_import"}}</button>
+        </div>
+      </form>
+    </div>
+    <div class="col-md-6">
+      <form method="post">
+        <input type="hidden" name="network" value="{{.Network}}">
+        <input type="hidden" name="action" value="import">
+        <label class="form-label">{{t .Locale "admin_fido_nodelist.import_path"}}</label>
+        <div class="d-flex flex-wrap gap-2">
+          <input class="form-control" name="import_path" placeholder="{{t .Locale "admin_fido_ops.import_path_placeholder"}}">
+          <button class="btn btn-primary" type="submit">{{t .Locale "admin_fido_ops.import_from_path"}}</button>
+        </div>
+      </form>
+    </div>
+    <div class="col-12">
+      <form method="post" class="d-inline">
+        <input type="hidden" name="network" value="{{.Network}}">
+        <input type="hidden" name="action" value="fetch">
+        <button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.fetch_nodelist"}}</button>
+      </form>
+      <form method="post" class="d-inline ms-2">
+        <input type="hidden" name="network" value="{{.Network}}">
+        <input type="hidden" name="action" value="export_local">
+        <button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.export_local"}}</button>
+      </form>
+    </div>
+  </div>
+
+  <h3 class="section-head">{{t .Locale "admin_fido.nodelist_search"}}</h3>
+  <form method="get" action="/admin/fido/nodelist" class="search-form d-flex flex-wrap gap-2 align-items-center mb-3">
+    <input type="hidden" name="network" value="{{.Network}}">
+    <input type="search" name="q" value="{{.Query}}" placeholder="{{t .Locale "nodelist.search_placeholder"}}" class="form-control">
+    <button type="submit" class="btn btn-primary">{{t .Locale "common.search"}}</button>
+  </form>
+
+  {{if .Results}}
+  <div class="table-responsive">
+  <table class="table table-dark table-striped table-hover align-middle mb-0">
+    <thead><tr><th>{{t .Locale "nodelist.col.address"}}</th><th>{{t .Locale "nodelist.col.aka"}}</th><th>{{t .Locale "common.name"}}</th><th>{{t .Locale "nodelist.col.location"}}</th><th>{{t .Locale "nodelist.col.sysop"}}</th><th>{{t .Locale "nodelist.col.type"}}</th><th></th></tr></thead>
+    <tbody>
+    {{range .Results.Nodes}}
+    <tr>
+      <td>{{.Addr4D}}</td>
+      <td>{{if .AKA}}{{.AKA}}{{else}}—{{end}}</td>
+      <td>{{.Name}}</td>
+      <td>{{.Location}}</td>
+      <td>{{.Sysop}}</td>
+      <td>{{.Type}}</td>
+      <td class="text-end text-nowrap">
+        <button type="button" class="btn btn-sm btn-outline-secondary nodelist-view-btn" data-network="{{$.Network}}" data-addr="{{.Addr4D}}">{{t $.Locale "nodelist.view_btn"}}</button>
+        <button type="button" class="btn btn-sm btn-outline-primary nodelist-edit-btn" data-network="{{$.Network}}" data-addr="{{.Addr4D}}">{{t $.Locale "common.edit"}}</button>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="7" class="meta">{{t .Locale "nodelist.empty"}}</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{if gt .Results.Pages 1}}
+  <p class="meta pagination">
+    {{t .Locale "common.page"}} {{.Results.Page}} {{t .Locale "common.of"}} {{.Results.Pages}}
+    {{if gt .Results.Page 1}}<a href="/admin/fido/nodelist?network={{.Network | urlquery}}&amp;q={{.Query | urlquery}}&amp;page={{sub .Results.Page 1}}">{{t .Locale "common.previous"}}</a>{{end}}
+    {{if lt .Results.Page .Results.Pages}}<a href="/admin/fido/nodelist?network={{.Network | urlquery}}&amp;q={{.Query | urlquery}}&amp;page={{add .Results.Page 1}}">{{t .Locale "common.next"}}</a>{{end}}
+  </p>
+  {{end}}
+  {{end}}
+  </div>
+</div>
+
+{{template "nodelist_modal.html" .}}
+<script>
+window.nodelistPage = {
+  apiUrl: '/admin/fido/nodelist/node',
+  saveUrl: '/admin/fido/nodelist',
+  editable: true,
+  query: {{printf "%q" .Query}},
+  i18n: {
+    address: {{printf "%q" (t .Locale "nodelist.col.address")}},
+    aka: {{printf "%q" (t .Locale "nodelist.col.aka")}},
+    network: {{printf "%q" (t .Locale "common.network")}},
+    name: {{printf "%q" (t .Locale "common.name")}},
+    location: {{printf "%q" (t .Locale "nodelist.col.location")}},
+    sysop: {{printf "%q" (t .Locale "nodelist.col.sysop")}},
+    phone: {{printf "%q" (t .Locale "nodelist.col.phone")}},
+    baud: {{printf "%q" (t .Locale "nodelist.col.baud")}},
+    type: {{printf "%q" (t .Locale "nodelist.col.type")}},
+    active: {{printf "%q" (t .Locale "common.active")}},
+    flags: {{printf "%q" (t .Locale "common.flags")}},
+    capabilities: {{printf "%q" (t .Locale "nodelist.col.capabilities")}},
+    flags_help: {{printf "%q" (t .Locale "nodelist.flags_help")}},
+    commit: {{printf "%q" (t .Locale "admin_fido_nodelist.commit_checkbox")}},
+    yes: {{printf "%q" (t .Locale "common.yes")}},
+    no: {{printf "%q" (t .Locale "common.no")}},
+    close: {{printf "%q" (t .Locale "common.close")}},
+    edit: {{printf "%q" (t .Locale "common.edit")}},
+    save: {{printf "%q" (t .Locale "common.save")}},
+    loading: {{printf "%q" (t .Locale "common.loading")}},
+    load_error: {{printf "%q" (t .Locale "nodelist.load_error")}},
+    save_error: {{printf "%q" (t .Locale "admin_fido_nodelist.save_error")}}
+  }
+};
+</script>
+<script src="/static/nodelist.js"></script>
+{{template "footer" .}}
+{{end}}

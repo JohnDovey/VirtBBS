@@ -253,6 +253,35 @@ body.virtbbs-body {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.nodelist-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.nodelist-detail-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--virtbbs-accent-dim);
+}
+
+.nodelist-detail-value {
+  font-size: 0.95rem;
+  word-break: break-word;
+}
+
+.nodelist-flag-item {
+  margin-bottom: 0.5rem;
+}
+
+.nodelist-flag-item:last-child {
+  margin-bottom: 0;
+}
+
 .network-map-img-wrap {
   background: #1a1a2e;
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -376,6 +405,16 @@ body.virtbbs-body {
 .admin-form input[type="password"],
 .admin-form select,
 .admin-form textarea {
+  max-width: 32rem;
+}
+
+.admin-form-vertical .form-label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.admin-form-vertical .form-control,
+.admin-form-vertical textarea {
   max-width: 32rem;
 }
 

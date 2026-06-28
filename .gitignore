@@ -28,10 +28,10 @@ android/**/local.properties
 display/BINKPDAY.ANS
 display/BINKPALL.ANS
 
-# Local FidoNet operational files (not part of source)
-ROUTES.BBS
-NODELIST.*
-NODEDIFF.*
+# Local FidoNet operational files (not part of source; repo root only)
+/ROUTES.BBS
+/NODELIST.*
+/NODEDIFF.*
 
 # OS / editor
 .DS_Store

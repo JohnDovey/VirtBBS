@@ -318,6 +318,24 @@ func (s *Store) GetLastRead(userID int64, conferenceID int) int {
 	return n
 }
 
+// LastReadMap returns last_msg_read per conference for a user.
+func (s *Store) LastReadMap(userID int64) map[int]int {
+	out := map[int]int{}
+	rows, err := s.db.Query(
+		`SELECT conference_id, last_msg_read FROM user_conferences WHERE user_id=?`, userID)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, last int
+		if err := rows.Scan(&cid, &last); err == nil {
+			out[cid] = last
+		}
+	}
+	return out
+}
+
 // SetLastRead updates (or creates) the last-read record for a user/conference.
 func (s *Store) SetLastRead(userID int64, conferenceID, lastMsgRead int) error {
 	_, err := s.db.Exec(`

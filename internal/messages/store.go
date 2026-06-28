@@ -476,6 +476,27 @@ func (s *Store) HighMsgNumber(conferenceID int) (int, error) {
 	return n, err
 }
 
+// HighMsgNumberByConference returns the highest msg_number per conference (non-deleted only).
+func (s *Store) HighMsgNumberByConference() (map[int]int, error) {
+	rows, err := s.db.Query(`
+		SELECT conference_id, COALESCE(MAX(msg_number),0)
+		FROM messages WHERE status!='D'
+		GROUP BY conference_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int]int{}
+	for rows.Next() {
+		var cid, high int
+		if err := rows.Scan(&cid, &high); err != nil {
+			return nil, err
+		}
+		out[cid] = high
+	}
+	return out, rows.Err()
+}
+
 type scanner interface{ Scan(...any) error }
 
 func scanMessage(sc scanner) (*Message, error) {

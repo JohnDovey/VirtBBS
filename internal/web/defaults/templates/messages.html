@@ -5,16 +5,19 @@
   <div class="card-body">
   <div class="table-responsive">
   <table class="table table-dark table-striped table-hover align-middle mb-0">
-    <thead><tr><th>{{t .Locale "common.area"}}</th><th>{{t .Locale "common.description"}}</th><th></th></tr></thead>
+    <thead><tr><th>{{t .Locale "common.area"}}</th><th>{{t .Locale "common.description"}}</th><th>{{t .Locale "messages.col.stats"}}</th><th></th></tr></thead>
     <tbody>
-    {{range .Conferences}}
+    {{range .Rows}}
     <tr>
-      <td>{{.Name}}{{if .Echo}} <span class="meta">{{t $.Locale "common.echo_tag"}}</span>{{end}}</td>
-      <td>{{.Description}}</td>
-      <td><a href="/messages?conf={{.ID}}">{{t $.Locale "common.enter"}}</a></td>
+      <td>{{.Conference.Name}}{{if .Conference.Echo}} <span class="meta">{{t $.Locale "common.echo_tag"}}</span>{{end}}</td>
+      <td>{{.Conference.Description}}</td>
+      <td>
+        <span class="badge conf-stats-badge {{if gt .Unread 0}}bg-primary{{else}}bg-secondary{{end}}" title="{{t $.Locale "messages.stats_badge_title"}}">{{.Total}}/{{.Unread}}/{{.LastRead}}</span>
+      </td>
+      <td><a href="/messages?conf={{.Conference.ID}}">{{t $.Locale "common.enter"}}</a></td>
     </tr>
     {{else}}
-    <tr><td colspan="3">{{t .Locale "messages.empty"}}</td></tr>
+    <tr><td colspan="4">{{t .Locale "messages.empty"}}</td></tr>
     {{end}}
     </tbody>
   </table>
