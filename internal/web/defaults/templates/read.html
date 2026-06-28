@@ -8,6 +8,7 @@
     {{t .Locale "common.from"}} <strong>{{.Message.FromName}}</strong> {{t .Locale "read.to_prefix"}} {{.Message.ToName}}
     · {{.Message.DatePosted.Format "2006-01-02 15:04"}}
     · #{{.Message.MsgNumber}}
+    {{if .LangLabel}}<span class="badge bg-secondary ms-1" title="{{t .Locale "read.lang_title"}}">{{.LangLabel}}</span>{{end}}
   </p>
   {{if .ShowSourceToggle}}
   <p class="meta">

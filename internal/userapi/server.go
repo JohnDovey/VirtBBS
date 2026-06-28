@@ -25,12 +25,12 @@
 // DEALINGS IN THE SOFTWARE.
 //
 // Change History:
-//   v0.6.0  2026-06-26  Phase 0 (VirtAnd/VirtTerm): initial implementation —
-//                        token-authenticated JSON-over-TCP API, separate from
-//                        the sysop-only internal/api, exposing security-filtered
-//                        conference/file listings, FidoNet nodelist search, and
-//                        a nodelist-version-check endpoint. QWK and file content
-//                        transfer land in a later phase.
+//   v0.6.0  2026-06-26  Phase 0 (VirtAnd): initial implementation —
+//                        token-authenticated JSON-over-TCP API for the VirtAnd
+//                        Android client, exposing security-filtered conference/
+//                        file listings, FidoNet nodelist search, and a nodelist-
+//                        version-check endpoint. QWK and file content transfer
+//                        land in a later phase.
 //   v0.7.0  2026-06-26  Phase 1 (VirtAnd/VirtTerm): qwk.download/qwk.upload
 //                        (real binary QWK/REP packets, base64-in-JSON) and
 //                        files.download/files.upload (base64-in-JSON file
@@ -41,12 +41,10 @@
 // ============================================================================
 
 // Package userapi provides a token-authenticated JSON-over-TCP API for
-// end-user client applications (VirtAnd, the Android point client, and
-// VirtAnd, the Android point client). It is deliberately a
-// separate package and port from the sysop-only internal/api, reusing the
-// same Request/Response shape for consistency but with a completely
-// different trust boundary: callers authenticate with a per-device API
-// token (internal/users.Store.AuthenticateToken), never the sysop password.
+// VirtAnd, the Android point client. Callers authenticate with a per-device
+// API token (internal/users.Store.AuthenticateToken), never the sysop password
+// or a user's BBS login password. Sysop administration uses the web UI
+// (internal/web, /admin/*), not this API.
 package userapi
 
 import (
@@ -71,7 +69,7 @@ import (
 // fit on a single newline-delimited JSON line.
 const maxLineSize = 16 * 1024 * 1024
 
-// Request is a JSON-RPC-style request, mirroring internal/api's shape.
+// Request is a JSON-RPC-style request (method, params, auth token).
 type Request struct {
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params,omitempty"`

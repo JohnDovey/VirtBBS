@@ -245,6 +245,28 @@ func (l *Log) DailyStats() (unique, total int, err error) {
 	return len(seen), total, nil
 }
 
+// CountByDay returns call counts keyed by YYYY-MM-DD for the last days calendar
+// days (including today). Older entries in the log are ignored.
+func (l *Log) CountByDay(days int) map[string]int {
+	if days <= 0 {
+		days = 30
+	}
+	cutoff := time.Now().AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+	out := map[string]int{}
+	entries, err := l.search("", 0)
+	if err != nil {
+		return out
+	}
+	for _, e := range entries {
+		key := e.Timestamp.Format("2006-01-02")
+		if key < cutoff {
+			continue
+		}
+		out[key]++
+	}
+	return out
+}
+
 // TextRecords returns the last n raw text-log lines (as recorded in CALLERS.LOG).
 // Useful for the terminal-based sysop log viewer.
 func (l *Log) TextRecords(n int) ([]string, error) {

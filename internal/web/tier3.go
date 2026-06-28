@@ -10,7 +10,6 @@ import (
 
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/fido"
-	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/users"
 )
@@ -166,18 +165,12 @@ func (s *Server) handleAPINetmail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		m := msgs[0]
+		locale := localeFromRequest(r)
 		if u.Sysop {
-			resp := struct {
-				*messages.Message
-				DisplayBody string `json:"DisplayBody"`
-			}{
-				Message:     m,
-				DisplayBody: fido.ReconstructSource(fidoSourceOpts(m, "")),
-			}
-			_ = json.NewEncoder(w).Encode(resp)
+			_ = json.NewEncoder(w).Encode(buildMessageViewJSON(locale, m, fido.ReconstructSource(fidoSourceOpts(m, ""))))
 			return
 		}
-		_ = json.NewEncoder(w).Encode(m)
+		_ = json.NewEncoder(w).Encode(buildMessageViewJSON(locale, m, ""))
 		return
 	}
 	msgs, err := s.Deps.Messages.ListNetmail(u.Name, u.Sysop, 0, 200)
@@ -316,27 +309,9 @@ func (s *Server) handleAdminBinkP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cfg := config.Get()
-	data := struct {
-		pageData
-		Networks   []string
-		LogLines   []string
-		LogPath    string
-		Stats      *fido.BinkpStatsQueryResult
-		PollResult string
-		Flash      string
-		Error      string
-	}{
-		pageData: pageData{BBSName: cfg.BBS.Name, User: u, Locale: localeFromRequest(r)},
-	}
-	for _, nd := range cfg.Fido.Networks {
-		data.Networks = append(data.Networks, nd.Name)
-	}
-	if lines, path, err := fido.ReadBinkpLogTail(40); err == nil {
-		data.LogLines, data.LogPath = lines, path
-	}
-	if st, err := fido.QueryBinkpStats(s.Deps.Messages.DB(), "", "day", time.Now().Format("2006-01-02")); err == nil {
-		data.Stats = st
-	}
+	locale := localeFromRequest(r)
+	var flash, errMsg string
+
 	if r.Method == http.MethodPost {
 		_ = r.ParseForm()
 		netName := r.FormValue("network")
@@ -345,24 +320,24 @@ func (s *Server) handleAdminBinkP(w http.ResponseWriter, r *http.Request) {
 		}
 		nd := cfg.Fido.NetworkByName(netName)
 		if nd == nil {
-			data.Error = tr(data.Locale, "admin_binkp.error.network")
+			errMsg = tr(locale, "admin_binkp.error.network")
 		} else {
 			res := fido.PollAndToss(nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name)
 			if res.Poll.Error != nil {
-				data.Error = res.Poll.Error.Error()
+				errMsg = res.Poll.Error.Error()
 			} else {
 				tossed := 0
 				if res.Toss != nil {
 					tossed = res.Toss.Imported
 				}
-				data.Flash = trf(data.Locale, "admin_binkp.flash.poll_ok",
+				flash = trf(locale, "admin_binkp.flash.poll_ok",
 					len(res.Poll.Sent), len(res.Poll.Received), tossed)
 			}
 		}
-		if lines, path, err := fido.ReadBinkpLogTail(40); err == nil {
-			data.LogLines, data.LogPath = lines, path
-		}
 	}
+
+	data := s.gatherBinkpStatsPage(r, flash, errMsg)
+	data.User = u
 	s.render(w, "admin_binkp.html", data)
 }
 

@@ -1,0 +1,28 @@
+{{define "network_map.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{tf .Locale "networks.map.title" .Network}}</h2></div>
+  <div class="card-body">
+  <p class="meta"><a href="/networks/about?network={{.QueryNet}}">{{t .Locale "networks.map.back_about"}}</a> · <a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
+  {{if not .IsHub}}
+  <p class="meta">{{t .Locale "networks.map.hub_only"}}</p>
+  <p><a class="btn btn-primary btn-sm" href="/nodelist?network={{.QueryNet}}">{{t .Locale "networks.nav.nodelist"}}</a></p>
+  {{else if .MapError}}
+  <p class="alert alert-warning">{{.MapError}}</p>
+  {{else if not .Diagrams}}
+  <p class="meta">{{t .Locale "networks.map.none"}}</p>
+  {{else}}
+  <p class="meta mb-4">{{t .Locale "networks.map.help"}}</p>
+  {{range .Diagrams}}
+  <div class="network-map-block mb-4">
+    <h3 class="h6 section-head">{{if .NetNum}}{{tf $.Locale .TitleKey .NetNum}}{{else}}{{t $.Locale .TitleKey}}{{end}}</h3>
+    <div class="network-map-img-wrap">
+      <img class="img-fluid network-map-img" src="/networks/diagram?network={{$.QueryNet}}&amp;diagram={{.Key | urlquery}}" alt="">
+    </div>
+  </div>
+  {{end}}
+  {{end}}
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

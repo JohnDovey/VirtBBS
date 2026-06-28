@@ -30,7 +30,7 @@
 //                        CreateAPIToken/AuthenticateToken/RevokeAPIToken/ListAPITokens
 //                        for the new user-facing userapi package.
 //   v0.9.0  2026-06-26  Sysop GUI gap-fill: ListAllAPITokens/RevokeAPITokenByID for
-//                        sysop-side token administration (internal/api, GUI tab).
+//                        sysop-side token administration via the web admin UI.
 // ============================================================================
 
 // Package users manages the VirtBBS user database.
@@ -473,8 +473,8 @@ func (s *Store) RevokeAPIToken(userID, tokenID int64) error {
 }
 
 // RevokeAPITokenByID marks a token revoked by its ID alone, with no userID
-// scoping check — for sysop-side administration (internal/api), where the
-// caller is trusted to revoke any user's token, not just their own.
+// scoping check — for sysop-side administration via the web admin UI, where
+// the caller is trusted to revoke any user's token, not just their own.
 func (s *Store) RevokeAPITokenByID(tokenID int64) error {
 	_, err := s.db.Exec(`
 		UPDATE user_api_tokens SET revoked_at=?

@@ -113,10 +113,12 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		pageData
 		Stats       DashboardStats
 		NewMessages []NewMessageLine
+		Charts      StatsCharts
 	}{
 		pageData: s.page(r),
 		Stats:       s.gatherDashboardStats(u),
 		NewMessages: s.gatherNewMessageLines(u),
+		Charts:      s.gatherStatsCharts(),
 	}
 	s.render(w, "stats.html", data)
 }
@@ -258,15 +260,15 @@ func (s *Server) handleMessageRead(w http.ResponseWriter, r *http.Request) {
 		displayBody = fido.ReconstructSource(fidoSourceOpts(msg, c.EchoTag))
 	}
 	data := struct {
-		pageData
-		Conference        *conferences.Conference
-		Message           *messages.Message
-		CanWrite          bool
-		ShowSourceToggle  bool
-		ShowSource        bool
-		DisplayBody       string
+		messageReadData
+		Conference       *conferences.Conference
+		Message          *messages.Message
+		CanWrite         bool
+		ShowSourceToggle bool
+		ShowSource       bool
+		DisplayBody      string
 	}{
-		pageData:         s.page(r),
+		messageReadData:  readPageData(s, r, msg),
 		Conference:       c,
 		Message:          msg,
 		CanWrite:         canWriteConference(u, c),
@@ -428,13 +430,13 @@ func (s *Server) handleNetmailRead(w http.ResponseWriter, r *http.Request) {
 		displayBody = fido.ReconstructSource(fidoSourceOpts(msg, ""))
 	}
 	data := struct {
-		pageData
+		messageReadData
 		Message     *messages.Message
 		DisplayBody string
 	}{
-		pageData:    s.page(r),
-		Message:     msg,
-		DisplayBody: displayBody,
+		messageReadData: readPageData(s, r, msg),
+		Message:         msg,
+		DisplayBody:     displayBody,
 	}
 	s.render(w, "netmail_read.html", data)
 }
@@ -595,10 +597,20 @@ func (s *Server) handleNodelist(w http.ResponseWriter, r *http.Request) {
 		page = 1
 	}
 	ndb := fido.OpenNodelistDB(s.Deps.Messages.DB())
+	if nd, err := networkDefByName(network); err == nil && nd.IsHub() {
+		cfg := config.Get()
+		if err := fido.RebuildHubNodelistDB(s.Deps.Messages.DB(), nd, cfg.BBS.Name, cfg.Sysop.Name); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 	results, err := ndb.Search(network, query, page, 25)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if results != nil {
+		fido.LinkHostAKAsPtrs(results.Nodes)
 	}
 	data := struct {
 		pageData
@@ -638,6 +650,13 @@ func (s *Server) handleNodelistExport(w http.ResponseWriter, r *http.Request) {
 	query := strings.TrimSpace(r.FormValue("q"))
 	scope := r.FormValue("scope")
 	ndb := fido.OpenNodelistDB(s.Deps.Messages.DB())
+	if nd, err := networkDefByName(network); err == nil && nd.IsHub() {
+		cfg := config.Get()
+		if err := fido.RebuildHubNodelistDB(s.Deps.Messages.DB(), nd, cfg.BBS.Name, cfg.Sysop.Name); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 	var nodes []fido.NodeEntry
 	var err error
 	if scope == "all" {

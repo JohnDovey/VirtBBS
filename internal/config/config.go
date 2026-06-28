@@ -68,8 +68,6 @@ type SessionConfig struct {
 type NetworkConfig struct {
 	TelnetPort   int    `toml:"telnet_port"    json:"telnet_port"`
 	SSHPort      int    `toml:"ssh_port"       json:"ssh_port"`
-	APIPort      int    `toml:"api_port"       json:"api_port"`
-	APIBind      string `toml:"api_bind"       json:"api_bind"`
 	UserAPIPort  int    `toml:"userapi_port"   json:"userapi_port"` // VirtAnd token-authenticated API
 	UserAPIBind  string `toml:"userapi_bind"   json:"userapi_bind"`
 	WebPort      int    `toml:"web_port"       json:"web_port"`      // browser-based BBS UI (internal/web)
@@ -146,8 +144,6 @@ func defaults() *Config {
 		Network: NetworkConfig{
 			TelnetPort:   2323,
 			SSHPort:      3232,
-			APIPort:      9999,
-			APIBind:      "0.0.0.0",
 			UserAPIPort:  9998,
 			UserAPIBind:  "0.0.0.0",
 			WebPort:      8081,

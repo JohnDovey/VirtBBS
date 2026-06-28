@@ -13,8 +13,6 @@
     <h3>{{t .Locale "admin_config.section_ports"}}</h3>
     <label>{{t .Locale "admin_config.telnet"}} <input class="form-control" type="number" name="telnet_port" value="{{.Config.Network.TelnetPort}}"></label>
     <label>{{t .Locale "admin_config.ssh"}} <input class="form-control" type="number" name="ssh_port" value="{{.Config.Network.SSHPort}}"></label>
-    <label>{{t .Locale "admin_config.api_port"}} <input class="form-control" type="number" name="api_port" value="{{.Config.Network.APIPort}}"></label>
-    <label>{{t .Locale "admin_config.api_bind"}} <input class="form-control" name="api_bind" value="{{.Config.Network.APIBind}}"></label>
     <label>{{t .Locale "admin_config.userapi_port"}} <input class="form-control" type="number" name="userapi_port" value="{{.Config.Network.UserAPIPort}}"></label>
     <label>{{t .Locale "admin_config.userapi_bind"}} <input class="form-control" name="userapi_bind" value="{{.Config.Network.UserAPIBind}}"></label>
     <label>{{t .Locale "admin_config.web_port"}} <input class="form-control" type="number" name="web_port" value="{{.Config.Network.WebPort}}"></label>

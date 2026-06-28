@@ -32,6 +32,23 @@
         <li class="nav-item"><a class="nav-link" href="/bulletins" data-nav="/bulletins">{{t .Locale "nav.bulletins"}}</a></li>
         <li class="nav-item"><a class="nav-link" href="/stats" data-nav="/stats">{{t .Locale "nav.stats"}}</a></li>
         <li class="nav-item"><a class="nav-link" href="/online" data-nav="/online">{{t .Locale "nav.online"}}</a></li>
+        {{if .NavNetworks}}
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" data-nav="/networks">{{t .Locale "nav.networks"}}</a>
+          <ul class="dropdown-menu">
+            {{range .NavNetworks}}
+            <li class="dropend">
+              <a class="dropdown-item dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">{{.Name}}</a>
+              <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="/networks/about?network={{.Name | urlquery}}">{{t $.Locale "networks.nav.about"}}</a></li>
+                <li><a class="dropdown-item" href="/nodelist?network={{.Name | urlquery}}">{{t $.Locale "networks.nav.nodelist"}}</a></li>
+                {{if .IsHub}}<li><a class="dropdown-item" href="/networks/map?network={{.Name | urlquery}}">{{t $.Locale "networks.nav.map"}}</a></li>{{end}}
+              </ul>
+            </li>
+            {{end}}
+          </ul>
+        </li>
+        {{end}}
         <li class="nav-item"><a class="nav-link" href="/nodelist" data-nav="/nodelist">{{t .Locale "nav.nodelist"}}</a></li>
         {{if .User.Sysop}}<li class="nav-item"><a class="nav-link" href="/admin" data-nav="/admin">{{t .Locale "nav.admin"}}</a></li>{{end}}
         <li class="nav-item"><a class="nav-link" href="/profile" data-nav="/profile">{{t .Locale "nav.profile"}}</a></li>

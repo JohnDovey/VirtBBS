@@ -49,7 +49,9 @@
       .then(function (r) { return r.json(); })
       .then(function (m) {
         paneEl.innerHTML = '<h3>' + esc(m.Subject) + '</h3>' +
-          '<p class="meta">' + esc(formatFrom(m.FromName, m.MsgNumber)) + '</p>' +
+          '<p class="meta">' + esc(formatFrom(m.FromName, m.MsgNumber)) +
+          (m.LangLabel ? ' <span class="badge bg-secondary">' + esc(m.LangLabel) + '</span>' : '') +
+          '</p>' +
           '<div class="msg-body">' + esc(m.DisplayBody || m.Body) + '</div>';
       });
   }

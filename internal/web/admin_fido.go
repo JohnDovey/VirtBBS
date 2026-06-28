@@ -63,7 +63,7 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 	if lines, path, err := fido.ReadBinkpLogTail(40); err == nil {
 		data.BinkpLogLines, data.BinkpLogPath = lines, path
 	}
-	if st, err := fido.QueryBinkpStats(db, network, "day", time.Now().Format("2006-01-02")); err == nil && st != nil {
+	if st, err := fido.QueryBinkpStatsForPeriod(db, network, "day", time.Now()); err == nil && st != nil {
 		data.BinkpStatsText = fmt.Sprintf("%d network(s), %d link(s) today", len(st.Networks), len(st.Links))
 	}
 

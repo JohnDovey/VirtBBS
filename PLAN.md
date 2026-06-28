@@ -39,7 +39,7 @@ VirtBBS/
 │   ├── config/           # VirtBBS.DAT config + PCBOARD.DAT importer
 │   ├── ansi/             # ANSI escape sequence renderer
 │   ├── callers/          # Callers log
-│   └── api/              # JSON-over-TCP API for remote GUI communication
+│   └── api/              # (removed) — sysop admin is web-only via internal/web
 ├── pkg/
 │   └── pcbformat/        # Shared PCBoard binary format decoders
 │       ├── float4.go     # 4-byte BASIC single-precision float conversion
@@ -63,7 +63,8 @@ VirtBBS/
 - One goroutine per connected user session
 - Session state machine: LOGIN → MAIN_MENU → CONFERENCE → MESSAGE → FILE → DOOR → LOGOFF
 - Multi-node coordination via SQLite (replaces USERNET.XXX binary file)
-- Exposes a JSON-over-TCP management API (`internal/api`) for remote GUI
+- Sysop administration via built-in web UI (`internal/web`, `/admin/*`)
+- VirtAnd user API (`internal/userapi`) — JSON-over-TCP on port 9998 (default)
 
 ### Telnet Layer (`internal/telnet`)
 - RFC 854 Telnet + IAC negotiation
@@ -82,8 +83,8 @@ VirtBBS/
   [network]
   telnet_port = 2323
   ssh_port    = 3232
-  api_port    = 9999       # remote GUI API port
-  api_bind    = "0.0.0.0" # allow remote connections
+  userapi_port = 9998      # VirtAnd token-authenticated API
+  userapi_bind = "0.0.0.0"
 
   [paths]
   db       = "./data/virtbbs.db"
@@ -119,19 +120,11 @@ VirtBBS/
 - Xmodem/Ymodem as fallback (simpler, also pure Go)
 - Protocol selected per-session (stored in user record)
 
-### Remote GUI API (`internal/api`)
-- JSON-over-TCP on configurable port (default 9999), bind address configurable (default `0.0.0.0` for remote access)
-- TLS optional (self-signed cert generated on first run)
-- Authentication: sysop username + password (bcrypt)
-- Endpoints (JSON RPC style):
-  - `nodes.list` — active node status
-  - `users.list/get/update/delete`
-  - `messages.list/get/delete`
-  - `conferences.list/get/update`
-  - `callers.list` — recent callers log
-  - `config.get/update` — VirtBBS.DAT CRUD
-  - `node.chat` — send message to a node
-  - `node.kick` — disconnect a node
+### VirtAnd User API (`internal/userapi`)
+- JSON-over-TCP on configurable port (default 9998), bind address configurable (default `0.0.0.0`)
+- Authentication: per-device API token (created via web profile **[T]okens** or `/profile/tokens`)
+- Endpoints (JSON RPC style): conferences, files, QWK download/upload, FidoNet nodelist search, session info
+- Sysop administration is web-only — not exposed through this API
 
 ### Sysop GUI (`cmd/virtbbs-gui`)
 - **Library**: [Fyne](https://fyne.io) v2 — pure Go, cross-platform (macOS/Linux/Windows), no cgo

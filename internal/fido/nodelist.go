@@ -83,6 +83,7 @@ type NodeEntry struct {
 	Flags    string `json:"flags"`
 	Type     string `json:"type"` // Zone/Host/Hub/Pvt/Hold/Down/Boss/Node
 	Active   bool   `json:"active"`
+	AKA      string `json:"aka,omitempty"` // companion address (e.g. zone:net/0 Host AKA); not stored in DB
 }
 
 // Addr4D returns the 4D address string for this node.

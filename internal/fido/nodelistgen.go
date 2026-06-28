@@ -29,6 +29,8 @@
 //                        (ImportFile) — this is the missing encoder half,
 //                        generating VirtBBS's own outbound nodelist (full +
 //                        a day-over-day diff) for a network it hosts.
+//   v1.4.1  2026-06-28  Host (/0) lines per FTS-0005; sync fido_members into
+//                        fido_nodes for hub search/export; Host AKA pairing.
 // ============================================================================
 
 // Package fido — nodelistgen.go
@@ -50,12 +52,8 @@ import (
 )
 
 // GenerateNodelist builds the full nodelist for nd (a hub network) from
-// fido_members, writes it to nd.NodelistDir, and returns its bytes and
-// filename. hubBBSName/hubSysopName are used for net 1's implicit Host
-// line when no member is explicitly marked is_host for that net — net 1's
-// host is this BBS itself (config.Config isn't importable here, see
-// members.go's saveDownlink comment for why; the caller supplies these
-// two strings instead).
+// fido_members, writes it to nd.NodelistDir, syncs fido_nodes for search,
+// and returns its bytes and filename.
 func GenerateNodelist(db *sql.DB, nd *NetworkDef, hubBBSName, hubSysopName string) ([]byte, string, error) {
 	our := nd.NodeAddr()
 	if our == (Addr{}) {
@@ -67,39 +65,209 @@ func GenerateNodelist(db *sql.DB, nd *NetworkDef, hubBBSName, hubSysopName strin
 		return nil, "", err
 	}
 
-	var b strings.Builder
-	fmt.Fprintf(&b, ";VirtNet nodelist for %q, generated %s\r\n", nd.Name, time.Now().Format(time.RFC3339))
-	fmt.Fprintf(&b, "Zone,%d,%s,%s,%s,-Unpublished-,33600,CM\r\n",
-		our.Zone, nlEncode(hubBBSName), nlEncode("Internet"), nlEncode(hubSysopName))
-
-	byNet := groupByNet(members)
-	nets := sortedNets(byNet)
-	for _, net := range nets {
-		netMembers := byNet[net]
-		host := findHost(netMembers)
-		if host == nil && net == our.Net {
-			// Net 1 (the hub's own net) has an implicit Host: VirtBBS itself.
-			writeNodelistLine(&b, "Host", net, hubBBSName, "Internet", hubSysopName, "")
-		} else if host != nil {
-			writeMemberLine(&b, "Host", host)
-		}
-		for _, m := range netMembers {
-			if host != nil && m.ID == host.ID {
-				continue
-			}
-			writeMemberLine(&b, "", m)
-		}
-	}
+	entries := hubNodelistEntries(nd, members, hubBBSName, hubSysopName)
+	data := encodeNodelistEntries(nd.Name, entries)
 
 	filename := fmt.Sprintf("VirtNode.Z%03d", time.Now().YearDay())
-	data := []byte(b.String())
 	if err := os.MkdirAll(nd.NodelistDir, 0755); err != nil {
 		return nil, "", err
 	}
 	if err := os.WriteFile(filepath.Join(nd.NodelistDir, filename), data, 0644); err != nil {
 		return nil, "", err
 	}
+	if err := rebuildHubNodelistDB(db, nd.Name, entries); err != nil {
+		return data, filename, err
+	}
 	return data, filename, nil
+}
+
+// RebuildHubNodelistDB refreshes fido_nodes from fido_members for a hub
+// network so web/API nodelist search sees every VirtNet member (and each
+// net's Host at zone:net/0 per FTS-0005).
+func RebuildHubNodelistDB(db *sql.DB, nd *NetworkDef, hubBBSName, hubSysopName string) error {
+	if !nd.IsHub() {
+		return nil
+	}
+	mdb := OpenMembersDB(db)
+	members, err := mdb.ListMembers(nd.Name)
+	if err != nil {
+		return err
+	}
+	return rebuildHubNodelistDB(db, nd.Name, hubNodelistEntries(nd, members, hubBBSName, hubSysopName))
+}
+
+func rebuildHubNodelistDB(db *sql.DB, network string, entries []NodeEntry) error {
+	if _, err := db.Exec(`DELETE FROM fido_nodes WHERE network=?`, network); err != nil {
+		return err
+	}
+	ndb := OpenNodelistDB(db)
+	for i := range entries {
+		if err := ndb.UpsertLocalNode(&entries[i]); err != nil {
+			return err
+		}
+	}
+	return RecordNodelistVersion(db, network, len(entries))
+}
+
+// hubNodelistEntries builds VirtNet nodelist rows from fido_members,
+// including Zone and Host (/0) lines per FTS-0005. A net coordinator
+// (IsHost) is listed as Host,N,... (address zone:net/0) and, when their
+// assigned node number is non-zero, also as a regular node line (AKA).
+func hubNodelistEntries(nd *NetworkDef, members []*Member, hubBBSName, hubSysopName string) []NodeEntry {
+	our := nd.NodeAddr()
+	var out []NodeEntry
+
+	out = append(out, NodeEntry{
+		Network: nd.Name, Zone: our.Zone, Net: our.Zone, Node: 0,
+		Name: hubBBSName, Location: "Internet", Sysop: hubSysopName,
+		Phone: "-Unpublished-", Baud: 33600, Flags: "CM", Type: "Zone", Active: true,
+	})
+
+	byNet := groupByNet(members)
+	for _, net := range sortedNets(byNet) {
+		netMembers := byNet[net]
+		host := findHost(netMembers)
+
+		if host != nil {
+			out = append(out, memberAsHostEntry(host))
+			if host.NodeNum != 0 {
+				e := memberAsNodeEntry(host)
+				e.AKA = hostHostAKA(host)
+				out = append(out, e)
+			}
+		} else if net == our.Net {
+			out = append(out, NodeEntry{
+				Network: nd.Name, Zone: our.Zone, Net: net, Node: 0,
+				Name: hubBBSName, Location: "Internet", Sysop: hubSysopName,
+				Phone: "-Unpublished-", Baud: 33600, Type: "Host", Active: true,
+			})
+		}
+
+		for _, m := range netMembers {
+			if host != nil && m.ID == host.ID {
+				continue
+			}
+			out = append(out, memberAsNodeEntry(m))
+		}
+	}
+	LinkHostAKAs(out)
+	return out
+}
+
+func memberAsHostEntry(m *Member) NodeEntry {
+	return NodeEntry{
+		Network: m.Network, Zone: m.Zone, Net: m.Net, Node: 0,
+		Name: m.BBSName, Location: m.Location, Sysop: m.SysopName,
+		Phone: "-Unpublished-", Baud: 33600, Flags: memberIBNFlags(m),
+		Type: "Host", Active: m.IsActive,
+	}
+}
+
+func memberAsNodeEntry(m *Member) NodeEntry {
+	return NodeEntry{
+		Network: m.Network, Zone: m.Zone, Net: m.Net, Node: m.NodeNum, Point: m.Point,
+		Name: m.BBSName, Location: m.Location, Sysop: m.SysopName,
+		Phone: "-Unpublished-", Baud: 33600, Flags: memberIBNFlags(m),
+		Type: "Node", Active: m.IsActive,
+	}
+}
+
+func hostHostAKA(m *Member) string {
+	return fmt.Sprintf("%d:%d/0", m.Zone, m.Net)
+}
+
+func memberIBNFlags(m *Member) string {
+	if m.BinkpHost == "" {
+		return ""
+	}
+	return ",IBN:" + m.BinkpHost
+}
+
+// LinkHostAKAs sets NodeEntry.AKA on paired Host (/0) and regular node rows
+// for the same net coordinator within one result set.
+func LinkHostAKAs(entries []NodeEntry) {
+	type nodeRef struct {
+		idx  int
+		addr string
+	}
+	hostByNet := map[int]int{}
+	nodeByNet := map[int]nodeRef{}
+	for i, e := range entries {
+		if e.Type == "Host" && e.Node == 0 {
+			hostByNet[e.Net] = i
+		}
+		if e.Type == "Node" && e.Node != 0 {
+			if hIdx, ok := hostByNet[e.Net]; ok && entries[hIdx].Name == e.Name {
+				nodeByNet[e.Net] = nodeRef{i, e.Addr4D()}
+			}
+		}
+	}
+	for net, hIdx := range hostByNet {
+		if nr, ok := nodeByNet[net]; ok {
+			entries[hIdx].AKA = nr.addr
+			entries[nr.idx].AKA = hostHostAKAFromEntry(&entries[hIdx])
+		}
+	}
+}
+
+// LinkHostAKAsPtrs is LinkHostAKAs for a slice of pointers from Search.
+func LinkHostAKAsPtrs(nodes []*NodeEntry) {
+	if len(nodes) == 0 {
+		return
+	}
+	entries := make([]NodeEntry, len(nodes))
+	for i, n := range nodes {
+		if n != nil {
+			entries[i] = *n
+		}
+	}
+	LinkHostAKAs(entries)
+	for i := range entries {
+		if nodes[i] != nil {
+			nodes[i].AKA = entries[i].AKA
+		}
+	}
+}
+
+func hostHostAKAFromEntry(e *NodeEntry) string {
+	return fmt.Sprintf("%d:%d/0", e.Zone, e.Net)
+}
+
+func encodeNodelistEntries(network string, entries []NodeEntry) []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, ";VirtNet nodelist for %q, generated %s\r\n", network, time.Now().Format(time.RFC3339))
+	for i := range entries {
+		fmt.Fprintf(&b, "%s\r\n", encodeHubNodeLine(&entries[i]))
+	}
+	return []byte(b.String())
+}
+
+func encodeHubNodeLine(e *NodeEntry) string {
+	keyword := nodelistKeyword(e.Type)
+	num := e.Node
+	switch strings.ToLower(e.Type) {
+	case "zone":
+		num = e.Zone
+	case "region", "host":
+		num = e.Net
+	}
+	phone := e.Phone
+	if phone == "" {
+		phone = "-Unpublished-"
+	}
+	baud := e.Baud
+	if baud == 0 {
+		baud = 33600
+	}
+	flags := e.Flags
+	if keyword == "" {
+		return fmt.Sprintf(",%d,%s,%s,%s,%s,%d,%s",
+			num, nlEncode(e.Name), nlEncode(e.Location), nlEncode(e.Sysop),
+			phone, baud, flags)
+	}
+	return fmt.Sprintf("%s,%d,%s,%s,%s,%s,%d,%s",
+		keyword, num, nlEncode(e.Name), nlEncode(e.Location), nlEncode(e.Sysop),
+		phone, baud, flags)
 }
 
 func groupByNet(members []*Member) map[int][]*Member {
@@ -128,12 +296,19 @@ func findHost(members []*Member) *Member {
 	return nil
 }
 
+func writeHostMemberLine(b *strings.Builder, m *Member) {
+	writeNodelistLine(b, "Host", m.Net, m.BBSName, m.Location, m.SysopName, memberIBNFlags(m))
+}
+
 func writeMemberLine(b *strings.Builder, keyword string, m *Member) {
-	flags := ""
-	if m.BinkpHost != "" {
-		flags = ",IBN:" + m.BinkpHost
+	if keyword == "Host" || (keyword == "" && m.IsHost) {
+		writeHostMemberLine(b, m)
+		if m.NodeNum != 0 {
+			writeNodelistLine(b, "", m.NodeNum, m.BBSName, m.Location, m.SysopName, memberIBNFlags(m))
+		}
+		return
 	}
-	writeNodelistLine(b, keyword, m.NodeNum, m.BBSName, m.Location, m.SysopName, flags)
+	writeNodelistLine(b, keyword, m.NodeNum, m.BBSName, m.Location, m.SysopName, memberIBNFlags(m))
 }
 
 func writeNodelistLine(b *strings.Builder, keyword string, num int, bbsName, location, sysop, extraFlags string) {
@@ -178,9 +353,9 @@ func SnapshotMembers(db *sql.DB, network string) error {
 }
 
 type snapshotEntry struct {
-	zone, net, node, point        int
-	bbsName, sysopName, location  string
-	flags                          string
+	zone, net, node, point       int
+	bbsName, sysopName, location string
+	flags                        string
 }
 
 // GenerateNodelistDiff diffs today's fido_members against the most recent

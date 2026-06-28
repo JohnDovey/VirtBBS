@@ -95,7 +95,7 @@ max_nodes = 10              # Maximum simultaneous connections
 [network]
 telnet_port = 2323          # Telnet listen port
 ssh_port    = 3232          # SSH listen port
-api_port    = 9999          # JSON/TCP management API (scripts/automation)
+userapi_port = 9998          # VirtAnd JSON-over-TCP API (token auth)
 web_port    = 8081          # Browser BBS + sysop admin UI
 web_bind    = "0.0.0.0"
 
@@ -145,11 +145,10 @@ bin/virtbbs
 The server will log startup messages:
 
 ```
-2026/06/25 12:00:00 VirtBBS 1.4.0 starting
+2026/06/25 12:00:00 VirtBBS 1.5.0 starting
 2026/06/25 12:00:00 Telnet listening on :2323
 2026/06/25 12:00:00 SSH listening on :3232
-2026/06/25 12:00:00 Management API listening on 0.0.0.0:9999
-2026/06/25 12:00:00 User API listening on 0.0.0.0:9998
+2026/06/25 12:00:00 User API (VirtAnd) listening on 0.0.0.0:9998
 2026/06/25 12:00:00 Web UI listening on 0.0.0.0:8081 (www: www)
 ```
 
@@ -189,7 +188,7 @@ http://localhost:8081/admin
 
 From there you can manage users, online nodes, BBS configuration, conferences, file areas, callers log, FidoNet settings, BinkP, and VirtAnd API tokens. See `www/README.md` for the complete route list.
 
-The JSON/TCP management API (port 9999) remains available for scripts and automation; the web admin uses Go handlers directly rather than calling that API.
+The VirtAnd user API (port 9998) is a separate JSON-over-TCP endpoint for the Android point client only; sysop administration uses the web UI directly.
 
 ---
 
@@ -300,9 +299,9 @@ To allow callers from the internet, open the following ports on your firewall/ro
 |---|---|---|
 | 2323 | TCP | Telnet BBS access |
 | 3232 | TCP | SSH BBS access |
-| 9999 | TCP | Sysop API (restrict to trusted IPs) |
+| 9998 | TCP | VirtAnd user API (token auth; restrict to trusted IPs) |
 
-> **Security:** Consider binding `api_bind` to `127.0.0.1` if running the GUI only on the same machine, or use an SSH tunnel for remote access.
+> **Security:** Consider binding `userapi_bind` to `127.0.0.1` if VirtAnd connects only on the same machine, or use an SSH tunnel for remote access.
 
 ---
 
@@ -354,4 +353,4 @@ make sure you've fully stopped the old process before starting the new one.
 
 ## Version
 
-This guide covers VirtBBS **1.4.0**.
+This guide covers VirtBBS **1.5.0**.

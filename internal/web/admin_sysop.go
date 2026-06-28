@@ -35,8 +35,6 @@ func (s *Server) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		merged.BBS.MaxNodes = formInt(r, "max_nodes", merged.BBS.MaxNodes)
 		merged.Network.TelnetPort = formInt(r, "telnet_port", merged.Network.TelnetPort)
 		merged.Network.SSHPort = formInt(r, "ssh_port", merged.Network.SSHPort)
-		merged.Network.APIPort = formInt(r, "api_port", merged.Network.APIPort)
-		merged.Network.APIBind = strings.TrimSpace(r.FormValue("api_bind"))
 		merged.Network.UserAPIPort = formInt(r, "userapi_port", merged.Network.UserAPIPort)
 		merged.Network.UserAPIBind = strings.TrimSpace(r.FormValue("userapi_bind"))
 		merged.Network.WebPort = formInt(r, "web_port", merged.Network.WebPort)

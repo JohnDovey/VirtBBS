@@ -28,11 +28,11 @@ func WriteBinkpStatsBulletins(db *sql.DB, displayDir, bbsName string) error {
 	yesterday := time.Now().Add(-24 * time.Hour)
 	dayKey := yesterday.Format("2006-01-02")
 
-	dayStats, err := QueryBinkpStats(db, "", "day", dayKey)
+	dayStats, err := QueryBinkpStatsForPeriod(db, "", "24h", time.Now())
 	if err != nil {
 		return fmt.Errorf("daily stats: %w", err)
 	}
-	allStats, err := QueryBinkpStats(db, "", "all", "")
+	allStats, err := QueryBinkpStatsForPeriod(db, "", "all", time.Now())
 	if err != nil {
 		return fmt.Errorf("all-time stats: %w", err)
 	}
@@ -58,7 +58,7 @@ func renderStatsBulletin(bbsName, title string, q *BinkpStatsQueryResult) string
 	b.WriteString(ansi.Colorize(ansi.BrightBlack, bbsName))
 	b.WriteString("\r\n\r\n")
 
-	if len(q.Networks) == 0 {
+	if len(q.Networks) == 0 && len(q.Links) == 0 {
 		b.WriteString(ansi.Colorize(ansi.Yellow, "  No BinkP activity recorded for this period."))
 		b.WriteString("\r\n")
 		return b.String()
@@ -88,6 +88,10 @@ func renderStatsBulletin(bbsName, title string, q *BinkpStatsQueryResult) string
 		b.WriteString("\r\n")
 
 		links := filterLinks(q.Links, n.Network)
+		if len(links) == 0 && networkPollTotal(n) == 0 && n.TossImported == 0 &&
+			n.NetmailRecv+n.NetmailSent+n.EchomailRecv+n.EchomailSent == 0 {
+			continue
+		}
 		if len(links) > 0 {
 			b.WriteString(ansi.Colorize(ansi.BrightYellow, "  Link detail:"))
 			b.WriteString("\r\n")
@@ -104,6 +108,12 @@ func renderStatsBulletin(bbsName, title string, q *BinkpStatsQueryResult) string
 	b.WriteString(ansi.Colorize(ansi.BrightBlack, "  Generated "+time.Now().Format(time.RFC3339)))
 	b.WriteString("\r\n")
 	return b.String()
+}
+
+func networkPollTotal(n BinkpStatsRow) int {
+	return n.PollClientOK + n.PollClientFail +
+		n.PollServerUplinkOK + n.PollServerUplinkFail +
+		n.PollServerDownlinkOK + n.PollServerDownlinkFail
 }
 
 func filterLinks(links []BinkpLinkStatsRow, network string) []BinkpLinkStatsRow {

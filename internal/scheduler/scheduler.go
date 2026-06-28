@@ -98,10 +98,11 @@ func Start(store *messages.Store, confStore *conferences.Store, fileStore *files
 }
 
 // runDayRollover regenerates a hub network's VirtNet nodelist/diff/change-
-// log/diagrams once every 24h (and once immediately at startup), and
-// drains any pending inbound nodelist echoes (fido.ProcessPendingNodelistEchoes)
-// once per minute — fast enough that a freshly-tossed echo is applied
-// locally well within the same session a sysop might check it in.
+// log/diagrams once every 24h, and once immediately at startup (files only —
+// no echo conference posts until the first daily rollover). Also drains any
+// pending inbound nodelist echoes (fido.ProcessPendingNodelistEchoes) once
+// per minute — fast enough that a freshly-tossed echo is applied locally
+// well within the same session a sysop might check it in.
 func runDayRollover(networkName string, store *messages.Store, confStore *conferences.Store, fileStore *files.Store, stop <-chan struct{}) {
 	nd := config.Get().Fido.NetworkByName(networkName)
 	if nd == nil {
@@ -109,18 +110,18 @@ func runDayRollover(networkName string, store *messages.Store, confStore *confer
 	}
 	log.Printf("virtnet scheduler: %s — day-rollover nodelist generation, daily", networkName)
 
-	runRollover := func() {
+	runRollover := func(publish bool) {
 		cfg := config.Get()
 		nd := cfg.Fido.NetworkByName(networkName)
 		if nd == nil || !nd.Enabled || !nd.IsHub() {
 			return
 		}
-		warnings := fido.RunDayRollover(nd, store.DB(), confStore, store, fileStore, cfg.BBS.Name, cfg.Sysop.Name)
+		warnings := fido.RunDayRollover(nd, store.DB(), confStore, store, fileStore, cfg.BBS.Name, cfg.Sysop.Name, publish)
 		for _, w := range warnings {
 			log.Printf("virtnet scheduler: %s rollover warning: %s", networkName, w)
 		}
 	}
-	runRollover() // once at startup, so a freshly-configured hub has a nodelist immediately
+	runRollover(false) // startup: regenerate files locally, defer echo posts to daily rollover
 
 	dayTicker := time.NewTicker(24 * time.Hour)
 	defer dayTicker.Stop()
@@ -132,7 +133,7 @@ func runDayRollover(networkName string, store *messages.Store, confStore *confer
 		case <-stop:
 			return
 		case <-dayTicker.C:
-			runRollover()
+			runRollover(true)
 		case <-echoTicker.C:
 			nd := config.Get().Fido.NetworkByName(networkName)
 			if nd == nil || !nd.Enabled || !nd.IsHub() {

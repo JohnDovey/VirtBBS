@@ -73,6 +73,9 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/profile", s.handleProfile)
 	mux.HandleFunc("/nodelist", s.handleNodelist)
 	mux.HandleFunc("/nodelist/export", s.handleNodelistExport)
+	mux.HandleFunc("/networks/about", s.handleNetworkAbout)
+	mux.HandleFunc("/networks/map", s.handleNetworkMap)
+	mux.HandleFunc("/networks/diagram", s.handleNetworkDiagram)
 	mux.HandleFunc("/qwk", s.handleQWK)
 	mux.HandleFunc("/subscriptions", s.handleSubscriptions)
 	mux.HandleFunc("/search", s.handleSearch)
@@ -125,6 +128,8 @@ func (s *Server) templates() (*template.Template, error) {
 			},
 			"t": func(locale, key string) string { return tr(locale, key) },
 			"tf": func(locale, key string, args ...any) string { return trf(locale, key, args...) },
+			"formatSize": func(locale string, bytes int64) string { return formatDataSize(bytes, locale) },
+			"chartData": func(c StatsCharts) template.JS { return template.JS(c.ChartJSON()) },
 			"webOp": func(locale, op string) string { return translateWebOp(locale, op) },
 			"safeHTML": func(s string) template.HTML { return template.HTML(s) },
 		}
@@ -149,11 +154,12 @@ func (s *Server) render(w http.ResponseWriter, name string, data any) {
 }
 
 type pageData struct {
-	BBSName string
-	User    *users.User
-	Flash   string
-	Error   string
-	Locale  string
+	BBSName     string
+	User        *users.User
+	Flash       string
+	Error       string
+	Locale      string
+	NavNetworks []NetworkNavItem
 }
 
 func (s *Server) base(r *http.Request) pageData {

@@ -55,12 +55,11 @@ GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/virtbbs
 |---|---|
 | Telnet | 2323 |
 | SSH | 3232 |
-| Sysop API | 9999 |
 | User API (VirtAnd) | 9998 |
 | Web UI (HTTP) | 8081 |
 | BinkP (FidoNet, per network) | 24554 |
 
-Change Telnet/SSH/API ports in `VirtBBS.DAT` under `[network]`. FidoNet
+Change Telnet/SSH/User API/Web ports in `VirtBBS.DAT` under `[network]`. FidoNet
 mail directories (`fido/inbound`, `fido/<Name>_inbound`, etc.) are created
 automatically when config is saved.
 

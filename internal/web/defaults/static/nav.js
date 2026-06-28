@@ -39,6 +39,12 @@
       }
     });
 
+    $('#mainNav .dropdown-item[href]').on('click', function () {
+      if (window.matchMedia('(max-width: 991.98px)').matches) {
+        collapseNavOnMobile();
+      }
+    });
+
     highlightActiveNav();
   });
 })(jQuery);

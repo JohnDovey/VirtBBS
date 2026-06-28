@@ -7,6 +7,7 @@
   <p class="meta">
     {{t .Locale "common.from"}} <strong>{{.Message.FromName}}</strong> {{t .Locale "read.to_prefix"}} {{.Message.ToName}}
     · {{.Message.DatePosted.Format "2006-01-02 15:04"}}
+    {{if .LangLabel}}<span class="badge bg-secondary ms-1" title="{{t .Locale "read.lang_title"}}">{{.LangLabel}}</span>{{end}}
   </p>
   {{if .Message.FidoOrigin}}
   <p class="meta fido-source-hint">{{t .Locale "read.fido_origin"}} {{.Message.FidoOrigin}}</p>

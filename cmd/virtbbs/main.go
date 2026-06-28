@@ -36,7 +36,7 @@
 //   v0.13.0 2026-06-28  Start internal/web HTTP listener on WebBind:WebPort
 // ============================================================================
 
-// virtbbs is the VirtBBS server — Telnet + SSH BBS with a built-in management API.
+// virtbbs is the VirtBBS server — Telnet + SSH BBS with web UI and VirtAnd user API.
 package main
 
 import (
@@ -54,7 +54,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
-	"github.com/virtbbs/virtbbs/internal/api"
 	"github.com/virtbbs/virtbbs/internal/callers"
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/config"
@@ -327,24 +326,11 @@ func main() {
 		fido.EnsureAllNetworkOwnNodes(sqlDB, cfg.Fido.AllNetworks(), cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort)
 	}
 
-	// Start management API
-	apiAddr := fmt.Sprintf("%s:%d", cfg.Network.APIBind, cfg.Network.APIPort)
 	log.Printf("VirtBBS %s starting", version.Version)
-	log.Printf("Management API listening on %s", apiAddr)
-	apiDeps := api.Deps{
-		Users:       userStore,
-		Messages:    msgStore,
-		Nodes:       nodeStore,
-		Callers:     callersLog,
-		Conferences: confStore,
-		Files:       fileStore,
-	}
-	apiSrv := &api.Server{Addr: apiAddr, Deps: apiDeps}
 
-	// Start the user-facing API (VirtAnd) — token-authenticated,
-	// separate port/trust-boundary from the sysop-only management API above.
+	// User API (VirtAnd) — token-authenticated JSON-over-TCP on a separate port.
 	userAPIAddr := fmt.Sprintf("%s:%d", cfg.Network.UserAPIBind, cfg.Network.UserAPIPort)
-	log.Printf("User API listening on %s", userAPIAddr)
+	log.Printf("User API (VirtAnd) listening on %s", userAPIAddr)
 	userAPIDeps := userapi.Deps{
 		Users:       userStore,
 		Messages:    msgStore,
@@ -352,11 +338,6 @@ func main() {
 		Files:       fileStore,
 	}
 	userAPISrv := &userapi.Server{Addr: userAPIAddr, Deps: userAPIDeps}
-	go func() {
-		if err := userAPISrv.ListenAndServe(); err != nil {
-			log.Printf("User API error: %v", err)
-		}
-	}()
 
 	// Start the browser-based BBS web UI (templates/static from paths.www).
 	webAddr := fmt.Sprintf("%s:%d", cfg.Network.WebBind, cfg.Network.WebPort)
@@ -378,7 +359,7 @@ func main() {
 
 	go watchVolume(cfg.Paths.DB)
 
-	log.Fatal(apiSrv.ListenAndServe())
+	log.Fatal(userAPISrv.ListenAndServe())
 }
 
 // watchVolume periodically confirms dbPath (and its containing directory)

@@ -57,12 +57,11 @@ The **web UI** is the primary interface for everyday use and all sysop administr
 ```
 VirtBBS/
 ├── cmd/
-│   └── virtbbs/           # BBS server (Telnet + SSH + API + userapi + web)
+│   └── virtbbs/           # BBS server (Telnet + SSH + userapi + web)
 ├── android/
 │   └── VirtAnd/           # Android point client (Kotlin) — offline-first, QWK/REP sync
 ├── www/                   # Web UI templates and static assets (seeded from internal/web/defaults)
 ├── internal/
-│   ├── api/               # JSON-over-TCP sysop management API (scripts/automation)
 │   ├── fido/              # FidoNet BinkP, toss, scan, netmail, nodelist
 │   ├── messages/          # Message base (SQLite)
 │   ├── qwk/               # Real legacy QWK/REP binary offline-mail packets
@@ -94,8 +93,7 @@ See `www/README.md` for the full web route list and feature checklist.
 
 - Telnet (2323) and SSH (3232) — one goroutine per caller
 - Web UI (8081) — HTML templates + static assets from `paths.www`
-- User API (9998) — VirtAnd token-authenticated JSON-over-TCP
-- Sysop API (9999) — JSON-over-TCP for scripts/automation (optional; web admin uses Go handlers directly)
+- User API (9998) — VirtAnd-only token-authenticated JSON-over-TCP
 - FidoNet BinkP, toss/scan scheduler when `[fido] enabled = true`
 - `--init-sysop` bootstraps the first sysop account
 
@@ -105,7 +103,6 @@ See `www/README.md` for the full web route list and feature checklist.
 |---------|------|
 | Telnet | 2323 |
 | SSH | 3232 |
-| Sysop API | 9999 |
 | User API (VirtAnd) | 9998 |
 | Web UI (HTTP) | 8081 |
 | BinkP (FidoNet, per network) | 24554 |
@@ -189,7 +186,7 @@ Log in with your BBS username and password. Sysops see **Admin** in the navigati
 | Minor (x.**N**.0) | Bumped on significant feature additions |
 | Major (**N**.0.0) | Bumped on explicit request |
 
-Current version: **1.4.0**
+Current version: **1.5.0**
 
 ---
 
