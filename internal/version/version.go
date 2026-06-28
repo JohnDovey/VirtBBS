@@ -298,4 +298,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "1.6.1"
+const Version = "1.6.2"
