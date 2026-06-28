@@ -53,8 +53,47 @@ All FidoNet settings live under the `[fido]` table in `VirtBBS.DAT`:
 | `[fido.file_areas]` | Maps FileFix tags to local file directory IDs — see §9.1. |
 | `[fido.areas]` | Maps echomail `AREA:` tags to local conference IDs — see §3. |
 | `[[fido.downlinks]]` | Systems that subscribe to our echomail areas via AreaFix — see §8.1. |
+| `node_flags` | Capability flags for **this BBS's own** nodelist entry — see §1.1. |
+| `binkp_host` | Hostname:port advertised in IBN/INA flags when those flags are enabled. |
 
 > **Address format reminder:** VirtBBS only understands the standard 4D form `zone:net/node[.point]`. There is no separate "domain" field (e.g. `.fidonet.org`) — that's a FidoNet Internet-gateway concept VirtBBS does not implement.
+
+### 1.1 Node capability flags (`node_flags`)
+
+Each network entry can declare what services this node offers via standard FTS-0005 nodelist flags. Configure them in the sysop GUI **Network Setup → Node Capabilities** section, in `VirtBBS.DAT`, or via the `fido.network.flags.update` API.
+
+| Flag | Meaning |
+|------|---------|
+| IBN | Internet BinkP Node — accepts BinkP connections; may include hostname and port |
+| INA | Internet Address — hostname for internet connectivity |
+| ITN | Internet Telnet Node |
+| CM | Continuous Mail — accepts connections 24 hours |
+| MO | Mail Only — no interactive users |
+| BEER | Sysop drinks beer |
+| TRACE | Trace requests honoured |
+| PING | Ping requests honoured |
+
+**Defaults for new VirtTerm/VirtBBS networks:** `IBN`, `ITN`, `BEER`, `TRACE`, `PING`.
+
+Example:
+
+```toml
+[fido]
+  node_flags = ["IBN", "ITN", "BEER", "TRACE", "PING"]
+  binkp_host = "bbs.example.com:24554"
+```
+
+When you save node capabilities (GUI **Save Node Capabilities** or `fido.network.flags.update`):
+
+1. Flags are persisted in `VirtBBS.DAT` under `node_flags` / `binkp_host`.
+2. The **local nodelist** (`fido_nodes` table) entry for this node's address is updated (system name, sysop, flags).
+3. A **NODEDIFF** file (`NODEDIFF.DDD` in `nodelist_dir`) is written for this node only.
+4. **Netmail** is queued to the configured **uplink** with subject `NODEDIFF for zone:net/node` and the diff in the body. Hub networks with no uplink skip netmail and keep the diff file locally.
+
+API helpers:
+
+- `fido.network.flags.list` — returns all known flags with descriptions (for the GUI).
+- `fido.network.flags.update` — `{ "network": "FidoNet", "node_flags": ["IBN", ...], "binkp_host": "host:24554" }`.
 
 ---
 
@@ -201,6 +240,22 @@ to view recent sessions, or call the `fido.binkp.log` management API
 
 Lines are prefixed `binkp server:` or `binkp client:` / `fido scheduler:`
 as appropriate, with the network name in brackets where relevant.
+
+### 6.1.1 BinkP statistics and bulletins
+
+VirtBBS records BinkP/FidoNet counters in SQLite (`fido_binkp_stats` and
+`fido_binkp_link_stats`), aggregated per network by **day**, **month**,
+**year**, and **all-time**. Counters include outbound poll success/failure,
+inbound uplink/downlink sessions, files sent/received, netmail and echomail
+sent/received, toss imported/skipped/held, and session errors. Per-link
+breakdowns are kept for configured uplinks and downlinks.
+
+- **Sysop GUI:** FidoNet → Operations → **BinkP Stats** (period selector)
+- **API:** `fido.binkp.stats` (params: `{"network":"","period":"day","period_key":"2026-06-27"}`)
+- **ANSI bulletins:** at local midnight the server overwrites
+  `<session.display_dir>/BINKPDAY.ANS` (previous calendar day's stats) and
+  `<session.display_dir>/BINKPALL.ANS` (all-time). Both are also refreshed
+  once at startup. Display them like any other PCBoard display file.
 
 > **Limitation:** outbound routing is filename-based (matching the destination address tag scan.go embeds in the filename), not directory-based — there's no per-link outbound subdirectory structure (the BSO "outbound.flo" convention). This is sufficient for the AreaFix downlink fan-out this server was built to support, but isn't a full general-purpose FTN mailer's routing model.
 

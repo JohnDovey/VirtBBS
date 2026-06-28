@@ -63,12 +63,18 @@ const PrimaryNetworkName = "FidoNet"
 
 // TossResult summarises the outcome of a toss run.
 type TossResult struct {
-	Packets     int // .PKT files processed
-	Imported    int // messages inserted
-	Skipped     int // messages ignored (duplicate, etc.)
-	Orphaned    int // messages held for sysop review
-	OrphanNotes []OrphanNote
-	Errors      []string
+	Packets          int // .PKT files processed
+	Imported         int // messages inserted
+	Skipped          int // messages ignored (duplicate, etc.)
+	Orphaned         int // messages held for sysop review
+	NetmailImported  int
+	EchomailImported int
+	NetmailSkipped   int
+	EchomailSkipped  int
+	NetmailHeld      int
+	EchomailHeld     int
+	OrphanNotes      []OrphanNote
+	Errors           []string
 }
 
 // TossAll tosses every enabled network's inbound directory in turn,
@@ -133,11 +139,17 @@ func TossDir(nd *NetworkDef, store *messages.Store, confStore *conferences.Store
 		}
 
 		pktPath := filepath.Join(nd.InboundDir, e.Name())
-		imp, skip, orphans, notes, errs := tossFile(nd, store, confStore, pktPath)
+		imp, skip, orphans, ni, ei, ns, es, nh, eh, notes, errs := tossFile(nd, store, confStore, pktPath)
 		result.Packets++
 		result.Imported += imp
 		result.Skipped += skip
 		result.Orphaned += orphans
+		result.NetmailImported += ni
+		result.EchomailImported += ei
+		result.NetmailSkipped += ns
+		result.EchomailSkipped += es
+		result.NetmailHeld += nh
+		result.EchomailHeld += eh
 		result.OrphanNotes = append(result.OrphanNotes, notes...)
 		result.Errors = append(result.Errors, errs...)
 
@@ -151,16 +163,20 @@ func TossDir(nd *NetworkDef, store *messages.Store, confStore *conferences.Store
 			result.Errors = append(result.Errors, fmt.Sprintf("sysop notify: %v", err))
 		}
 	}
+	RecordToss(nd.Name, result)
 	return result, nil
 }
 
 // TossFile processes a single .PKT file, importing its messages.
 func TossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName, pktPath string) (imported, skipped, orphaned int, notes []OrphanNote, errs []string) {
-	imp, sk, orph, nts, es := tossFile(nd, store, confStore, pktPath)
+	imp, sk, orph, _, _, _, _, _, _, nts, es := tossFile(nd, store, confStore, pktPath)
 	return imp, sk, orph, nts, es
 }
 
-func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, pktPath string) (imported, skipped, orphaned int, notes []OrphanNote, errs []string) {
+func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, pktPath string) (
+	imported, skipped, orphaned, netImported, echoImported, netSkipped, echoSkipped, netHeld, echoHeld int,
+	notes []OrphanNote, errs []string,
+) {
 	f, err := os.Open(pktPath)
 	if err != nil {
 		errs = append(errs, fmt.Sprintf("%s: %v", pktPath, err))
@@ -231,8 +247,10 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 				if note, err := HoldOrphanMessage(nd, pm, "NOT_FOR_US"); err != nil {
 					errs = append(errs, fmt.Sprintf("hold netmail: %v", err))
 					skipped++
+					netSkipped++
 				} else {
 					orphaned++
+					netHeld++
 					notes = append(notes, note)
 				}
 				continue
@@ -248,8 +266,10 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 				if note, err := HoldOrphanMessage(nd, pm, "UNKNOWN_AREA"); err != nil {
 					errs = append(errs, fmt.Sprintf("hold echomail: %v", err))
 					skipped++
+					echoSkipped++
 				} else {
 					orphaned++
+					echoHeld++
 					notes = append(notes, note)
 				}
 				continue
@@ -278,6 +298,11 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 				errs = append(errs, fmt.Sprintf("dedupe check: %v", err))
 			} else if exists {
 				skipped++
+				if isNetmail {
+					netSkipped++
+				} else {
+					echoSkipped++
+				}
 				continue
 			}
 		}
@@ -306,13 +331,28 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 			if note, holdErr := HoldOrphanMessage(nd, pm, "INSERT_FAILED"); holdErr != nil {
 				errs = append(errs, fmt.Sprintf("hold after insert fail: %v", holdErr))
 				skipped++
+				if isNetmail {
+					netSkipped++
+				} else {
+					echoSkipped++
+				}
 			} else {
 				orphaned++
+				if isNetmail {
+					netHeld++
+				} else {
+					echoHeld++
+				}
 				notes = append(notes, note)
 			}
 			continue
 		}
 		imported++
+		if isNetmail {
+			netImported++
+		} else {
+			echoImported++
+		}
 	}
 	return
 }

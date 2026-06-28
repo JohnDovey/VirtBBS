@@ -44,3 +44,22 @@ func networkDef(name string) (*fido.NetworkDef, error) {
 	}
 	return nd, nil
 }
+
+func saveNetworkNodeFlags(networkName string, flags []string, binkpHost string) error {
+	cfg := config.Get()
+	merged := *cfg
+	if strings.EqualFold(networkName, cfg.Fido.EffectivePrimaryName()) {
+		merged.Fido.NodeFlags = flags
+		merged.Fido.BinkpHost = binkpHost
+		return config.Save(&merged)
+	}
+	merged.Fido.Networks = append([]fido.NetworkDef{}, cfg.Fido.Networks...)
+	for i := range merged.Fido.Networks {
+		if strings.EqualFold(merged.Fido.Networks[i].Name, networkName) {
+			merged.Fido.Networks[i].NodeFlags = flags
+			merged.Fido.Networks[i].BinkpHost = binkpHost
+			return config.Save(&merged)
+		}
+	}
+	return fmt.Errorf("network %q not found", networkName)
+}

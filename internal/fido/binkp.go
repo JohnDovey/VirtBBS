@@ -132,16 +132,20 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB)
 
 	// Wait for remote M_ADR before sending password.
 	if err := bp.waitForADR(); err != nil {
-		res.Error = err; return res
+		res.Error = fmt.Errorf("handshake ADR (%s): %w", target, err); return res
 	}
 
-	if err := bp.sendCmd(bpM_PWD, nd.Password); err != nil {
-		res.Error = err; return res
+	pwd := nd.Password
+	if pwd == "" {
+		pwd = "-"
+	}
+	if err := bp.sendCmd(bpM_PWD, pwd); err != nil {
+		res.Error = fmt.Errorf("handshake PWD (%s): %w", target, err); return res
 	}
 
 	// Wait for M_OK or M_ERR.
 	if err := bp.waitForAuth(); err != nil {
-		res.Error = err; return res
+		res.Error = fmt.Errorf("handshake auth (%s): %w", target, err); return res
 	}
 
 	// ── Send outbound files ───────────────────────────────────────────────────
@@ -160,7 +164,7 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB)
 	// ── Receive inbound files until remote EOB ────────────────────────────────
 	received, err := bp.receiveUntilEOB(inboundDir)
 	if err != nil {
-		res.Error = err; return res
+		res.Error = fmt.Errorf("receive (%s): %w", target, err); return res
 	}
 	res.Received = received
 
@@ -185,23 +189,26 @@ type PollAndTossResult struct {
 // the "fido.poll" management API, and the automatic scheduler, so all three
 // behave identically.
 func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string) *PollAndTossResult {
-	var outFiles []string
-	entries, _ := os.ReadDir(nd.OutboundDir)
-	for _, e := range entries {
-		if !e.IsDir() {
-			outFiles = append(outFiles, filepath.Join(nd.OutboundDir, e.Name()))
-		}
-	}
+	uplink := nd.UplinkAddr()
+	outFiles := binkpOutboundFilesFor(nd, nil, uplink)
 
 	pollResult := Poll(nd, outFiles, nd.InboundDir, store.DB())
 	result := &PollAndTossResult{Poll: pollResult}
+	uplinkKey := nd.Uplink
 	if pollResult.Error != nil {
 		logPollResult(nd.Name, "client", len(pollResult.Sent), len(pollResult.Received), pollResult.Error)
+		RecordClientPoll(nd.Name, uplinkKey, false, len(pollResult.Sent), len(pollResult.Received))
 		return result
 	}
 
+	sentBase := make(map[string]bool, len(pollResult.Sent))
 	for _, f := range pollResult.Sent {
-		_ = os.Remove(filepath.Join(nd.OutboundDir, f))
+		sentBase[f] = true
+	}
+	for _, full := range outFiles {
+		if sentBase[filepath.Base(full)] {
+			_ = os.Remove(full)
+		}
 	}
 
 	tossResult, err := TossDir(nd, store, confStore, sysopName)
@@ -211,6 +218,7 @@ func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.S
 	result.Toss = tossResult
 	logPollResult(nd.Name, "client", len(pollResult.Sent), len(pollResult.Received), nil)
 	logTossResult(nd.Name, "client", result.Toss)
+	RecordClientPoll(nd.Name, uplinkKey, true, len(pollResult.Sent), len(pollResult.Received))
 	return result
 }
 
@@ -292,6 +300,7 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	peerAddrs, err := binkpWaitForADRAddrs(bp)
 	if err != nil {
 		LogBinkp(fmt.Sprintf("binkp server: handshake error from %s: %v", conn.RemoteAddr(), err))
+		RecordSessionError("")
 		return
 	}
 
@@ -299,6 +308,7 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	if nd == nil {
 		_ = bp.sendCmd(bpM_ERR, "unknown system")
 		LogBinkp(fmt.Sprintf("binkp server: rejected unknown peer %v from %s", peerAddrs, conn.RemoteAddr()))
+		RecordSessionError("")
 		return
 	}
 
@@ -306,15 +316,35 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	if !isUplink && dl != nil {
 		wantPassword = dl.Password
 	}
+	linkType := "downlink"
+	peerKey := ""
+	if isUplink {
+		linkType = "uplink"
+		peerKey = nd.Uplink
+	} else if dl != nil {
+		if dl.Address != "" {
+			peerKey = dl.Address
+		} else {
+			peerKey = dl.Name
+		}
+	}
+	if peerKey == "" && len(peerAddrs) > 0 {
+		peerKey = peerAddrs[0]
+	}
+
 	if wantPassword != "" {
 		gotPwd, err := binkpWaitForPWD(bp)
 		if err != nil {
 			LogBinkp(fmt.Sprintf("binkp server [%s]: password handshake error: %v", nd.Name, err))
+			RecordSessionError(nd.Name)
+			RecordServerSession(nd.Name, linkType, peerKey, false, 0, 0)
 			return
 		}
 		if gotPwd != wantPassword {
 			_ = bp.sendCmd(bpM_ERR, "bad password")
 			LogBinkp(fmt.Sprintf("binkp server [%s]: bad password from %v", nd.Name, peerAddrs))
+			RecordSessionError(nd.Name)
+			RecordServerSession(nd.Name, linkType, peerKey, false, 0, 0)
 			return
 		}
 	}
@@ -324,11 +354,15 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 
 	if err := os.MkdirAll(nd.InboundDir, 0755); err != nil {
 		LogBinkp(fmt.Sprintf("binkp server [%s]: %v", nd.Name, err))
+		RecordSessionError(nd.Name)
+		RecordServerSession(nd.Name, linkType, peerKey, false, 0, 0)
 		return
 	}
 	received, err := bp.receiveUntilEOB(nd.InboundDir)
 	if err != nil {
 		LogBinkp(fmt.Sprintf("binkp server [%s]: receive error: %v", nd.Name, err))
+		RecordSessionError(nd.Name)
+		RecordServerSession(nd.Name, linkType, peerKey, false, 0, len(received))
 		return
 	}
 
@@ -353,6 +387,7 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	}
 	LogBinkp(fmt.Sprintf("binkp server [%s]: session with %s (%v) complete — received %d, sent %d",
 		nd.Name, who, peerAddrs, len(received), len(sent)))
+	RecordServerSession(nd.Name, linkType, peerKey, true, len(sent), len(received))
 
 	if len(received) > 0 {
 		if tr, err := TossDir(nd, store, confStore, sysopName); err != nil {
@@ -619,7 +654,7 @@ func (b *binkpConn) sendFile(path string) error {
 	// M_FILE <name> <size> <mtime> <offset>
 	fileArg := fmt.Sprintf("%s %d %d 0", filepath.Base(path), size, mtime)
 	if err := b.sendCmd(bpM_FILE, fileArg); err != nil {
-		return err
+		return fmt.Errorf("M_FILE %s: %w", filepath.Base(path), err)
 	}
 
 	f, err := os.Open(path)
@@ -633,7 +668,7 @@ func (b *binkpConn) sendFile(path string) error {
 		n, err := f.Read(buf)
 		if n > 0 {
 			if serr := b.sendData(buf[:n]); serr != nil {
-				return serr
+				return fmt.Errorf("M_DATA %s: %w", filepath.Base(path), serr)
 			}
 		}
 		if err == io.EOF {
@@ -645,7 +680,10 @@ func (b *binkpConn) sendFile(path string) error {
 	}
 
 	// Wait for M_GOT acknowledgement for this file.
-	return b.waitForGOT(filepath.Base(path), size)
+	if err := b.waitForGOT(filepath.Base(path), size); err != nil {
+		return fmt.Errorf("M_GOT %s: %w", filepath.Base(path), err)
+	}
+	return nil
 }
 
 // waitForGOT reads frames until M_GOT for the named file arrives.
@@ -688,6 +726,12 @@ func (b *binkpConn) receiveUntilEOB(destDir string) ([]string, error) {
 		if err != nil {
 			if currentFile != nil {
 				currentFile.Close()
+				return received, err
+			}
+			// Some BinkP hosts (e.g. Synchronet/sbbs, binkd) close the TCP
+			// session after the batch instead of sending a final M_EOB.
+			if err == io.EOF {
+				return received, nil
 			}
 			return received, err
 		}

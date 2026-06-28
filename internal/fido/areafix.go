@@ -328,7 +328,7 @@ func replyAreaFix(nd *NetworkDef, our Addr, pm *Message, body string) error {
 		Body:     body,
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
-	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply})
+	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply}, nd.Name)
 	return err
 }
 
@@ -368,5 +368,5 @@ func RequestAreaFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
-	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg})
+	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
 }

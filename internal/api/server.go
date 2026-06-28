@@ -355,6 +355,15 @@ func (s *Server) dispatch(req Request) (any, error) {
 		lines, path, err := fido.ReadBinkpLogTail(p.Lines)
 		return map[string]any{"path": path, "lines": lines}, err
 
+	case "fido.binkp.stats":
+		var p struct {
+			Network   string `json:"network"`
+			Period    string `json:"period"`
+			PeriodKey string `json:"period_key"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		return fido.QueryBinkpStats(s.Deps.Messages.DB(), p.Network, p.Period, p.PeriodKey)
+
 	case "fido.netmail.send":
 		var m fido.NetmailMsg
 		if err := json.Unmarshal(req.Params, &m); err != nil {
@@ -377,7 +386,7 @@ func (s *Server) dispatch(req Request) (any, error) {
 		}
 		outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), m.Crash)
 		origAddr, _ := fido.ParseAddr(nd.Address)
-		pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{&m})
+		pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{&m}, nd.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -492,6 +501,46 @@ func (s *Server) dispatch(req Request) (any, error) {
 			return nil, err
 		}
 		return nil, config.Save(&merged)
+
+	case "fido.network.flags.list":
+		return fido.KnownNodeFlags(), nil
+
+	case "fido.network.flags.update":
+		var p struct {
+			Network   string   `json:"network"`
+			NodeFlags []string `json:"node_flags"`
+			BinkpHost string   `json:"binkp_host"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		validated, err := fido.ValidateNodeFlags(p.NodeFlags)
+		if err != nil {
+			return nil, err
+		}
+		nd, err := networkDef(p.Network)
+		if err != nil {
+			return nil, err
+		}
+		if err := saveNetworkNodeFlags(p.Network, validated, p.BinkpHost); err != nil {
+			return nil, err
+		}
+		cfg := config.Get()
+		nd = cfg.Fido.NetworkByName(p.Network)
+		if nd == nil {
+			return nil, fmt.Errorf("network %q not found", p.Network)
+		}
+		nd.NodeFlags = validated
+		nd.BinkpHost = p.BinkpHost
+		return fido.UpdateNodeFlags(
+			s.Deps.Messages.DB(), nd,
+			cfg.BBS.Name, cfg.Sysop.Name, "Internet",
+			cfg.Network.TelnetPort,
+			validated, p.BinkpHost,
+		)
 
 	case "fido.routes.list":
 		var p struct{ Network string }

@@ -14,6 +14,7 @@ namespace VirtBBS.GUI.ViewModels;
 public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
 {
     public const string DefaultPrimaryNetwork = "FidoNet";
+    public static readonly string[] DefaultNodeFlags = ["IBN", "ITN", "BEER", "TRACE", "PING"];
 
     [ObservableProperty] private string _status = "";
     [ObservableProperty] private string _selectedNetwork = DefaultPrimaryNetwork;
@@ -37,8 +38,10 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
     [ObservableProperty] private int _nodelistUpdateIntervalHours;
     [ObservableProperty] private string _nodelistEchoTag = "";
     [ObservableProperty] private string _akasText = "";
+    [ObservableProperty] private string _binkpHost = "";
 
     public ObservableCollection<string> NetworkNames { get; } = [];
+    public ObservableCollection<NodeFlagRow> NodeFlagRows { get; } = [];
     public ObservableCollection<AreaMapRow> InboundAreas { get; } = [];
     public ObservableCollection<FileAreaMapRow> FileAreaMaps { get; } = [];
     public ObservableCollection<FidoDownlink> Downlinks { get; } = [];
@@ -75,6 +78,7 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
             if (!NetworkNames.Contains(SelectedNetwork))
                 SelectedNetwork = NetworkNames.FirstOrDefault() ?? PrimaryName();
 
+            await LoadNodeFlagDefsAsync(ct);
             ApplyNetworkToForm(SelectedNetwork);
             await LoadAreaFixSubsAsync(ct);
             Status = "Network settings loaded.";
@@ -113,6 +117,8 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
         NodelistUpdateIntervalHours = src.NodelistUpdateIntervalHours;
         NodelistEchoTag = src.NodelistEchoTag;
         AkasText = string.Join("\n", src.AKAs ?? []);
+        BinkpHost = src.BinkpHost ?? "";
+        ApplyNodeFlagsToForm(src.NodeFlags);
 
         InboundAreas.Clear();
         foreach (var kv in src.Areas ?? [])
@@ -158,6 +164,8 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
                 PollIntervalMins = cfg.Fido.PollIntervalMins,
                 NodelistURL = cfg.Fido.NodelistURL,
                 NodelistUpdateIntervalHours = cfg.Fido.NodelistUpdateIntervalHours,
+                NodeFlags = cfg.Fido.NodeFlags,
+                BinkpHost = cfg.Fido.BinkpHost,
                 AKAs = cfg.Fido.AKAs,
                 Areas = cfg.Fido.Areas,
                 FileAreas = cfg.Fido.FileAreas,
@@ -353,6 +361,7 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
             InboundDir = inbound,
             OutboundDir = outbound,
             NodelistDir = nodelist,
+            NodeFlags = [.. DefaultNodeFlags],
         };
         _cachedConfig.Fido.Networks.Add(nd);
         await client.CallAsync("config.update", new { fido = _cachedConfig.Fido }, ct);
@@ -396,4 +405,53 @@ public partial class FidoNetworksViewModel(ApiClient client) : ViewModelBase
         }
         catch { /* optional */ }
     }
+
+    private async Task LoadNodeFlagDefsAsync(CancellationToken ct)
+    {
+        try
+        {
+            var defs = await client.CallAsync<NodeFlagDef[]>("fido.network.flags.list", null, ct) ?? [];
+            NodeFlagRows.Clear();
+            foreach (var d in defs)
+                NodeFlagRows.Add(new NodeFlagRow { Code = d.Code, Description = d.Description });
+        }
+        catch { /* optional on first load */ }
+    }
+
+    private void ApplyNodeFlagsToForm(IList<string>? configured)
+    {
+        var active = new HashSet<string>(
+            (configured is { Count: > 0 } ? configured : DefaultNodeFlags)
+            .Select(f => f.ToUpperInvariant()));
+        foreach (var row in NodeFlagRows)
+            row.IsChecked = active.Contains(row.Code.ToUpperInvariant());
+    }
+
+    private List<string> SelectedNodeFlags() =>
+        NodeFlagRows.Where(r => r.IsChecked).Select(r => r.Code).ToList();
+
+    [RelayCommand]
+    private async Task SaveNodeFlagsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await client.CallAsync<NodeFlagsUpdateResult>("fido.network.flags.update",
+                new
+                {
+                    network = SelectedNetwork,
+                    node_flags = SelectedNodeFlags(),
+                    binkp_host = BinkpHost.Trim(),
+                }, ct);
+            _cachedConfig = await client.CallAsync<BbsConfig>("config.get", null, ct) ?? _cachedConfig;
+            Status = result?.Message ?? "Node capabilities saved.";
+        }
+        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+    }
+}
+
+public partial class NodeFlagRow : ObservableObject
+{
+    [ObservableProperty] private string _code = "";
+    [ObservableProperty] private string _description = "";
+    [ObservableProperty] private bool _isChecked;
 }

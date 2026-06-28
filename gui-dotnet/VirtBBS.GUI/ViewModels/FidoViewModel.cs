@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -37,6 +38,13 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
     // BinkP session log.
     [ObservableProperty] private string _binkpLogText = "";
     [ObservableProperty] private string _binkpLogPath = "";
+
+    // BinkP statistics.
+    public ObservableCollection<string> StatsPeriods { get; } =
+        ["Today", "Yesterday", "This Month", "This Year", "All Time"];
+    [ObservableProperty] private string _selectedStatsPeriod = "Today";
+    [ObservableProperty] private string _binkpStatsText = "";
+    [ObservableProperty] private string _binkpStatsCaption = "";
 
     [RelayCommand]
     public async Task LoadNetworksAsync(CancellationToken ct = default)
@@ -148,6 +156,7 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             await client.CallAsync("fido.toss", null, ct);
             Status = "Toss complete.";
             await RefreshBinkpLogAsync(ct);
+            await RefreshBinkpStatsAsync(ct);
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -160,6 +169,7 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             await client.CallAsync("fido.scan", null, ct);
             Status = "Scan complete.";
             await RefreshBinkpLogAsync(ct);
+            await RefreshBinkpStatsAsync(ct);
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -182,8 +192,88 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
                 Status = "Poll complete.";
             }
             await RefreshBinkpLogAsync(ct);
+            await RefreshBinkpStatsAsync(ct);
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    public async Task RefreshBinkpStatsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var (period, periodKey) = MapStatsPeriod(SelectedStatsPeriod);
+            var stats = await client.CallAsync<BinkpStatsResult>("fido.binkp.stats", new
+            {
+                network = SelectedNetwork,
+                period,
+                period_key = periodKey,
+            }, ct);
+            if (stats is null)
+            {
+                BinkpStatsText = "(no stats available)";
+                return;
+            }
+            BinkpStatsCaption = $"{stats.Period} {stats.PeriodKey}".Trim();
+            BinkpStatsText = FormatStatsText(stats);
+        }
+        catch (Exception ex) { Status = $"Stats error: {ex.Message}"; }
+    }
+
+    partial void OnSelectedStatsPeriodChanged(string value) =>
+        _ = RefreshBinkpStatsAsync();
+
+    private static (string period, string periodKey) MapStatsPeriod(string label)
+    {
+        var now = DateTime.Now;
+        return label switch
+        {
+            "Yesterday" => ("day", now.AddDays(-1).ToString("yyyy-MM-dd")),
+            "This Month" => ("month", now.ToString("yyyy-MM")),
+            "This Year" => ("year", now.ToString("yyyy")),
+            "All Time" => ("all", ""),
+            _ => ("day", now.ToString("yyyy-MM-dd")),
+        };
+    }
+
+    private static string FormatStatsText(BinkpStatsResult stats)
+    {
+        if (stats.Networks.Count == 0)
+            return "No BinkP activity recorded for this period.";
+
+        var sb = new StringBuilder();
+        foreach (var n in stats.Networks)
+        {
+            sb.AppendLine($"Network: {n.Network}");
+            sb.AppendLine(new string('-', 50));
+            sb.AppendLine($"Outbound polls (OK/fail):     {n.PollClientOK} / {n.PollClientFail}");
+            sb.AppendLine($"  files sent/received:        {n.PollClientFilesSent} / {n.PollClientFilesRecv}");
+            sb.AppendLine($"Inbound uplink (OK/fail):   {n.PollServerUplinkOK} / {n.PollServerUplinkFail}");
+            sb.AppendLine($"  files sent/received:        {n.PollServerUplinkSent} / {n.PollServerUplinkRecv}");
+            sb.AppendLine($"Inbound downlink (OK/fail): {n.PollServerDownlinkOK} / {n.PollServerDownlinkFail}");
+            sb.AppendLine($"  files sent/received:        {n.PollServerDownlinkSent} / {n.PollServerDownlinkRecv}");
+            sb.AppendLine($"Netmail received/sent:      {n.NetmailRecv} / {n.NetmailSent}");
+            sb.AppendLine($"Echomail received/sent:     {n.EchomailRecv} / {n.EchomailSent}");
+            sb.AppendLine($"Toss imported/skipped/held: {n.TossImported} / {n.TossSkipped} / {n.TossHeld}");
+            sb.AppendLine($"Packets tossed:             {n.TossPackets}");
+            if (n.SessionErrors > 0)
+                sb.AppendLine($"Session errors:             {n.SessionErrors}");
+
+            var links = stats.Links.Where(l => l.Network == n.Network).ToList();
+            if (links.Count > 0)
+            {
+                sb.AppendLine();
+                sb.AppendLine("Link detail:");
+                foreach (var l in links)
+                {
+                    sb.AppendLine($"  {l.LinkType} {l.PeerKey}: poll {l.PollOK}/{l.PollFail}, " +
+                                  $"files {l.FilesSent}/{l.FilesRecv}, " +
+                                  $"nm {l.NetmailSent}/{l.NetmailRecv}, echo {l.EchomailSent}/{l.EchomailRecv}");
+                }
+            }
+            sb.AppendLine();
+        }
+        return sb.ToString().TrimEnd();
     }
 
     [RelayCommand]

@@ -228,3 +228,50 @@ CREATE TABLE IF NOT EXISTS fido_routes (
     created_at TEXT    NOT NULL DEFAULT (datetime('now')),
     UNIQUE(network, pattern)
 );
+
+-- BinkP / FidoNet session statistics (per network, per period).
+CREATE TABLE IF NOT EXISTS fido_binkp_stats (
+    network                    TEXT NOT NULL,
+    period                     TEXT NOT NULL,  -- day, month, year, all
+    period_key                 TEXT NOT NULL,  -- YYYY-MM-DD, YYYY-MM, YYYY, or empty for all
+    poll_client_ok             INTEGER NOT NULL DEFAULT 0,
+    poll_client_fail           INTEGER NOT NULL DEFAULT 0,
+    poll_client_files_sent     INTEGER NOT NULL DEFAULT 0,
+    poll_client_files_recv     INTEGER NOT NULL DEFAULT 0,
+    poll_server_uplink_ok      INTEGER NOT NULL DEFAULT 0,
+    poll_server_uplink_fail    INTEGER NOT NULL DEFAULT 0,
+    poll_server_uplink_sent    INTEGER NOT NULL DEFAULT 0,
+    poll_server_uplink_recv    INTEGER NOT NULL DEFAULT 0,
+    poll_server_downlink_ok    INTEGER NOT NULL DEFAULT 0,
+    poll_server_downlink_fail  INTEGER NOT NULL DEFAULT 0,
+    poll_server_downlink_sent  INTEGER NOT NULL DEFAULT 0,
+    poll_server_downlink_recv  INTEGER NOT NULL DEFAULT 0,
+    netmail_recv               INTEGER NOT NULL DEFAULT 0,
+    echomail_recv              INTEGER NOT NULL DEFAULT 0,
+    netmail_sent               INTEGER NOT NULL DEFAULT 0,
+    echomail_sent              INTEGER NOT NULL DEFAULT 0,
+    toss_imported              INTEGER NOT NULL DEFAULT 0,
+    toss_skipped               INTEGER NOT NULL DEFAULT 0,
+    toss_held                  INTEGER NOT NULL DEFAULT 0,
+    toss_packets               INTEGER NOT NULL DEFAULT 0,
+    session_errors             INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (network, period, period_key)
+);
+
+-- Per-link BinkP stats (uplink or downlink peer).
+CREATE TABLE IF NOT EXISTS fido_binkp_link_stats (
+    network        TEXT NOT NULL,
+    period         TEXT NOT NULL,
+    period_key     TEXT NOT NULL,
+    link_type      TEXT NOT NULL,  -- uplink or downlink
+    peer_key       TEXT NOT NULL,  -- Fido address or downlink name
+    poll_ok        INTEGER NOT NULL DEFAULT 0,
+    poll_fail      INTEGER NOT NULL DEFAULT 0,
+    files_sent     INTEGER NOT NULL DEFAULT 0,
+    files_recv     INTEGER NOT NULL DEFAULT 0,
+    netmail_sent   INTEGER NOT NULL DEFAULT 0,
+    echomail_sent  INTEGER NOT NULL DEFAULT 0,
+    netmail_recv   INTEGER NOT NULL DEFAULT 0,
+    echomail_recv  INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (network, period, period_key, link_type, peer_key)
+);

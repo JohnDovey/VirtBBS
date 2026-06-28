@@ -254,6 +254,7 @@ func main() {
 	if err := fido.InitBinkpLog(filepath.Join(cfg.Paths.Logs, "binkp.log")); err != nil {
 		log.Fatalf("binkp log: %v", err)
 	}
+	fido.InitBinkpStats(sqlDB)
 
 	fileStore, err := files.Open(sqlDB, cfg.Paths.Files)
 	if err != nil {
@@ -339,6 +340,8 @@ func main() {
 		if _, err := fido.ServeBinkP(&cfg.Fido, msgStore, confStore, cfg.Sysop.Name); err != nil {
 			fido.LogBinkp(fmt.Sprintf("BinkP server error: %v", err))
 		}
+
+		fido.StartBinkpStatsBulletins(sqlDB, cfg.Session.DisplayDir, cfg.BBS.Name)
 	}
 
 	// Start management API

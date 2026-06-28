@@ -176,6 +176,8 @@ public class FidoSection
     [JsonPropertyName("tic_password")] public string TicPassword { get; set; } = "";
     [JsonPropertyName("nodelist_url")]  public string NodelistURL { get; set; } = "";
     [JsonPropertyName("nodelist_update_interval_hours")] public int NodelistUpdateIntervalHours { get; set; }
+    [JsonPropertyName("node_flags")] public List<string> NodeFlags { get; set; } = new();
+    [JsonPropertyName("binkp_host")] public string BinkpHost { get; set; } = "";
     [JsonPropertyName("networks")]     public List<FidoNetworkDef> Networks { get; set; } = new();
 }
 
@@ -203,6 +205,24 @@ public class FidoNetworkDef
     [JsonPropertyName("nodelist_url")]  public string NodelistURL { get; set; } = "";
     [JsonPropertyName("nodelist_update_interval_hours")] public int NodelistUpdateIntervalHours { get; set; }
     [JsonPropertyName("nodelist_echo_tag")] public string NodelistEchoTag { get; set; } = "";
+    [JsonPropertyName("node_flags")] public List<string> NodeFlags { get; set; } = new();
+    [JsonPropertyName("binkp_host")] public string BinkpHost { get; set; } = "";
+}
+
+public class NodeFlagDef
+{
+    [JsonPropertyName("code")] public string Code { get; set; } = "";
+    [JsonPropertyName("description")] public string Description { get; set; } = "";
+}
+
+public class NodeFlagsUpdateResult
+{
+    [JsonPropertyName("address")] public string Address { get; set; } = "";
+    [JsonPropertyName("flags")] public string Flags { get; set; } = "";
+    [JsonPropertyName("nodediff_file")] public string NodediffFile { get; set; } = "";
+    [JsonPropertyName("netmail_sent")] public bool NetmailSent { get; set; }
+    [JsonPropertyName("netmail_to")] public string NetmailTo { get; set; } = "";
+    [JsonPropertyName("message")] public string Message { get; set; } = "";
 }
 
 public class FidoDownlink
@@ -361,6 +381,57 @@ public class BinkpLogResult
 {
     [JsonPropertyName("path")]  public string       Path  { get; set; } = "";
     [JsonPropertyName("lines")] public List<string> Lines { get; set; } = [];
+}
+
+public class BinkpStatsNetworkRow
+{
+    [JsonPropertyName("network")] public string Network { get; set; } = "";
+    [JsonPropertyName("period")] public string Period { get; set; } = "";
+    [JsonPropertyName("period_key")] public string PeriodKey { get; set; } = "";
+    [JsonPropertyName("poll_client_ok")] public int PollClientOK { get; set; }
+    [JsonPropertyName("poll_client_fail")] public int PollClientFail { get; set; }
+    [JsonPropertyName("poll_client_files_sent")] public int PollClientFilesSent { get; set; }
+    [JsonPropertyName("poll_client_files_recv")] public int PollClientFilesRecv { get; set; }
+    [JsonPropertyName("poll_server_uplink_ok")] public int PollServerUplinkOK { get; set; }
+    [JsonPropertyName("poll_server_uplink_fail")] public int PollServerUplinkFail { get; set; }
+    [JsonPropertyName("poll_server_uplink_sent")] public int PollServerUplinkSent { get; set; }
+    [JsonPropertyName("poll_server_uplink_recv")] public int PollServerUplinkRecv { get; set; }
+    [JsonPropertyName("poll_server_downlink_ok")] public int PollServerDownlinkOK { get; set; }
+    [JsonPropertyName("poll_server_downlink_fail")] public int PollServerDownlinkFail { get; set; }
+    [JsonPropertyName("poll_server_downlink_sent")] public int PollServerDownlinkSent { get; set; }
+    [JsonPropertyName("poll_server_downlink_recv")] public int PollServerDownlinkRecv { get; set; }
+    [JsonPropertyName("netmail_recv")] public int NetmailRecv { get; set; }
+    [JsonPropertyName("echomail_recv")] public int EchomailRecv { get; set; }
+    [JsonPropertyName("netmail_sent")] public int NetmailSent { get; set; }
+    [JsonPropertyName("echomail_sent")] public int EchomailSent { get; set; }
+    [JsonPropertyName("toss_imported")] public int TossImported { get; set; }
+    [JsonPropertyName("toss_skipped")] public int TossSkipped { get; set; }
+    [JsonPropertyName("toss_held")] public int TossHeld { get; set; }
+    [JsonPropertyName("toss_packets")] public int TossPackets { get; set; }
+    [JsonPropertyName("session_errors")] public int SessionErrors { get; set; }
+}
+
+public class BinkpStatsLinkRow
+{
+    [JsonPropertyName("network")] public string Network { get; set; } = "";
+    [JsonPropertyName("link_type")] public string LinkType { get; set; } = "";
+    [JsonPropertyName("peer_key")] public string PeerKey { get; set; } = "";
+    [JsonPropertyName("poll_ok")] public int PollOK { get; set; }
+    [JsonPropertyName("poll_fail")] public int PollFail { get; set; }
+    [JsonPropertyName("files_sent")] public int FilesSent { get; set; }
+    [JsonPropertyName("files_recv")] public int FilesRecv { get; set; }
+    [JsonPropertyName("netmail_sent")] public int NetmailSent { get; set; }
+    [JsonPropertyName("echomail_sent")] public int EchomailSent { get; set; }
+    [JsonPropertyName("netmail_recv")] public int NetmailRecv { get; set; }
+    [JsonPropertyName("echomail_recv")] public int EchomailRecv { get; set; }
+}
+
+public class BinkpStatsResult
+{
+    [JsonPropertyName("period")] public string Period { get; set; } = "";
+    [JsonPropertyName("period_key")] public string PeriodKey { get; set; } = "";
+    [JsonPropertyName("networks")] public List<BinkpStatsNetworkRow> Networks { get; set; } = [];
+    [JsonPropertyName("links")] public List<BinkpStatsLinkRow> Links { get; set; } = [];
 }
 
 // ── API tokens (VirtAnd/VirtTerm device tokens, sysop administration) ────────

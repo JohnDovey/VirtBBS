@@ -24,7 +24,8 @@ public class FidoHubViewModel(ApiClient client) : ViewModelBase
             Join.LoadAsync(ct),
             Tools.LoadNetworksAsync(ct),
             Operations.LoadNetworksAsync(ct),
-            Operations.RefreshBinkpLogAsync(ct)
+            Operations.RefreshBinkpLogAsync(ct),
+            Operations.RefreshBinkpStatsAsync(ct)
         );
     }
 }

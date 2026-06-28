@@ -112,6 +112,14 @@ type Config struct {
 	// 1-hour minimum.
 	NodelistUpdateIntervalHours int `toml:"nodelist_update_interval_hours" json:"nodelist_update_interval_hours"`
 
+	// NodeFlags lists capability flags for this BBS's own nodelist entry
+	// (IBN, ITN, CM, MO, BEER, TRACE, PING, etc.) — see nodeflags.go.
+	NodeFlags []string `toml:"node_flags" json:"node_flags"`
+
+	// BinkpHost is the hostname:port advertised in IBN/INA nodelist flags
+	// when IBN or INA is enabled. Blank means bare IBN/INA without hostname.
+	BinkpHost string `toml:"binkp_host" json:"binkp_host"`
+
 	// Networks lists additional FidoNet-compatible networks (LovlyNet, etc.).
 	// Each entry is a fully independent network with its own address space.
 	Networks []NetworkDef `toml:"networks" json:"networks"`
@@ -199,6 +207,10 @@ type NetworkDef struct {
 	// distributed under — see internal/fido/nodelistecho.go. Defaults to
 	// DefaultNodelistEchoTag if unset.
 	NodelistEchoTag string `toml:"nodelist_echo_tag" json:"nodelist_echo_tag"`
+
+	// NodeFlags/BinkpHost — see Config.NodeFlags / Config.BinkpHost.
+	NodeFlags []string `toml:"node_flags" json:"node_flags"`
+	BinkpHost string   `toml:"binkp_host" json:"binkp_host"`
 
 	// AKAs — see Config.AKAs.
 	AKAs []string `toml:"akas" json:"akas"`
@@ -296,6 +308,8 @@ func (c *Config) AllNetworks() []NetworkDef {
 		TicPassword:                 c.TicPassword,
 		NodelistURL:                 c.NodelistURL,
 		NodelistUpdateIntervalHours: c.NodelistUpdateIntervalHours,
+		NodeFlags:                   c.NodeFlags,
+		BinkpHost:                   c.BinkpHost,
 		AKAs:                        c.AKAs,
 	}
 	result := []NetworkDef{primary}

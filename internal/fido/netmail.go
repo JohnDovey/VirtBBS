@@ -133,7 +133,7 @@ func (ndb *NetmailDB) MarkSent(id int64) error {
 //   destAddr  — address of the next-hop system (uplink or direct dest)
 //   password  — session password for the PKT header
 //   outDir    — directory to write the .pkt file into (created if absent)
-func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailMsg) (string, error) {
+func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailMsg, network ...string) (string, error) {
 	if err := os.MkdirAll(outDir, 0755); err != nil {
 		return "", err
 	}
@@ -174,6 +174,9 @@ func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailM
 
 	if err := WritePacket(f, origAddr, destAddr, password, pktMsgs); err != nil {
 		return "", err
+	}
+	if len(network) > 0 && network[0] != "" && len(msgs) > 0 {
+		RecordNetmailSent(network[0], destAddr.String(), len(msgs))
 	}
 
 	return path, nil

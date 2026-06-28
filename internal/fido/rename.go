@@ -45,6 +45,8 @@ func RenameNetwork(cfg *Config, db *sql.DB, oldName, newName string) error {
 			"fido_join_requests",
 			"fido_members",
 			"fido_routes",
+			"fido_binkp_stats",
+			"fido_binkp_link_stats",
 		}
 		for _, tbl := range tables {
 			if _, err := db.Exec(`UPDATE `+tbl+` SET network = ? WHERE network = ?`, newName, oldName); err != nil {

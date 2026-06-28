@@ -98,7 +98,7 @@ func SendNodeAnnounce(nd *NetworkDef, m *Member, changeType string) error {
 		Network:  nd.Name,
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
-	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg})
+	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
 	return err
 }
 

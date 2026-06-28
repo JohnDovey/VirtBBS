@@ -56,6 +56,22 @@
                     <TextBox Grid.Row="17" Grid.Column="1" Text="{Binding AkasText}" AcceptsReturn="True" Height="60"/>
                 </Grid>
 
+                <TextBlock Text="Node Capabilities" FontWeight="Bold" FontSize="14" Margin="0,6,0,0"/>
+                <TextBlock Text="Flags for this node's nodelist entry. Saving updates the local nodelist, writes a NODEDIFF, and sends netmail to the uplink." TextWrapping="Wrap" Opacity="0.85"/>
+                <TextBlock Text="BinkP / internet hostname (IBN, INA):" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding BinkpHost}" Watermark="host.example.com:24554"/>
+                <ItemsControl ItemsSource="{Binding NodeFlagRows}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:NodeFlagRow">
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8" Margin="0,2">
+                                <CheckBox Grid.Column="0" Content="{Binding Code}" IsChecked="{Binding IsChecked}" MinWidth="80"/>
+                                <TextBlock Grid.Column="1" Text="{Binding Description}" TextWrapping="Wrap" VerticalAlignment="Center" Opacity="0.9"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <Button Content="Save Node Capabilities" Command="{Binding SaveNodeFlagsCommand}" HorizontalAlignment="Left"/>
+
                 <TextBlock Text="Inbound Echo Areas ([fido.areas] → conference ID)" FontWeight="Bold"/>
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Button Content="+ Add Area" Command="{Binding AddInboundAreaCommand}"/>

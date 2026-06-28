@@ -111,7 +111,7 @@ func AutoRespondTrace(nd *NetworkDef, pm *Message) error {
 
 	reply := BuildTraceReply(nd, our, "VirtBBS TraceBot", pm)
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
-	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply})
+	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply}, nd.Name)
 	return err
 }
 
@@ -143,5 +143,5 @@ func SendTrace(nd *NetworkDef, fromName, toName, toAddr string) (pktPath string,
 		return "", fmt.Errorf("no uplink configured")
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
-	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg})
+	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
 }

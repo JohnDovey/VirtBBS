@@ -2097,7 +2097,7 @@ func (s *session) netmailReply(orig *messages.Message) {
 	outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), false)
 	origAddr, _ := fido.ParseAddr(cfg.Fido.Address)
 
-	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg})
+	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg}, nd.Name)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Error writing PKT: "+err.Error()))
 		return
@@ -2185,7 +2185,7 @@ func (s *session) netmailCompose() {
 	outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), crash)
 	origAddr, _ := fido.ParseAddr(cfg.Fido.Address)
 
-	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg})
+	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg}, nd.Name)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Error writing PKT: "+err.Error()))
 		return

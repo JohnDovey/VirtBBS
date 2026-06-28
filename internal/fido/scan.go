@@ -87,9 +87,11 @@ func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store, b
 		}
 		taglines := LoadTaglines(nd.TaglinesFile)
 		areafixDB := OpenAreaFixDB(store.DB())
+		before := result.Scanned
 		if err := scanNetwork(cfg, &nd, store, confStore, bbsName, taglines, areafixDB, result); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("[%s] %v", nd.Name, err))
 		}
+		RecordScan(nd.Name, result.Scanned-before)
 	}
 	return result, nil
 }
