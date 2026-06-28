@@ -517,12 +517,23 @@ func binkpOutboundFilesFor(nd *NetworkDef, dl *Downlink, peerAddr Addr) []string
 		}
 	}
 
-	sub := fmt.Sprintf("%04X%04X.OUT", peerAddr.Zone*0x100+peerAddr.Net, peerAddr.Node)
-	crashDir := filepath.Join(nd.OutboundDir, sub)
-	if crashEntries, err := os.ReadDir(crashDir); err == nil {
-		for _, e := range crashEntries {
-			if !e.IsDir() {
-				out = append(out, filepath.Join(crashDir, e.Name()))
+	if dl != nil {
+		appendOutboundSubdirFiles(&out, nd.OutboundDir, peerAddr)
+	} else {
+		// Uplink poll: a point node sends everything queued in any BSO-style
+		// *.OUT bucket (crash or routing-table next-hop), not only the uplink's
+		// own subdirectory.
+		for _, e := range entries {
+			if !e.IsDir() || !strings.HasSuffix(strings.ToUpper(e.Name()), ".OUT") {
+				continue
+			}
+			subDir := filepath.Join(nd.OutboundDir, e.Name())
+			if subEntries, err := os.ReadDir(subDir); err == nil {
+				for _, se := range subEntries {
+					if !se.IsDir() {
+						out = append(out, filepath.Join(subDir, se.Name()))
+					}
+				}
 			}
 		}
 	}
@@ -540,6 +551,18 @@ func binkpOutboundFilesFor(nd *NetworkDef, dl *Downlink, peerAddr Addr) []string
 		}
 	}
 	return out
+}
+
+func appendOutboundSubdirFiles(out *[]string, baseOutbound string, peerAddr Addr) {
+	sub := fmt.Sprintf("%04X%04X.OUT", peerAddr.Zone*0x100+peerAddr.Net, peerAddr.Node)
+	crashDir := filepath.Join(baseOutbound, sub)
+	if crashEntries, err := os.ReadDir(crashDir); err == nil {
+		for _, e := range crashEntries {
+			if !e.IsDir() {
+				*out = append(*out, filepath.Join(crashDir, e.Name()))
+			}
+		}
+	}
 }
 
 // latestNodelistFile finds the most recently modified file in dir whose
