@@ -80,6 +80,9 @@ type PathsConfig struct {
 	Logs      string `toml:"logs"       json:"logs"`
 	CallerLog string `toml:"caller_log" json:"caller_log"`
 	WWW       string `toml:"www"        json:"www"` // web UI templates and static files
+	// GraphvizDot is an optional explicit path to the Graphviz dot binary.
+	// When empty, virtbbs uses graphviz/bin/dot next to the executable, then PATH.
+	GraphvizDot string `toml:"graphviz_dot" json:"graphviz_dot"`
 }
 
 type SysopConfig struct {

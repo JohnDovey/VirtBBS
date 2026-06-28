@@ -4,11 +4,23 @@
 
 - macOS 12+, Linux (kernel 4.x+), or Windows 10+
 - The `virtbbs` server ships as a self-contained binary — no additional runtime required
-- **[Graphviz](https://graphviz.org/)** (optional) — required on the **server** host if you want network topology diagrams in `<Network>_diags.zip` (after nodelist import or VirtNet day-rollover). Without the `dot` binary on PATH, nodelist import and rollover still succeed; diagram generation is skipped with a warning in the server log.
+- **[Graphviz](https://graphviz.org/)** (optional) — required for network topology diagrams in `<Network>_diags.zip`. **Recommended:** bundle `dot` next to `virtbbs` (see [docs/Graphviz Bundle.md](docs/Graphviz%20Bundle.md)). Alternatively install Graphviz on PATH or set `paths.graphviz_dot` in `VirtBBS.DAT`.
 
-### Installing Graphviz
+### Bundled Graphviz (recommended)
 
-VirtBBS shells out to Graphviz's `dot` command to render nodelist topology diagrams during VirtNet day-rollover. Install Graphviz on the machine that runs `virtbbs`, then verify:
+From your install directory (alongside the `virtbbs` binary):
+
+```bash
+./scripts/bundle-graphviz.sh .
+```
+
+This creates `graphviz/bin/dot` (+ `graphviz/lib/` when shared libraries are needed). Ship both `virtbbs` and the `graphviz/` folder together. VirtBBS prefers the bundled copy over PATH.
+
+See [docs/Graphviz Bundle.md](docs/Graphviz%20Bundle.md) for Windows, `GRAPHVIZ_PREFIX`, and troubleshooting.
+
+### System Graphviz install (alternative)
+
+If you prefer a system-wide install instead of bundling:
 
 ```bash
 which dot    # macOS/Linux
@@ -44,7 +56,14 @@ Intel Macs usually install `dot` to `/usr/local/bin`; Apple Silicon Macs use `/o
 - `winget install graphviz`, or
 - `choco install graphviz`
 
-After installing, **restart `virtbbs`** so the server process picks up the updated PATH. If you run VirtBBS as a system service (launchd, systemd) and diagrams are still skipped, ensure the service environment includes the directory containing `dot` (e.g. `/usr/local/bin` or `/opt/homebrew/bin` on macOS).
+After installing, **restart `virtbbs`**. If diagrams are still skipped, set an explicit path in `VirtBBS.DAT`:
+
+```toml
+[paths]
+  graphviz_dot = "/opt/homebrew/bin/dot"
+```
+
+Or use the bundled layout (`./scripts/bundle-graphviz.sh .`) so no PATH changes are needed for systemd/launchd services.
 
 ---
 

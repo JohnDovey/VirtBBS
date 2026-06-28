@@ -45,7 +45,6 @@ package fido
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 )
@@ -218,14 +217,12 @@ func zoneLabelForDiagram(nd *NetworkDef, nodes []NodeEntry, bbsName, sysopName s
 	return Addr{Zone: zone}, zName, zSysop
 }
 
-// RenderPNG writes dot to a temp .dot file and shells out to the `dot` CLI
-// to render it to outPath as a PNG. If `dot` isn't found on PATH, returns
-// a descriptive error rather than panicking — the caller should log it and
-// skip that diagram, not fail the whole regeneration (see GenerateDiagramsFromNodes).
+// RenderPNG renders DOT source to outPath as PNG using Graphviz dot — bundled
+// graphviz/bin/dot next to virtbbs, paths.graphviz_dot, or PATH.
 func RenderPNG(dot, outPath string) error {
-	dotBin, err := exec.LookPath("dot")
+	dotBin, err := ResolveDotBinary()
 	if err != nil {
-		return fmt.Errorf("graphviz 'dot' not found on PATH: %w", err)
+		return err
 	}
 	tmp, err := os.CreateTemp("", "virtnet-*.dot")
 	if err != nil {
@@ -238,7 +235,7 @@ func RenderPNG(dot, outPath string) error {
 	}
 	tmp.Close()
 
-	cmd := exec.Command(dotBin, "-Tpng", tmp.Name(), "-o", outPath)
+	cmd := prepareDotCmd(dotBin, "-Tpng", tmp.Name(), "-o", outPath)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("dot render failed: %w: %s", err, strings.TrimSpace(string(out)))

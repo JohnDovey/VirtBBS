@@ -98,6 +98,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	fido.SetGraphvizDotPath(cfg.Paths.GraphvizDot)
 
 	// Ensure data directories exist
 	for _, dir := range []string{"data", cfg.Paths.Files, cfg.Paths.Logs, cfg.Paths.WWW} {

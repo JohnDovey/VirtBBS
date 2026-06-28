@@ -13,6 +13,10 @@ go mod tidy
 # Build the BBS server (no cgo, cross-compiles cleanly)
 go build ./cmd/virtbbs
 
+# Optional: bundle Graphviz dot next to the binary for network diagrams
+chmod +x scripts/bundle-graphviz.sh
+./scripts/bundle-graphviz.sh .
+
 # Run the BBS server
 ./virtbbs -config VirtBBS.DAT
 ```

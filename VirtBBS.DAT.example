@@ -12,6 +12,9 @@
   logs        = "logs"
   caller_log  = "logs/CALLERS.LOG"
   www         = "www"
+  # Optional explicit path to Graphviz dot. Leave blank to use graphviz/bin/dot
+  # next to the virtbbs executable, then PATH.
+  # graphviz_dot = "/opt/homebrew/bin/dot"
 
 [sysop]
   name = "Sysop"
