@@ -3,7 +3,7 @@
 This guide covers every FidoNet setting in `VirtBBS.DAT`, how echomail/netmail
 routing works, the BinkP server, how to add additional FidoNet-compatible
 networks, AreaFix, FileFix, the PING/TRACE test utilities, and automatic
-nodelist updates. It covers VirtBBS **0.15.1**.
+nodelist updates. It covers VirtBBS **1.0.0**.
 
 ---
 
@@ -48,7 +48,7 @@ All FidoNet settings live under the `[fido]` table in `VirtBBS.DAT`:
 | `filefix_password` | Password **we** send when requesting file areas from **our own uplink's** FileFix — see §9. |
 | `tic_password` | Password **we** send when requesting file transfers from **our own uplink's** TIC processor (FTS-5005). Downlinks authenticate with the same `password` as AreaFix/FileFix. See §9.3. |
 | `poll_interval_mins` | Overrides how often the automatic scheduler polls this network's uplink, in minutes. `0`/unset = 6 hours. Any value below 5 is clamped up to 5 — see §6.2. |
-| `nodelist_url` | Direct file URL or discovery page for automatic nodelist updates. Blank = scan `https://www.darkrealms.ca/` — see §12. |
+| `nodelist_url` | Direct file URL or (primary FidoNet only) discovery page for automatic updates. Blank on additional networks = no automatic fetch — use Import File or the Local Nodelist editor. See §12. |
 | `nodelist_update_interval_hours` | Overrides how often the scheduler fetches a fresh nodelist, in hours. `0`/unset = 24 hours. Any value below 1 is clamped up to 1 — see §12.2. |
 | `[fido.file_areas]` | Maps FileFix tags to local file directory IDs — see §9.1. |
 | `[fido.areas]` | Maps echomail `AREA:` tags to local conference IDs — see §3. |

@@ -79,7 +79,11 @@ func Start(store *messages.Store, confStore *conferences.Store, fileStore *files
 		name := nd.Name
 		if nd.Uplink != "" {
 			go runNetwork(name, store, confStore, stopCh)
-			go runNodelistFetch(name, store, stopCh)
+			if nd.NodelistFetchEnabled() {
+				go runNodelistFetch(name, store, stopCh)
+			} else {
+				log.Printf("nodelist scheduler: %s — automatic fetch disabled (no nodelist_url configured)", name)
+			}
 		} else {
 			go runDayRollover(name, store, confStore, fileStore, stopCh)
 		}
@@ -202,6 +206,9 @@ func runNodelistFetch(networkName string, store *messages.Store, stop <-chan str
 	if nd == nil {
 		return
 	}
+	if !nd.NodelistFetchEnabled() {
+		return
+	}
 	interval := nd.EffectiveNodelistInterval()
 	log.Printf("nodelist scheduler: %s — fetching every %s from %s",
 		networkName, interval, nd.EffectiveNodelistURL())
@@ -217,6 +224,9 @@ func runNodelistFetch(networkName string, store *messages.Store, stop <-chan str
 			cfg := config.Get()
 			nd := cfg.Fido.NetworkByName(networkName)
 			if nd == nil || !nd.Enabled {
+				continue
+			}
+			if !nd.NodelistFetchEnabled() {
 				continue
 			}
 

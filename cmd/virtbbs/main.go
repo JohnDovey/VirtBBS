@@ -342,6 +342,8 @@ func main() {
 		}
 
 		fido.StartBinkpStatsBulletins(sqlDB, cfg.Session.DisplayDir, cfg.BBS.Name)
+
+		fido.EnsureAllNetworkOwnNodes(sqlDB, cfg.Fido.AllNetworks(), cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort)
 	}
 
 	// Start management API

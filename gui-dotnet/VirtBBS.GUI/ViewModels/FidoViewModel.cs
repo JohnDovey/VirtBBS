@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
@@ -31,9 +32,15 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
     [ObservableProperty] private string _nmBody = "";
     [ObservableProperty] private bool _crash;
 
-    // Nodelist import.
+    // Nodelist import/export.
     [ObservableProperty] private string _importPath = "";
+    [ObservableProperty] private string _exportPath = "";
     [ObservableProperty] private string _versionText = "";
+
+    // Local nodelist editor.
+    public ObservableCollection<LocalNodeEditRow> LocalEditorNodes { get; } = [];
+    private readonly HashSet<string> _localNodesPendingDelete = new(StringComparer.OrdinalIgnoreCase);
+    [ObservableProperty] private LocalNodeEditRow? _selectedLocalNode;
 
     // BinkP session log.
     [ObservableProperty] private string _binkpLogText = "";
@@ -57,8 +64,81 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             foreach (var n in names) NetworkNames.Add(n);
             if (!NetworkNames.Contains(SelectedNetwork))
                 SelectedNetwork = NetworkNames.FirstOrDefault() ?? FidoNetworksViewModel.DefaultPrimaryNetwork;
+            await LoadLocalNodelistAsync(ct);
         }
         catch { /* ignore */ }
+    }
+
+    partial void OnSelectedNetworkChanged(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
+        _ = LoadLocalNodelistAsync();
+        _ = CheckVersionAsync();
+    }
+
+    [RelayCommand]
+    public async Task LoadLocalNodelistAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var r = await client.CallAsync<LocalNodelistListResult>("fido.nodelist.local.list",
+                new { network = SelectedNetwork }, ct);
+            LocalEditorNodes.Clear();
+            _localNodesPendingDelete.Clear();
+            foreach (var n in r?.Nodes ?? [])
+                LocalEditorNodes.Add(LocalNodeEditRow.FromFidoNode(n));
+            Status = $"{LocalEditorNodes.Count} local node(s) for {SelectedNetwork}.";
+        }
+        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private void AddLocalNode()
+    {
+        LocalEditorNodes.Add(new LocalNodeEditRow { IsNew = true, Address = "0:0/0" });
+    }
+
+    [RelayCommand]
+    private void RemoveLocalNode()
+    {
+        if (SelectedLocalNode is null) return;
+        if (!SelectedLocalNode.IsNew && !string.IsNullOrWhiteSpace(SelectedLocalNode.Address))
+            _localNodesPendingDelete.Add(SelectedLocalNode.Address);
+        LocalEditorNodes.Remove(SelectedLocalNode);
+        SelectedLocalNode = null;
+    }
+
+    [RelayCommand]
+    private async Task CommitLocalNodelistAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var upsert = LocalEditorNodes
+                .Where(r => !string.IsNullOrWhiteSpace(r.Address))
+                .Select(r => r.ToUpsertPayload())
+                .ToList();
+            var result = await client.CallAsync<LocalNodelistCommitResult>("fido.nodelist.local.commit",
+                new { network = SelectedNetwork, upsert, delete = _localNodesPendingDelete.ToList() }, ct);
+            _localNodesPendingDelete.Clear();
+            Status = result?.Message ?? "Local nodelist committed.";
+            await LoadLocalNodelistAsync(ct);
+            await CheckVersionAsync(ct);
+        }
+        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private async Task ExportNodelistAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var result = await client.CallAsync<NodelistExportResult>("fido.nodelist.export",
+                new { network = SelectedNetwork, path = ExportPath }, ct);
+            Status = result is null
+                ? "Export complete."
+                : $"Exported {result.Size} bytes to {result.Path}.";
+        }
+        catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
 
     [RelayCommand]
@@ -94,7 +174,7 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             new { network = SelectedNetwork, query = NodeQuery, page = NodePage, size = 25 }, ct);
         if (r is null) return;
         NodeResults.Clear();
-        foreach (var n in r.Nodes) NodeResults.Add(n);
+        foreach (var n in r.Nodes ?? []) NodeResults.Add(n);
         NodeTotalPages = r.Pages;
         Status = $"{r.Total} node(s) found.";
     }
@@ -133,6 +213,8 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             await client.CallAsync("fido.import.nodelist",
                 new { path = ImportPath, network = SelectedNetwork }, ct);
             Status = "Nodelist imported.";
+            await LoadLocalNodelistAsync(ct);
+            await CheckVersionAsync(ct);
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -183,7 +265,7 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
                 new { network = SelectedNetwork }, ct);
             if (result?.Poll is { } poll)
             {
-                Status = $"Poll complete — sent {poll.Sent.Count}, received {poll.Received.Count}.";
+                Status = $"Poll complete — sent {poll.Sent?.Count ?? 0}, received {poll.Received?.Count ?? 0}.";
                 if (result.Toss is { } toss)
                     Status += $" Toss: {toss.Imported} imported, {toss.Skipped} skipped, {toss.Orphaned} held.";
             }
@@ -212,16 +294,22 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             if (stats is null)
             {
                 BinkpStatsText = "(no stats available)";
+                BinkpStatsCaption = "";
                 return;
             }
+            stats.Networks ??= [];
+            stats.Links ??= [];
             BinkpStatsCaption = $"{stats.Period} {stats.PeriodKey}".Trim();
             BinkpStatsText = FormatStatsText(stats);
         }
         catch (Exception ex) { Status = $"Stats error: {ex.Message}"; }
     }
 
-    partial void OnSelectedStatsPeriodChanged(string value) =>
+    partial void OnSelectedStatsPeriodChanged(string value)
+    {
+        if (string.IsNullOrEmpty(value)) return;
         _ = RefreshBinkpStatsAsync();
+    }
 
     private static (string period, string periodKey) MapStatsPeriod(string label)
     {
@@ -238,11 +326,14 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
 
     private static string FormatStatsText(BinkpStatsResult stats)
     {
-        if (stats.Networks.Count == 0)
+        var networks = stats.Networks ?? [];
+        var links = stats.Links ?? [];
+
+        if (networks.Count == 0)
             return "No BinkP activity recorded for this period.";
 
         var sb = new StringBuilder();
-        foreach (var n in stats.Networks)
+        foreach (var n in networks)
         {
             sb.AppendLine($"Network: {n.Network}");
             sb.AppendLine(new string('-', 50));
@@ -259,12 +350,12 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             if (n.SessionErrors > 0)
                 sb.AppendLine($"Session errors:             {n.SessionErrors}");
 
-            var links = stats.Links.Where(l => l.Network == n.Network).ToList();
-            if (links.Count > 0)
+            var netLinks = links.Where(l => l.Network == n.Network).ToList();
+            if (netLinks.Count > 0)
             {
                 sb.AppendLine();
                 sb.AppendLine("Link detail:");
-                foreach (var l in links)
+                foreach (var l in netLinks)
                 {
                     sb.AppendLine($"  {l.LinkType} {l.PeerKey}: poll {l.PollOK}/{l.PollFail}, " +
                                   $"files {l.FilesSent}/{l.FilesRecv}, " +
@@ -284,9 +375,10 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
             var log = await client.CallAsync<BinkpLogResult>("fido.binkp.log", new { lines = 300 }, ct);
             if (log is null) return;
             BinkpLogPath = string.IsNullOrWhiteSpace(log.Path) ? "" : log.Path;
-            BinkpLogText = log.Lines.Count == 0
+            var lines = log.Lines ?? [];
+            BinkpLogText = lines.Count == 0
                 ? "(no BinkP sessions logged yet)"
-                : string.Join(Environment.NewLine, log.Lines);
+                : string.Join(Environment.NewLine, lines);
         }
         catch (Exception ex) { Status = $"Log error: {ex.Message}"; }
     }

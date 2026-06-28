@@ -287,7 +287,12 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 	if periodKey == "" {
 		periodKey = statsPeriodKey(period, time.Now())
 	}
-	res := &BinkpStatsQueryResult{Period: period, PeriodKey: periodKey}
+	res := &BinkpStatsQueryResult{
+		Period:    period,
+		PeriodKey: periodKey,
+		Networks:  []BinkpStatsRow{},
+		Links:     []BinkpLinkStatsRow{},
+	}
 
 	netSQL := `SELECT network, period, period_key,
 		poll_client_ok, poll_client_fail, poll_client_files_sent, poll_client_files_recv,

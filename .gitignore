@@ -32,6 +32,10 @@ android/**/local.properties
 /files/
 /fido/
 
+# Runtime-generated BinkP stats bulletins (refreshed at midnight)
+display/BINKPDAY.ANS
+display/BINKPALL.ANS
+
 # Local FidoNet operational files (not part of source)
 ROUTES.BBS
 NODELIST.*

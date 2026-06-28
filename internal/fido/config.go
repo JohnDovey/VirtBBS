@@ -37,7 +37,10 @@
 
 package fido
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 // Config holds all FidoNet settings for VirtBBS.
 // The top-level fields describe the primary (first) network.
@@ -202,6 +205,9 @@ type NetworkDef struct {
 	NodelistURL                 string         `toml:"nodelist_url" json:"nodelist_url"`
 	NodelistUpdateIntervalHours int            `toml:"nodelist_update_interval_hours" json:"nodelist_update_interval_hours"`
 
+	// IsPrimary is true for the [fido] primary network entry (not serialized).
+	IsPrimary bool `json:"-"`
+
 	// NodelistEchoTag is the echo area tag this network's own generated
 	// nodelist (when this BBS is the network's hub, Uplink=="") is
 	// distributed under — see internal/fido/nodelistecho.go. Defaults to
@@ -290,6 +296,7 @@ func (c *Config) AllNetworks() []NetworkDef {
 	primary := NetworkDef{
 		Name:            c.EffectivePrimaryName(),
 		Enabled:         c.Enabled,
+		IsPrimary:       true,
 		Address:         c.Address,
 		Uplink:          c.Uplink,
 		Password:        c.Password,
@@ -483,13 +490,23 @@ func (n *NetworkDef) EffectiveNodelistInterval() time.Duration {
 	return d
 }
 
-// EffectiveNodelistURL returns NodelistURL if configured, otherwise
-// DefaultNodelistDiscoveryURL.
+// EffectiveNodelistURL returns the configured nodelist URL. Only the primary
+// [fido] network may fall back to DefaultNodelistDiscoveryURL when blank;
+// additional networks must set nodelist_url explicitly or automatic fetch
+// is disabled.
 func (n *NetworkDef) EffectiveNodelistURL() string {
-	if n.NodelistURL != "" {
-		return n.NodelistURL
+	if strings.TrimSpace(n.NodelistURL) != "" {
+		return strings.TrimSpace(n.NodelistURL)
 	}
-	return DefaultNodelistDiscoveryURL
+	if n.IsPrimary {
+		return DefaultNodelistDiscoveryURL
+	}
+	return ""
+}
+
+// NodelistFetchEnabled reports whether automatic nodelist download is configured.
+func (n *NetworkDef) NodelistFetchEnabled() bool {
+	return n.EffectiveNodelistURL() != ""
 }
 
 // DefaultNodelistEchoTag is used when NodelistEchoTag is left blank.

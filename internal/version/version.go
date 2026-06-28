@@ -250,6 +250,14 @@
 //                        API for tailing recent lines, and a sysop GUI FidoNet
 //                        Operations "BinkP Log" tab; poll/toss/scan actions refresh
 //                        the viewer and manual poll shows sent/received/toss counts.
+//   v1.0.0  2026-06-28  First 1.0 release: BinkP stats (per network/day/month/year,
+//                        uplink/downlink, midnight BINKPDAY/BINKPALL bulletins),
+//                        node capability flags editor, local nodelist editor with
+//                        import/export and NODEDIFF commit, FidoNet nodelist fetch
+//                        scoped to primary network only, BinkP poll EOF fix for
+//                        peers that close TCP after send, VirtTermMac (Avalonia
+//                        terminal client), VirtTerm (WinForms), and VirtAnd
+//                        (Android QWK/offline client).
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -260,4 +268,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.15.1"
+const Version = "1.0.0"

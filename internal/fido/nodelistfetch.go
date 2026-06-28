@@ -172,6 +172,9 @@ func looksLikeDirectFile(rawURL string) bool {
 // the path to the resulting file (ready to pass to ImportFile).
 func FetchNodelist(nd *NetworkDef) (string, error) {
 	target := nd.EffectiveNodelistURL()
+	if target == "" {
+		return "", fmt.Errorf("network %q: no nodelist_url configured (automatic FidoNet discovery applies to the primary network only)", nd.Name)
+	}
 
 	if !looksLikeDirectFile(target) {
 		discovered, err := discoverNodelistURL(target)

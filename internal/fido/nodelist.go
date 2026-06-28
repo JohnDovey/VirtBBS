@@ -490,6 +490,32 @@ func (ndb *NodelistDB) Count(network string) (int, error) {
 	return n, err
 }
 
+// ListAll returns every node for a network, sorted by address.
+func (ndb *NodelistDB) ListAll(network string) ([]NodeEntry, error) {
+	rows, err := ndb.db.Query(`SELECT id, network, zone, net, node_num, point, name, location, sysop, phone, baud, flags, node_type, is_active
+		FROM fido_nodes WHERE network=? ORDER BY zone, net, node_num, point`, network)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ptrs, err := scanNodes(rows)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]NodeEntry, len(ptrs))
+	for i, p := range ptrs {
+		out[i] = *p
+	}
+	return out, nil
+}
+
+// DeleteAddr removes one node from the local nodelist.
+func (ndb *NodelistDB) DeleteAddr(network string, a Addr) error {
+	_, err := ndb.db.Exec(`DELETE FROM fido_nodes WHERE network=? AND zone=? AND net=? AND node_num=? AND point=?`,
+		network, a.Zone, a.Net, a.Node, a.Point)
+	return err
+}
+
 // singleRow adapts *sql.Row to the Scan interface used by scanNodes.
 type singleRow struct{ *sql.Row }
 

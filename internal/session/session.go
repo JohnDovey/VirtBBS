@@ -1957,6 +1957,10 @@ func (s *session) fidoLoadNodelist() {
 		return
 	}
 	s.writeln(ansi.Colorize(ansi.White, "Fetching nodelist from "+target.EffectiveNodelistURL()+"…"))
+	if !target.NodelistFetchEnabled() {
+		s.writeln(ansi.Colorize(ansi.Yellow, "No nodelist_url configured for "+target.Name+" — set one in network config or use Import File."))
+		return
+	}
 	result, err := fido.FetchAndImport(target, s.deps.Messages.DB())
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Nodelist fetch error: "+err.Error()))

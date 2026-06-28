@@ -40,6 +40,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -244,7 +245,13 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if err := fido.EnsureAllNetworkDirs(&merged.Fido); err != nil {
 			return nil, err
 		}
-		return nil, config.Save(&merged)
+		if err := config.Save(&merged); err != nil {
+			return nil, err
+		}
+		cfg := config.Get()
+		fido.EnsureAllNetworkOwnNodes(s.Deps.Messages.DB(), cfg.Fido.AllNetworks(),
+			cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort)
+		return nil, nil
 
 	case "node.kick":
 		var p struct{ NodeID int }
@@ -428,6 +435,9 @@ func (s *Server) dispatch(req Request) (any, error) {
 		if nd == nil {
 			return nil, fmt.Errorf("network %q not found", p.Network)
 		}
+		if !nd.NodelistFetchEnabled() {
+			return nil, fmt.Errorf("network %q: no nodelist_url configured", nd.Name)
+		}
 		return fido.FetchAndImport(nd, s.Deps.Messages.DB())
 
 	case "fido.nodelist.version":
@@ -436,6 +446,70 @@ func (s *Server) dispatch(req Request) (any, error) {
 			return nil, err
 		}
 		return fido.GetNodelistVersion(s.Deps.Messages.DB(), p.Network)
+
+	case "fido.nodelist.local.list":
+		var p struct{ Network string }
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		nodes, err := fido.ListLocalNodes(s.Deps.Messages.DB(), p.Network)
+		return map[string]any{"nodes": nodes}, err
+
+	case "fido.nodelist.local.apply":
+		var p fido.LocalNodelistCommitParams
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		return nil, fido.ApplyLocalNodes(s.Deps.Messages.DB(), p.Network, p.Upsert, p.Delete)
+
+	case "fido.nodelist.local.commit":
+		var p fido.LocalNodelistCommitParams
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		nd, err := networkDef(p.Network)
+		if err != nil {
+			return nil, err
+		}
+		cfg := config.Get()
+		return fido.CommitLocalNodelist(s.Deps.Messages.DB(), nd,
+			cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort, p)
+
+	case "fido.nodelist.export":
+		var p struct {
+			Network string `json:"network"`
+			Path    string `json:"path"`
+		}
+		if err := json.Unmarshal(req.Params, &p); err != nil {
+			return nil, err
+		}
+		if p.Network == "" {
+			p.Network = fido.PrimaryNetworkName
+		}
+		nd, err := networkDef(p.Network)
+		if err != nil {
+			return nil, err
+		}
+		filePath, body, err := fido.ExportNodelistFile(s.Deps.Messages.DB(), nd)
+		if err != nil {
+			return nil, err
+		}
+		if p.Path != "" {
+			if err := os.WriteFile(p.Path, body, 0644); err != nil {
+				return nil, err
+			}
+			filePath = p.Path
+		}
+		return map[string]any{"path": filePath, "size": len(body)}, nil
 
 	// ── File areas ──────────────────────────────────────────────────────────
 

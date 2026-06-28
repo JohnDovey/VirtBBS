@@ -54,6 +54,39 @@
                 </DockPanel>
             </TabItem>
 
+            <TabItem Header="Local Nodelist">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,8">
+                        <TextBlock Text="Edit the local nodelist for this network. Add or change rows, then Commit to write NODELIST + NODEDIFF and notify uplink."
+                                   TextWrapping="Wrap" Opacity="0.85"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Content="Reload" Command="{Binding LoadLocalNodelistCommand}"/>
+                            <Button Content="Add Node" Command="{Binding AddLocalNodeCommand}"/>
+                            <Button Content="Remove Selected" Command="{Binding RemoveLocalNodeCommand}"/>
+                            <Button Content="Commit" Command="{Binding CommitLocalNodelistCommand}"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBox Text="{Binding ImportPath}" Width="280" PlaceholderText="Import path"/>
+                            <Button Content="Import File" Command="{Binding ImportNodelistCommand}"/>
+                            <TextBox Text="{Binding ExportPath}" Width="280" PlaceholderText="Export path (optional)"/>
+                            <Button Content="Export" Command="{Binding ExportNodelistCommand}"/>
+                        </StackPanel>
+                    </StackPanel>
+                    <DataGrid ItemsSource="{Binding LocalEditorNodes}" SelectedItem="{Binding SelectedLocalNode}"
+                              AutoGenerateColumns="False" CanUserReorderColumns="False">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Address" Binding="{Binding Address}" Width="110"/>
+                            <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="140"/>
+                            <DataGridTextColumn Header="Location" Binding="{Binding Location}" Width="120"/>
+                            <DataGridTextColumn Header="Sysop" Binding="{Binding Sysop}" Width="100"/>
+                            <DataGridTextColumn Header="Flags" Binding="{Binding Flags}" Width="180"/>
+                            <DataGridTextColumn Header="Type" Binding="{Binding Type}" Width="70"/>
+                            <DataGridCheckBoxColumn Header="Active" Binding="{Binding Active}" Width="60"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </TabItem>
+
             <TabItem Header="NetMail">
                 <StackPanel Spacing="6" MaxWidth="520" Margin="8">
                     <TextBox Text="{Binding ToAddr}" PlaceholderText="To address (1:234/56)"/>
