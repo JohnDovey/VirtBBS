@@ -34,6 +34,10 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
     [ObservableProperty] private string _importPath = "";
     [ObservableProperty] private string _versionText = "";
 
+    // BinkP session log.
+    [ObservableProperty] private string _binkpLogText = "";
+    [ObservableProperty] private string _binkpLogPath = "";
+
     [RelayCommand]
     public async Task LoadNetworksAsync(CancellationToken ct = default)
     {
@@ -143,6 +147,7 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
         {
             await client.CallAsync("fido.toss", null, ct);
             Status = "Toss complete.";
+            await RefreshBinkpLogAsync(ct);
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -154,6 +159,7 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
         {
             await client.CallAsync("fido.scan", null, ct);
             Status = "Scan complete.";
+            await RefreshBinkpLogAsync(ct);
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
     }
@@ -163,10 +169,36 @@ public partial class FidoViewModel(ApiClient client) : ViewModelBase
     {
         try
         {
-            await client.CallAsync("fido.poll", new { network = SelectedNetwork }, ct);
-            Status = "Poll complete.";
+            var result = await client.CallAsync<FidoPollAndTossResult>("fido.poll",
+                new { network = SelectedNetwork }, ct);
+            if (result?.Poll is { } poll)
+            {
+                Status = $"Poll complete — sent {poll.Sent.Count}, received {poll.Received.Count}.";
+                if (result.Toss is { } toss)
+                    Status += $" Toss: {toss.Imported} imported, {toss.Skipped} skipped, {toss.Orphaned} held.";
+            }
+            else
+            {
+                Status = "Poll complete.";
+            }
+            await RefreshBinkpLogAsync(ct);
         }
         catch (Exception ex) { Status = $"Error: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    public async Task RefreshBinkpLogAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            var log = await client.CallAsync<BinkpLogResult>("fido.binkp.log", new { lines = 300 }, ct);
+            if (log is null) return;
+            BinkpLogPath = string.IsNullOrWhiteSpace(log.Path) ? "" : log.Path;
+            BinkpLogText = log.Lines.Count == 0
+                ? "(no BinkP sessions logged yet)"
+                : string.Join(Environment.NewLine, log.Lines);
+        }
+        catch (Exception ex) { Status = $"Log error: {ex.Message}"; }
     }
 
     [RelayCommand]

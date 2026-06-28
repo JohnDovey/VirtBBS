@@ -338,6 +338,31 @@ public record NodelistVersion
     [property: JsonPropertyName("node_count")]  int    NodeCount
 );
 
+public class FidoPollResult
+{
+    [JsonPropertyName("Sent")]     public List<string> Sent     { get; set; } = [];
+    [JsonPropertyName("Received")] public List<string> Received { get; set; } = [];
+}
+
+public class FidoTossSummary
+{
+    [JsonPropertyName("Imported")] public int Imported { get; set; }
+    [JsonPropertyName("Skipped")]  public int Skipped  { get; set; }
+    [JsonPropertyName("Orphaned")] public int Orphaned { get; set; }
+}
+
+public class FidoPollAndTossResult
+{
+    [JsonPropertyName("Poll")] public FidoPollResult?  Poll { get; set; }
+    [JsonPropertyName("Toss")] public FidoTossSummary? Toss { get; set; }
+}
+
+public class BinkpLogResult
+{
+    [JsonPropertyName("path")]  public string       Path  { get; set; } = "";
+    [JsonPropertyName("lines")] public List<string> Lines { get; set; } = [];
+}
+
 // ── API tokens (VirtAnd/VirtTerm device tokens, sysop administration) ────────
 
 public class ApiToken

@@ -49,6 +49,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -250,6 +251,10 @@ func main() {
 		log.Fatalf("callers log: %v", err)
 	}
 
+	if err := fido.InitBinkpLog(filepath.Join(cfg.Paths.Logs, "binkp.log")); err != nil {
+		log.Fatalf("binkp log: %v", err)
+	}
+
 	fileStore, err := files.Open(sqlDB, cfg.Paths.Files)
 	if err != nil {
 		log.Fatalf("files store: %v", err)
@@ -332,7 +337,7 @@ func main() {
 		// Start the BinkP server so other systems (our uplink, or our own
 		// downlinks) can poll THIS BBS instead of only the reverse.
 		if _, err := fido.ServeBinkP(&cfg.Fido, msgStore, confStore, cfg.Sysop.Name); err != nil {
-			log.Printf("BinkP server error: %v", err)
+			fido.LogBinkp(fmt.Sprintf("BinkP server error: %v", err))
 		}
 	}
 

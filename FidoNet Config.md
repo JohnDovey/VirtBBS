@@ -3,7 +3,7 @@
 This guide covers every FidoNet setting in `VirtBBS.DAT`, how echomail/netmail
 routing works, the BinkP server, how to add additional FidoNet-compatible
 networks, AreaFix, FileFix, the PING/TRACE test utilities, and automatic
-nodelist updates. It covers VirtBBS **0.15.0**.
+nodelist updates. It covers VirtBBS **0.15.1**.
 
 ---
 
@@ -192,8 +192,15 @@ How an inbound connection is handled:
    - **If the caller is our uplink:** everything in `outbound_dir` that *isn't* specifically tagged for one of our own downlinks, plus crash-routed netmail addressed to the uplink.
 6. Successfully sent files are deleted; received files are immediately tossed (matching the "every poll completes with a toss" rule in §6).
 
-Session activity and errors are written to the server's log, prefixed
-`binkp server: [<network name>]`.
+Session activity and errors are written to **`binkp.log`** under your
+configured `[paths] logs` directory (default `./logs/binkp.log`), with
+RFC3339 timestamps. The same lines are also mirrored to the server's
+stdout log. In the sysop GUI, open **FidoNet → Operations → BinkP Log**
+to view recent sessions, or call the `fido.binkp.log` management API
+(params: `{"lines": 200}`).
+
+Lines are prefixed `binkp server:` or `binkp client:` / `fido scheduler:`
+as appropriate, with the network name in brackets where relevant.
 
 > **Limitation:** outbound routing is filename-based (matching the destination address tag scan.go embeds in the filename), not directory-based — there's no per-link outbound subdirectory structure (the BSO "outbound.flo" convention). This is sufficient for the AreaFix downlink fan-out this server was built to support, but isn't a full general-purpose FTN mailer's routing model.
 

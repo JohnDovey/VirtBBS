@@ -64,6 +64,19 @@
                     <Button Content="Send NetMail" Command="{Binding SendNetmailCommand}"/>
                 </StackPanel>
             </TabItem>
+
+            <TabItem Header="BinkP Log">
+                <DockPanel Margin="8">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+                        <Button Content="Refresh" Command="{Binding RefreshBinkpLogCommand}"/>
+                        <TextBlock Text="{Binding BinkpLogPath}" VerticalAlignment="Center" Opacity="0.7"/>
+                    </StackPanel>
+                    <ScrollViewer>
+                        <TextBox Text="{Binding BinkpLogText}" IsReadOnly="True" AcceptsReturn="True"
+                                 TextWrapping="NoWrap" FontFamily="Consolas, Courier New, monospace"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
         </TabControl>
 
         <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Opacity="0.8" TextWrapping="Wrap" Margin="0,8,0,0"/>

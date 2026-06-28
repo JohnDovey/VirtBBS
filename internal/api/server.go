@@ -347,6 +347,14 @@ func (s *Server) dispatch(req Request) (any, error) {
 		result := fido.PollAndToss(nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name)
 		return result, result.Poll.Error
 
+	case "fido.binkp.log":
+		var p struct {
+			Lines int `json:"lines"`
+		}
+		_ = json.Unmarshal(req.Params, &p)
+		lines, path, err := fido.ReadBinkpLogTail(p.Lines)
+		return map[string]any{"path": path, "lines": lines}, err
+
 	case "fido.netmail.send":
 		var m fido.NetmailMsg
 		if err := json.Unmarshal(req.Params, &m); err != nil {

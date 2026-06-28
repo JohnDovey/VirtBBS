@@ -244,6 +244,12 @@
 //                        Zmodem menu, VirtAnd queue/compose/detail enhancements.
 //                        Sysop GUI: scrollable edit panes, FidoNet tab fix,
 //                        VirtNet secondary-network null-safe editing.
+//   v0.15.1 2026-06-28  BinkP dedicated session log: all client/server/scheduler
+//                        BinkP activity is written to <paths.logs>/binkp.log with
+//                        RFC3339 timestamps (mirrored to stdout), fido.binkp.log
+//                        API for tailing recent lines, and a sysop GUI FidoNet
+//                        Operations "BinkP Log" tab; poll/toss/scan actions refresh
+//                        the viewer and manual poll shows sent/received/toss counts.
 // ============================================================================
 
 // Package version holds the VirtBBS version number.
@@ -254,4 +260,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "0.15.0"
+const Version = "0.15.1"

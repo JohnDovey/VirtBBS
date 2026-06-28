@@ -53,7 +53,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"os"
 	"path/filepath"
@@ -197,6 +196,7 @@ func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.S
 	pollResult := Poll(nd, outFiles, nd.InboundDir, store.DB())
 	result := &PollAndTossResult{Poll: pollResult}
 	if pollResult.Error != nil {
+		logPollResult(nd.Name, "client", len(pollResult.Sent), len(pollResult.Received), pollResult.Error)
 		return result
 	}
 
@@ -209,6 +209,8 @@ func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.S
 		tossResult = &TossResult{Errors: []string{err.Error()}}
 	}
 	result.Toss = tossResult
+	logPollResult(nd.Name, "client", len(pollResult.Sent), len(pollResult.Received), nil)
+	logTossResult(nd.Name, "client", result.Toss)
 	return result
 }
 
@@ -252,7 +254,7 @@ func ServeBinkP(cfg *Config, store *messages.Store, confStore *conferences.Store
 			return nil, fmt.Errorf("binkp listen %s: %w", addr, lerr)
 		}
 		listeners = append(listeners, ln)
-		log.Printf("BinkP listening on %s (%d network(s))", addr, len(candidates))
+		LogBinkp(fmt.Sprintf("BinkP listening on %s (%d network(s))", addr, len(candidates)))
 		go binkpAcceptLoop(ln, candidates, store, confStore, sysopName)
 	}
 
@@ -289,14 +291,14 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 
 	peerAddrs, err := binkpWaitForADRAddrs(bp)
 	if err != nil {
-		log.Printf("binkp server: handshake error from %s: %v", conn.RemoteAddr(), err)
+		LogBinkp(fmt.Sprintf("binkp server: handshake error from %s: %v", conn.RemoteAddr(), err))
 		return
 	}
 
 	nd, dl, isUplink := binkpMatchPeer(candidates, peerAddrs)
 	if nd == nil {
 		_ = bp.sendCmd(bpM_ERR, "unknown system")
-		log.Printf("binkp server: rejected unknown peer %v from %s", peerAddrs, conn.RemoteAddr())
+		LogBinkp(fmt.Sprintf("binkp server: rejected unknown peer %v from %s", peerAddrs, conn.RemoteAddr()))
 		return
 	}
 
@@ -307,12 +309,12 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	if wantPassword != "" {
 		gotPwd, err := binkpWaitForPWD(bp)
 		if err != nil {
-			log.Printf("binkp server [%s]: password handshake error: %v", nd.Name, err)
+			LogBinkp(fmt.Sprintf("binkp server [%s]: password handshake error: %v", nd.Name, err))
 			return
 		}
 		if gotPwd != wantPassword {
 			_ = bp.sendCmd(bpM_ERR, "bad password")
-			log.Printf("binkp server [%s]: bad password from %v", nd.Name, peerAddrs)
+			LogBinkp(fmt.Sprintf("binkp server [%s]: bad password from %v", nd.Name, peerAddrs))
 			return
 		}
 	}
@@ -321,12 +323,12 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	}
 
 	if err := os.MkdirAll(nd.InboundDir, 0755); err != nil {
-		log.Printf("binkp server [%s]: %v", nd.Name, err)
+		LogBinkp(fmt.Sprintf("binkp server [%s]: %v", nd.Name, err))
 		return
 	}
 	received, err := bp.receiveUntilEOB(nd.InboundDir)
 	if err != nil {
-		log.Printf("binkp server [%s]: receive error: %v", nd.Name, err)
+		LogBinkp(fmt.Sprintf("binkp server [%s]: receive error: %v", nd.Name, err))
 		return
 	}
 
@@ -335,7 +337,7 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	var sent []string
 	for _, f := range outFiles {
 		if err := bp.sendFile(f); err != nil {
-			log.Printf("binkp server [%s]: send error: %v", nd.Name, err)
+			LogBinkp(fmt.Sprintf("binkp server [%s]: send error: %v", nd.Name, err))
 			break
 		}
 		sent = append(sent, f)
@@ -349,15 +351,14 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	if !isUplink {
 		who = "downlink " + dl.Name
 	}
-	log.Printf("binkp server [%s]: session with %s (%v) complete — received %d, sent %d",
-		nd.Name, who, peerAddrs, len(received), len(sent))
+	LogBinkp(fmt.Sprintf("binkp server [%s]: session with %s (%v) complete — received %d, sent %d",
+		nd.Name, who, peerAddrs, len(received), len(sent)))
 
 	if len(received) > 0 {
 		if tr, err := TossDir(nd, store, confStore, sysopName); err != nil {
-			log.Printf("binkp server [%s]: auto-toss error: %v", nd.Name, err)
+			LogBinkp(fmt.Sprintf("binkp server [%s]: auto-toss error: %v", nd.Name, err))
 		} else {
-			log.Printf("binkp server [%s]: auto-toss after incoming poll: %d imported, %d skipped, %d held",
-				nd.Name, tr.Imported, tr.Skipped, tr.Orphaned)
+			logTossResult(nd.Name, "server", tr)
 		}
 	}
 }

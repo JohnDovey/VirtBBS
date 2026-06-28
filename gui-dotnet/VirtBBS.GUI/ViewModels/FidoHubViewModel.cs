@@ -23,7 +23,8 @@ public class FidoHubViewModel(ApiClient client) : ViewModelBase
             Routing.LoadAsync(ct),
             Join.LoadAsync(ct),
             Tools.LoadNetworksAsync(ct),
-            Operations.LoadNetworksAsync(ct)
+            Operations.LoadNetworksAsync(ct),
+            Operations.RefreshBinkpLogAsync(ct)
         );
     }
 }

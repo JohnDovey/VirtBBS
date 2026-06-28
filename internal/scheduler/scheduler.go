@@ -36,6 +36,7 @@
 package scheduler
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -174,17 +175,17 @@ func runNetwork(networkName string, store *messages.Store, confStore *conference
 
 			result := fido.PollAndToss(nd, store, confStore, config.Get().Sysop.Name)
 			if result.Poll.Error != nil {
-				log.Printf("fido scheduler: %s poll error: %v", networkName, result.Poll.Error)
+				fido.LogBinkp(fmt.Sprintf("fido scheduler: %s poll error: %v", networkName, result.Poll.Error))
 				continue
 			}
-			log.Printf("fido scheduler: %s poll complete (sent %d, received %d)",
-				networkName, len(result.Poll.Sent), len(result.Poll.Received))
+			fido.LogBinkp(fmt.Sprintf("fido scheduler: %s poll complete (sent %d, received %d)",
+				networkName, len(result.Poll.Sent), len(result.Poll.Received)))
 
 			if result.Toss != nil {
-				log.Printf("fido scheduler: %s toss complete (%d imported, %d skipped, %d held)",
-					networkName, result.Toss.Imported, result.Toss.Skipped, result.Toss.Orphaned)
+				fido.LogBinkp(fmt.Sprintf("fido scheduler: %s toss complete (%d imported, %d skipped, %d held)",
+					networkName, result.Toss.Imported, result.Toss.Skipped, result.Toss.Orphaned))
 				for _, e := range result.Toss.Errors {
-					log.Printf("fido scheduler: %s toss error: %s", networkName, e)
+					fido.LogBinkp(fmt.Sprintf("fido scheduler: %s toss error: %s", networkName, e))
 				}
 			}
 		}
