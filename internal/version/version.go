@@ -272,6 +272,8 @@
 //                        i18n; ^ALANG kludge and user locale; real name and echo From-name
 //                        policy; profile editing; sysop Fido raw-source view for netmail/echo.
 //   v1.3.0  2026-06-28  Bootstrap 5 + jQuery responsive web UI (collapsible nav, cards, grids).
+//   v1.6.2  2026-06-28  Bundled Graphviz: include lib/graphviz plugins for PNG;
+//                        fallback to PATH dot when bundle plugins are missing.
 //   v1.6.1  2026-06-28  FileFix %RESCAN backlog TIC export; VirtNet member
 //                        nodelist echo auto-drain on toss and scheduler ticker.
 //   v1.6.0  2026-06-28  TIC file-echo pipeline (inbound/outbound, file scan, admin UI);

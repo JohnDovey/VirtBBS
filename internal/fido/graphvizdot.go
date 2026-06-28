@@ -87,8 +87,8 @@ func graphvizBundleRoot(dotPath string) string {
 	return ""
 }
 
-// prepareDotCmd builds an exec.Cmd for dot with library paths when using a
-// bundled graphviz/ tree (graphviz/bin/dot + graphviz/lib/*.so|dylib).
+// prepareDotCmd builds an exec.Cmd for dot with library/plugin paths when using
+// a bundled graphviz/ tree (graphviz/bin/dot, graphviz/lib, graphviz/lib/graphviz).
 func prepareDotCmd(dotPath string, args ...string) *exec.Cmd {
 	cmd := exec.Command(dotPath, args...)
 	root := graphvizBundleRoot(dotPath)
@@ -97,15 +97,16 @@ func prepareDotCmd(dotPath string, args ...string) *exec.Cmd {
 	}
 	binDir := filepath.Join(root, "bin")
 	libDir := filepath.Join(root, "lib")
+	cmd.Env = os.Environ()
 	if st, err := os.Stat(binDir); err == nil && st.IsDir() {
 		cmd.Dir = binDir
 	}
 	if st, err := os.Stat(libDir); err == nil && st.IsDir() {
 		switch runtime.GOOS {
 		case "linux":
-			cmd.Env = append(os.Environ(), "LD_LIBRARY_PATH="+prependLibPath("LD_LIBRARY_PATH", libDir))
+			cmd.Env = append(cmd.Env, "LD_LIBRARY_PATH="+prependLibPath("LD_LIBRARY_PATH", libDir))
 		case "darwin":
-			cmd.Env = append(os.Environ(), "DYLD_LIBRARY_PATH="+prependLibPath("DYLD_LIBRARY_PATH", libDir))
+			cmd.Env = append(cmd.Env, "DYLD_LIBRARY_PATH="+prependLibPath("DYLD_LIBRARY_PATH", libDir))
 		}
 	}
 	return cmd

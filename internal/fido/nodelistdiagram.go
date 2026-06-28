@@ -45,6 +45,7 @@ package fido
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 )
@@ -224,6 +225,28 @@ func RenderPNG(dot, outPath string) error {
 	if err != nil {
 		return err
 	}
+	if err := renderPNGWithDot(dotBin, dot, outPath); err != nil {
+		if bundledDotNeedsPlugins(err) && graphvizBundleRoot(dotBin) != "" {
+			if sys, lookErr := exec.LookPath("dot"); lookErr == nil && sys != dotBin {
+				if retryErr := renderPNGWithDot(sys, dot, outPath); retryErr == nil {
+					return nil
+				}
+			}
+		}
+		return err
+	}
+	return nil
+}
+
+func bundledDotNeedsPlugins(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "not recognized") || strings.Contains(msg, "No formats found")
+}
+
+func renderPNGWithDot(dotBin, dot, outPath string) error {
 	tmp, err := os.CreateTemp("", "virtnet-*.dot")
 	if err != nil {
 		return err

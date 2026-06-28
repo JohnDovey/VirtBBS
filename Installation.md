@@ -14,7 +14,9 @@ From your install directory (alongside the `virtbbs` binary):
 ./scripts/bundle-graphviz.sh .
 ```
 
-This creates `graphviz/bin/dot` (+ `graphviz/lib/` when shared libraries are needed). Ship both `virtbbs` and the `graphviz/` folder together. VirtBBS prefers the bundled copy over PATH.
+This creates `graphviz/bin/dot`, `graphviz/lib/` (shared libraries), and **`graphviz/lib/graphviz/`** (Graphviz plugins + `config8` — required for PNG). Ship both `virtbbs` and the `graphviz/` folder together. VirtBBS prefers the bundled copy over PATH.
+
+If you see `Format "png" not recognized`, re-run the bundle script — an older bundle may have copied `dot` without the plugin directory.
 
 See [docs/Graphviz Bundle.md](docs/Graphviz%20Bundle.md) for Windows, `GRAPHVIZ_PREFIX`, and troubleshooting.
 

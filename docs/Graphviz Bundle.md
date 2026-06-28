@@ -19,11 +19,14 @@ This creates:
 
 ```
 graphviz/
-  bin/dot          # or dot.exe
-  lib/             # platform shared libraries (when needed)
+  bin/dot              # or dot.exe
+  lib/                 # libgvc, libcgraph, …
+  lib/graphviz/        # config8 + libgvplugin_*.dylib (required for PNG)
 ```
 
-Ship **`virtbbs` + `graphviz/`** together in your install or release tarball. The bundled tree is gitignored — run the script on each target platform when packaging.
+Ship **`virtbbs` + `graphviz/`** together in your install or release tarball. The bundled tree is gitignored — run the script on each target platform when packaging. The script runs a PNG smoke test and exits with an error if plugins are missing.
+
+**If you see `Format "png" not recognized`:** the bundle is missing `lib/graphviz/` — re-run `./scripts/bundle-graphviz.sh .` from the updated repo.
 
 **macOS / Linux:** install Graphviz once on the build machine (`brew install graphviz`, `apt install graphviz`, etc.), then run the script.
 
