@@ -101,6 +101,7 @@ func main() {
 	}
 	config.RegisterFidoMappingHooks()
 	fido.SetGraphvizDotPath(cfg.Paths.GraphvizDot)
+	fido.SetNetworkDiagramCacheRoot(cfg.Paths.WWW)
 	fido.SetOutboundBBSName(cfg.BBS.Name)
 
 	// Ensure data directories exist

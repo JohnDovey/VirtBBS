@@ -15,7 +15,7 @@
   <div class="network-map-block mb-4">
     <h3 class="h6 section-head">{{if .NetNum}}{{tf $.Locale .TitleKey .NetNum}}{{else}}{{t $.Locale .TitleKey}}{{end}}</h3>
     <div class="network-map-img-wrap">
-      <img class="img-fluid network-map-img" src="/networks/diagram?network={{$.QueryNet}}&amp;diagram={{.Key | urlquery}}" alt="">
+      <img class="img-fluid network-map-img" src="{{.Src}}" alt="">
     </div>
   </div>
   {{end}}

@@ -1,11 +1,8 @@
 package web
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/virtbbs/virtbbs/internal/config"
@@ -39,6 +36,7 @@ type NetworkDiagramView struct {
 	Key      string
 	TitleKey string
 	NetNum   int
+	Src      string
 }
 
 func networkNavItems() []NetworkNavItem {
@@ -138,7 +136,10 @@ func (s *Server) handleNetworkMap(w http.ResponseWriter, r *http.Request) {
 	var mapError string
 	locale := localeFromRequest(r)
 	cfg := config.Get()
-	prefix := fido.NetworkDiagPrefix(nd.Name)
+	wwwRoot := cfg.Paths.WWW
+	if strings.TrimSpace(wwwRoot) == "" {
+		wwwRoot = s.Root
+	}
 
 	nodes, err := fido.OpenNodelistDB(s.Deps.Messages.DB()).ListAll(nd.Name)
 	if err != nil {
@@ -146,22 +147,32 @@ func (s *Server) handleNetworkMap(w http.ResponseWriter, r *http.Request) {
 	} else if len(nodes) == 0 {
 		mapError = tr(locale, "networks.map.no_nodes")
 	} else {
-		pngs, warnings := fido.GenerateDiagramsFromNodes(nd.Name, nd, cfg.BBS.Name, cfg.Sysop.Name, nodes)
-		if len(pngs) == 0 && len(warnings) > 0 {
-			mapError = strings.Join(warnings, "; ")
-		}
 		zone := nd.NodeAddr().Zone
 		if zone == 0 && len(nodes) > 0 {
 			zone = nodes[0].Zone
 		}
-		diagrams = networkDiagramViews(zone, prefix, pngs)
+		cached := fido.ListNetworkDiagramCache(wwwRoot, nd.Name, zone)
+		if len(cached) == 0 {
+			pngs, warnings := fido.GenerateDiagramsFromNodes(nd.Name, nd, cfg.BBS.Name, cfg.Sysop.Name, nodes)
+			if len(pngs) == 0 && len(warnings) > 0 {
+				mapError = strings.Join(warnings, "; ")
+			} else if err := fido.WriteNetworkDiagramCache(wwwRoot, nd.Name, zone, pngs); err != nil {
+				mapError = err.Error()
+			} else {
+				cached = fido.ListNetworkDiagramCache(wwwRoot, nd.Name, zone)
+			}
+		}
+		diagrams = networkDiagramViewsFromCache(nd.Name, cached)
+		if len(diagrams) == 0 && mapError == "" {
+			mapError = tr(locale, "networks.map.none")
+		}
 	}
 	data := struct {
 		pageData
-		Network   string
-		Diagrams  []NetworkDiagramView
-		MapError  string
-		QueryNet  string
+		Network  string
+		Diagrams []NetworkDiagramView
+		MapError string
+		QueryNet string
 	}{
 		pageData: s.page(r),
 		Network:  nd.Name,
@@ -172,40 +183,30 @@ func (s *Server) handleNetworkMap(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "network_map.html", data)
 }
 
-func networkDiagramViews(zone int, prefix string, pngs map[string][]byte) []NetworkDiagramView {
+func networkDiagramViewsFromCache(network string, cached []fido.DiagramCacheEntry) []NetworkDiagramView {
 	var out []NetworkDiagramView
-	if _, ok := pngs[prefix+"_Full.png"]; ok {
-		out = append(out, NetworkDiagramView{Key: "full", TitleKey: "networks.map.full"})
-	}
-	if _, ok := pngs[prefix+"_Hubs.png"]; ok {
-		out = append(out, NetworkDiagramView{Key: "hubs", TitleKey: "networks.map.hubs"})
-	}
-	var nets []int
-	for name := range pngs {
-		if !strings.HasPrefix(name, "Hub_") || !strings.HasSuffix(name, ".png") {
+	for _, e := range cached {
+		view := NetworkDiagramView{
+			Key: e.Key,
+			Src: fido.DiagramCacheWebURL(network, e.Key),
+		}
+		switch e.Key {
+		case "full":
+			view.TitleKey = "networks.map.full"
+		case "hubs":
+			view.TitleKey = "networks.map.hubs"
+		default:
+			if strings.HasPrefix(e.Key, "hub-") && e.NetNum > 0 {
+				view.TitleKey = "networks.map.per_net"
+				view.NetNum = e.NetNum
+			} else {
+				continue
+			}
+		}
+		if view.Src == "" {
 			continue
 		}
-		base := strings.TrimSuffix(strings.TrimPrefix(name, "Hub_"), ".png")
-		parts := strings.SplitN(base, "-", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		net, err := strconv.Atoi(parts[1])
-		if err != nil {
-			continue
-		}
-		nets = append(nets, net)
-	}
-	sort.Ints(nets)
-	for _, net := range nets {
-		name := fmt.Sprintf("Hub_%d-%d.png", zone, net)
-		if _, ok := pngs[name]; ok {
-			out = append(out, NetworkDiagramView{
-				Key:      fmt.Sprintf("hub-%d", net),
-				TitleKey: "networks.map.per_net",
-				NetNum:   net,
-			})
-		}
+		out = append(out, view)
 	}
 	return out
 }
@@ -223,54 +224,10 @@ func (s *Server) handleNetworkDiagram(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "diagram required", http.StatusBadRequest)
 		return
 	}
-	cfg := config.Get()
-	prefix := fido.NetworkDiagPrefix(nd.Name)
-	nodes, err := fido.OpenNodelistDB(s.Deps.Messages.DB()).ListAll(nd.Name)
-	if err != nil || len(nodes) == 0 {
+	src := fido.DiagramCacheWebURL(nd.Name, diagram)
+	if src == "" {
 		http.NotFound(w, r)
 		return
 	}
-	pngs, _ := fido.GenerateDiagramsFromNodes(nd.Name, nd, cfg.BBS.Name, cfg.Sysop.Name, nodes)
-	zone := nd.NodeAddr().Zone
-	if zone == 0 && len(nodes) > 0 {
-		zone = nodes[0].Zone
-	}
-	filename := diagramFilename(zone, prefix, diagram, pngs)
-	if filename == "" {
-		http.NotFound(w, r)
-		return
-	}
-	data, ok := pngs[filename]
-	if !ok {
-		http.NotFound(w, r)
-		return
-	}
-	w.Header().Set("Content-Type", "image/png")
-	w.Header().Set("Cache-Control", "private, max-age=300")
-	_, _ = w.Write(data)
-}
-
-func diagramFilename(zone int, prefix, key string, pngs map[string][]byte) string {
-	switch key {
-	case "full":
-		name := prefix + "_Full.png"
-		if _, ok := pngs[name]; ok {
-			return name
-		}
-	case "hubs":
-		name := prefix + "_Hubs.png"
-		if _, ok := pngs[name]; ok {
-			return name
-		}
-	}
-	if strings.HasPrefix(key, "hub-") {
-		netStr := strings.TrimPrefix(key, "hub-")
-		if net, err := strconv.Atoi(netStr); err == nil {
-			name := fmt.Sprintf("Hub_%d-%d.png", zone, net)
-			if _, ok := pngs[name]; ok {
-				return name
-			}
-		}
-	}
-	return ""
+	http.Redirect(w, r, src, http.StatusMovedPermanently)
 }

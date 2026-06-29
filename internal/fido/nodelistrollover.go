@@ -235,5 +235,12 @@ func rebuildNetworkDiagramZip(nd *NetworkDef, nodes []NodeEntry, fileArea FileAr
 	if err := writeMultiZipAndRegister(dirPath, dirID, fileArea, zipName, pngs, diz); err != nil {
 		return len(pngs), append(warnings, fmt.Sprintf("zip %s: %v", zipName, err))
 	}
+	zone := nd.NodeAddr().Zone
+	if zone == 0 && len(nodes) > 0 {
+		zone = nodes[0].Zone
+	}
+	if err := WriteNetworkDiagramCacheDefault(nd.Name, zone, pngs); err != nil {
+		warnings = append(warnings, fmt.Sprintf("diagram cache: %v", err))
+	}
 	return len(pngs), warnings
 }
