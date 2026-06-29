@@ -2,7 +2,7 @@
 #
 # android-build.sh - Build VirtAnd from CLI (Android project on JohnDovey drive)
 #
-# Toolchain matches ClonesApp — see ../../CLAUDE.md.
+# Toolchain matches ClonesApp — see ../../docs/CLAUDE.md.
 #
 # Usage examples:
 #   ./android-build.sh                      # :app:assembleDebug (default)

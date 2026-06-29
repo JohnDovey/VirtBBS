@@ -4,7 +4,7 @@
 //   core — pure Kotlin/JVM business logic (API client, QWK packet parsing).
 //   app  — Android application (Room, WorkManager, Compose UI).
 //
-// Build tooling matches ClonesApp (see ../CLAUDE.md and ../../CLAUDE.md).
+// Build tooling matches ClonesApp (see ../../docs/CLAUDE.md).
 enableFeaturePreview("STABLE_CONFIGURATION_CACHE")
 
 pluginManagement {

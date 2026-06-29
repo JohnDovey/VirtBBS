@@ -56,7 +56,7 @@ blind the way the whole project would otherwise have to be.
 
 Gradle wrapper and version catalog match
 [ClonesApp](/Volumes/JohnDovey/Projects/ClonesApp) (Gradle 9.5.1, AGP
-8.13.2, Kotlin 2.0, JDK 17). See `../../CLAUDE.md` for SDK paths and
+8.13.2, Kotlin 2.0, JDK 17). See `../../docs/CLAUDE.md` for SDK paths and
 AI-assistant notes.
 
 Copy `local.properties.example` to `local.properties` if you don't already

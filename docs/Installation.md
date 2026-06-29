@@ -4,7 +4,7 @@
 
 - macOS 12+, Linux (kernel 4.x+), or Windows 10+
 - The `virtbbs` server ships as a self-contained binary — no additional runtime required
-- **[Graphviz](https://graphviz.org/)** (optional) — required for network topology diagrams in `<Network>_diags.zip`. **Recommended:** bundle `dot` next to `virtbbs` (see [docs/Graphviz Bundle.md](docs/Graphviz%20Bundle.md)). Alternatively install Graphviz on PATH or set `paths.graphviz_dot` in `VirtBBS.DAT`.
+- **[Graphviz](https://graphviz.org/)** (optional) — required for network topology diagrams in `<Network>_diags.zip`. **Recommended:** bundle `dot` next to `virtbbs` (see [Graphviz Bundle.md](Graphviz%20Bundle.md)). Alternatively install Graphviz on PATH or set `paths.graphviz_dot` in `VirtBBS.DAT`.
 
 ### Bundled Graphviz (recommended)
 
@@ -18,7 +18,7 @@ This creates `graphviz/bin/dot`, `graphviz/lib/` (shared libraries), and **`grap
 
 If you see `Format "png" not recognized`, re-run the bundle script — an older bundle may have copied `dot` without the plugin directory.
 
-See [docs/Graphviz Bundle.md](docs/Graphviz%20Bundle.md) for Windows, `GRAPHVIZ_PREFIX`, and troubleshooting.
+See [Graphviz Bundle.md](Graphviz%20Bundle.md) for Windows, `GRAPHVIZ_PREFIX`, and troubleshooting.
 
 ### System Graphviz install (alternative)
 

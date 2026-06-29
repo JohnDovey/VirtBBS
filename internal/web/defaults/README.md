@@ -147,6 +147,6 @@ Legend: `[x]` done · `[ ]` not yet implemented
 
 ## Related docs
 
-- `BUILDING.md` — build instructions and default ports
+- `docs/BUILDING.md` — build instructions and default ports
 - `VirtBBS.DAT.example` — sample configuration
 - Terminal parity reference: `internal/session/session.go`

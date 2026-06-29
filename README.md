@@ -12,6 +12,26 @@ The browser-based BBS UI was inspired in part by **[BinktermPHP](https://lovelyb
 
 ---
 
+## Documentation
+
+All guides live in [`docs/`](docs/):
+
+| Document | Contents |
+|----------|----------|
+| [Installation.md](docs/Installation.md) | Fresh install, upgrade, ports, Graphviz |
+| [BUILDING.md](docs/BUILDING.md) | Build, cross-compile, PCBoard import |
+| [PLAN.md](docs/PLAN.md) | Development roadmap and architecture notes |
+| [FidoNet Config.md](docs/FidoNet%20Config.md) | FidoNet, BinkP, AreaFix, nodelist |
+| [VirtNet Nodelist Processing.md](docs/VirtNet%20Nodelist%20Processing.md) | Automatic nodelist fetch (FidoNet) and VirtNet hub generate/distribute/apply |
+| [AreaFix FileFix TIC.md](docs/AreaFix%20FileFix%20TIC.md) | AreaFix, FileFix, TIC robots and file echo |
+| [Using-VirtBBS-as-a-Network-Hub.md](docs/Using-VirtBBS-as-a-Network-Hub.md) | Running VirtBBS as a Fido network hub |
+| [Graphviz Bundle.md](docs/Graphviz%20Bundle.md) | Bundling Graphviz `dot` with the server |
+| [CLAUDE.md](docs/CLAUDE.md) | Notes for AI assistants and toolchain paths |
+
+Component-specific READMEs: [www/README.md](www/README.md) (web UI), [android/VirtAnd/README.md](android/VirtAnd/README.md) (Android client).
+
+---
+
 ## How to Connect
 
 | Client | How |
@@ -75,9 +95,8 @@ VirtBBS/
 ├── pkg/pcbformat/         # PCBoard binary format decoders
 ├── ppe/                   # Sample .PPS source files
 ├── VirtBBS.DAT            # Configuration (TOML)
+├── docs/                  # Project documentation
 ├── README.md
-├── Installation.md
-├── BUILDING.md
 └── go.mod
 ```
 
@@ -133,7 +152,7 @@ The server binary requires **no cgo** and cross-compiles cleanly for macOS, Linu
 
 ## Building from Source
 
-See [BUILDING.md](BUILDING.md) for full instructions.
+See [docs/BUILDING.md](docs/BUILDING.md) for full instructions.
 
 ```bash
 go mod tidy
@@ -145,7 +164,7 @@ go build ./cmd/virtbbs
 
 ## Quick Start
 
-See [Installation.md](Installation.md) for full instructions.
+See [docs/Installation.md](docs/Installation.md) for full instructions.
 
 ```bash
 # 1. Initialise the sysop account
@@ -162,21 +181,6 @@ open http://localhost:8081/
 ```
 
 Log in with your BBS username and password. Sysops see **Admin** in the navigation bar.
-
----
-
-## Documentation
-
-| Document | Contents |
-|----------|----------|
-| [Installation.md](Installation.md) | Fresh install, upgrade, ports, Graphviz |
-| [BUILDING.md](BUILDING.md) | Build, cross-compile, PCBoard import |
-| [FidoNet Config.md](FidoNet%20Config.md) | FidoNet, BinkP, AreaFix, nodelist |
-| [VirtNet Nodelist Processing.md](VirtNet%20Nodelist%20Processing.md) | Automatic nodelist fetch (FidoNet) and VirtNet hub generate/distribute/apply |
-| [AreaFix FileFix TIC.md](AreaFix%20FileFix%20TIC.md) | AreaFix, FileFix, TIC robots and file echo |
-| [www/README.md](www/README.md) | Web UI routes, seeding, feature checklist |
-| [CLAUDE.md](CLAUDE.md) | Notes for AI assistants and toolchain paths |
-| [android/VirtAnd/README.md](android/VirtAnd/README.md) | Android point client |
 
 ---
 
