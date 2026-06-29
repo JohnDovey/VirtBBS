@@ -68,6 +68,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/telnet"
 	"github.com/virtbbs/virtbbs/internal/userapi"
 	"github.com/virtbbs/virtbbs/internal/users"
+	"github.com/virtbbs/virtbbs/internal/uptime"
 	"github.com/virtbbs/virtbbs/internal/version"
 	"github.com/virtbbs/virtbbs/internal/web"
 )
@@ -392,6 +393,8 @@ func main() {
 	}
 
 	log.Printf("VirtBBS %s starting", version.Version)
+	uptime.RecordStart()
+	log.Print(uptime.Message(cfg.BBS.Name))
 
 	// User API (VirtAnd) — token-authenticated JSON-over-TCP on a separate port.
 	userAPIAddr := fmt.Sprintf("%s:%d", cfg.Network.UserAPIBind, cfg.Network.UserAPIPort)

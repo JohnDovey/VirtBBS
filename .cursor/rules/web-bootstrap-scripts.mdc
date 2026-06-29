@@ -1,0 +1,57 @@
+---
+description: VirtBBS web UI — load page scripts after Bootstrap so modals work
+globs: www/templates/**/*.html,internal/web/defaults/templates/**/*.html,www/static/*.js,internal/web/defaults/static/*.js
+alwaysApply: false
+---
+
+# Page scripts and Bootstrap load order
+
+`layout.html` footer loads jQuery and `bootstrap.bundle.min.js`. Page-specific scripts included **before** `{{template "footer" .}}` run during HTML parse, **before** Bootstrap exists — `bootstrap` / `window.bootstrap` is undefined and modals silently fail.
+
+## Required pattern
+
+1. **`defer` on page scripts** placed before the footer (same as `nodelist.js`, `bbslist.js`, `compose-editor.js`):
+   ```html
+   <script src="/static/my-page.js" defer></script>
+   {{template "footer" .}}
+   ```
+   Deferred scripts run after the document is parsed, so footer Bootstrap is available first.
+
+2. **`boot()` guard** — do not initialize Bootstrap at module top level:
+   ```javascript
+   function boot() {
+     if (typeof window.bootstrap === 'undefined' || !window.bootstrap.Modal) return;
+     // wire listeners, charts, etc.
+   }
+   if (document.readyState === 'loading') {
+     document.addEventListener('DOMContentLoaded', boot);
+   } else {
+     boot();
+   }
+   ```
+
+3. **Lazy modals** — create/show on first user action, not at load:
+   ```javascript
+   function getModal() {
+     var el = document.getElementById('my-modal');
+     if (!el || !window.bootstrap?.Modal) return null;
+     return window.bootstrap.Modal.getOrCreateInstance(el);
+   }
+   ```
+
+## Avoid
+
+```javascript
+// BAD — runs before footer Bootstrap
+var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+```
+
+```html
+<!-- BAD — synchronous load before footer -->
+<script src="/static/page.js"></script>
+{{template "footer" .}}
+```
+
+## Chart-only scripts
+
+Scripts that do not use Bootstrap (e.g. Chart.js only) may still use `defer` for consistency; not required if they never touch `bootstrap`.

@@ -272,6 +272,8 @@
 //                        i18n; ^ALANG kludge and user locale; real name and echo From-name
 //                        policy; profile editing; sysop Fido raw-source view for netmail/echo.
 //   v1.3.0  2026-06-28  Bootstrap 5 + jQuery responsive web UI (collapsible nav, cards, grids).
+//   v1.7.5  2026-06-29  BBS List search, View modal, and SQLite backfill fix; node2dot-style
+//                        network maps; server uptime in stats and startup log.
 //   v1.7.4  2026-06-29  NODELIST.Z##/NODEDIFF.Z## ZIP archives with FILE_ID.DIZ;
 //                        admin Rebuild from members for VirtNet hub nodelists.
 //   v1.7.3  2026-06-29  Fido NODELIST.Z## naming and weekly full/daily diff; hub import
@@ -312,4 +314,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "1.7.4"
+const Version = "1.7.5"

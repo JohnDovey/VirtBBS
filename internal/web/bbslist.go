@@ -53,6 +53,10 @@ func bbsListPageJSON(locale string) template.JS {
 		{"chart_insufficient", "stats.chart_insufficient"},
 		{"stats_heading", "bbslist.stats_heading"},
 		{"no_nodelist", "bbslist.no_nodelist"},
+		{"search_label", "bbslist.search_label"},
+		{"search_btn", "bbslist.search_btn"},
+		{"search_clear", "bbslist.search_clear"},
+		{"search_placeholder", "bbslist.search_placeholder"},
 	}
 	i18n := make(map[string]string, len(keys))
 	for _, pair := range keys {
@@ -95,6 +99,7 @@ func (s *Server) handleAPIBBSList(w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Deps.Messages.DB()
 	section := strings.TrimSpace(r.URL.Query().Get("section"))
+	search := strings.TrimSpace(r.URL.Query().Get("q"))
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	if page < 1 {
 		page = 1
@@ -107,12 +112,12 @@ func (s *Server) handleAPIBBSList(w http.ResponseWriter, r *http.Request) {
 	)
 	switch section {
 	case "echomail":
-		result, err = fido.ListBBSNodesEchomail(db, page, bbsListPageSize)
+		result, err = fido.ListBBSNodesEchomail(db, page, bbsListPageSize, search)
 	case "netmail":
-		result, err = fido.ListBBSNodesNetmail(db, page, bbsListPageSize)
+		result, err = fido.ListBBSNodesNetmail(db, page, bbsListPageSize, search)
 	case "network":
 		network := strings.TrimSpace(r.URL.Query().Get("network"))
-		result, err = fido.ListBBSNodesByNetwork(db, network, page, bbsListPageSize)
+		result, err = fido.ListBBSNodesByNetwork(db, network, page, bbsListPageSize, search)
 	default:
 		http.Error(w, "section required (echomail, netmail, network)", http.StatusBadRequest)
 		return

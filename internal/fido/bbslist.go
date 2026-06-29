@@ -196,22 +196,22 @@ func recordEnd(db *sql.DB, network string, our, remote Addr, userName string, ec
 }
 
 // ListBBSNodesEchomail returns nodes with echomail activity, paginated.
-func ListBBSNodesEchomail(db *sql.DB, page, pageSize int) (*BBSListPage, error) {
-	return listBBSNodes(db, "echomail_count > 0", "echomail_count DESC, last_seen DESC", "", page, pageSize)
+func ListBBSNodesEchomail(db *sql.DB, page, pageSize int, search string) (*BBSListPage, error) {
+	return listBBSNodes(db, "n.echomail_count > 0", "n.echomail_count DESC, n.last_seen DESC", "", page, pageSize, search)
 }
 
 // ListBBSNodesNetmail returns nodes with netmail activity, paginated.
-func ListBBSNodesNetmail(db *sql.DB, page, pageSize int) (*BBSListPage, error) {
-	return listBBSNodes(db, "netmail_count > 0", "netmail_count DESC, last_seen DESC", "", page, pageSize)
+func ListBBSNodesNetmail(db *sql.DB, page, pageSize int, search string) (*BBSListPage, error) {
+	return listBBSNodes(db, "n.netmail_count > 0", "n.netmail_count DESC, n.last_seen DESC", "", page, pageSize, search)
 }
 
 // ListBBSNodesByNetwork returns nodes for one network, paginated.
-func ListBBSNodesByNetwork(db *sql.DB, network string, page, pageSize int) (*BBSListPage, error) {
+func ListBBSNodesByNetwork(db *sql.DB, network string, page, pageSize int, search string) (*BBSListPage, error) {
 	network = strings.TrimSpace(network)
 	if network == "" {
 		return &BBSListPage{Nodes: []BBSListNode{}}, nil
 	}
-	return listBBSNodes(db, "1=1", "echomail_count + netmail_count DESC, last_seen DESC", network, page, pageSize)
+	return listBBSNodes(db, "1=1", "n.echomail_count + n.netmail_count DESC, n.last_seen DESC", network, page, pageSize, search)
 }
 
 // ListBBSNetworkNames returns distinct network names that have BBS list data.
@@ -235,7 +235,7 @@ func ListBBSNetworkNames(db *sql.DB) ([]string, error) {
 	return out, rows.Err()
 }
 
-func listBBSNodes(db *sql.DB, where, order, network string, page, pageSize int) (*BBSListPage, error) {
+func listBBSNodes(db *sql.DB, where, order, network string, page, pageSize int, search string) (*BBSListPage, error) {
 	if db == nil {
 		return nil, fmt.Errorf("database not available")
 	}
@@ -250,11 +250,14 @@ func listBBSNodes(db *sql.DB, where, order, network string, page, pageSize int) 
 	netCond := ""
 	args := []any{}
 	if network != "" {
-		netCond = " AND network=?"
+		netCond = " AND n.network=?"
 		args = append(args, network)
 	}
 
-	countSQL := `SELECT COUNT(*) FROM fido_bbs_nodes WHERE ` + where + netCond
+	searchCond, searchArgs := bbsListSearchSQL(search)
+	args = append(args, searchArgs...)
+
+	countSQL := `SELECT COUNT(*) FROM fido_bbs_nodes n WHERE ` + where + netCond + searchCond
 	var total int
 	if err := db.QueryRow(countSQL, args...).Scan(&total); err != nil {
 		return nil, err
@@ -264,8 +267,8 @@ func listBBSNodes(db *sql.DB, where, order, network string, page, pageSize int) 
 		pages = (total + pageSize - 1) / pageSize
 	}
 
-	querySQL := `SELECT network, node_addr, echomail_count, netmail_count, last_seen
-		FROM fido_bbs_nodes WHERE ` + where + netCond +
+	querySQL := `SELECT n.network, n.node_addr, n.echomail_count, n.netmail_count, n.last_seen
+		FROM fido_bbs_nodes n WHERE ` + where + netCond + searchCond +
 		` ORDER BY ` + order + ` LIMIT ? OFFSET ?`
 	queryArgs := append(args, pageSize, offset)
 	rows, err := db.Query(querySQL, queryArgs...)
@@ -295,6 +298,28 @@ func listBBSNodes(db *sql.DB, where, order, network string, page, pageSize int) 
 		nodes = []BBSListNode{}
 	}
 	return &BBSListPage{Nodes: nodes, Total: total, Page: page, Pages: pages}, nil
+}
+
+func bbsListSearchSQL(search string) (string, []any) {
+	search = strings.TrimSpace(search)
+	if search == "" {
+		return "", nil
+	}
+	like := "%" + search + "%"
+	return ` AND (
+		n.node_addr LIKE ? OR
+		EXISTS (
+			SELECT 1 FROM fido_nodes fn
+			WHERE fn.zone = n.zone AND fn.net = n.net AND fn.node_num = n.node_num AND fn.point = 0
+				AND (fn.network = n.network OR fn.network = '')
+				AND (fn.name LIKE ? OR fn.location LIKE ? OR fn.sysop LIKE ?)
+		) OR
+		EXISTS (
+			SELECT 1 FROM fido_bbs_users u
+			WHERE u.network = n.network AND u.node_addr = n.node_addr
+				AND (u.user_name LIKE ? OR u.user_addr LIKE ?)
+		)
+	)`, []any{like, like, like, like, like, like}
 }
 
 func enrichBBSNode(ndb *NodelistDB, n *BBSListNode) {

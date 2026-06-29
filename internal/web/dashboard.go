@@ -9,6 +9,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/display"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/users"
+	"github.com/virtbbs/virtbbs/internal/uptime"
 )
 
 // NewMessageLine is one conference with unread messages for the dashboard.
@@ -37,6 +38,11 @@ type DashboardStats struct {
 	BBSFileToday   int
 	BBSFileMonth   int
 	OnlineNodes    int
+	BBSUptimeDays       int
+	BBSUptimeMinutes    int
+	BBSUptimeSeconds    int
+	BBSUptimeSinceDate  string
+	BBSUptimeSinceTime  string
 }
 
 // BulletinView is a rendered display file for the web UI.
@@ -100,6 +106,11 @@ func (s *Server) gatherDashboardStats(u *users.User) DashboardStats {
 		if nodes, err := s.Deps.Nodes.List(); err == nil {
 			st.OnlineNodes = len(nodes)
 		}
+	}
+	st.BBSUptimeDays, st.BBSUptimeMinutes, st.BBSUptimeSeconds = uptime.Breakdown(uptime.Elapsed())
+	if since := uptime.StartedAt(); !since.IsZero() {
+		st.BBSUptimeSinceDate = since.Format("2006-01-02")
+		st.BBSUptimeSinceTime = since.Format("15:04:05")
 	}
 	return st
 }

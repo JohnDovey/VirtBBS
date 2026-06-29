@@ -92,104 +92,389 @@ func sanitizeNetworkFileToken(network string) string {
 	return b.String()
 }
 
-// buildDOT renders nodelist entries (grouped by net for DiagramPerHub) into
-// Graphviz DOT text, mirroring node2dot.py's conventions.
-func buildDOT(network string, zoneAddr Addr, zoneName, zoneSysop string, byNet map[int][]NodeEntry, scope DiagramScope, onlyNet int) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "digraph %s {\r\n", dotEscape(sanitizeNetworkFileToken(network)))
-	b.WriteString("  node [shape=box, style=filled];\r\n")
-
-	zoneID := "zone"
-	fmt.Fprintf(&b, "  %s [label=\"%d\\n%s\\n%s\", fillcolor=lightblue];\r\n",
-		zoneID, zoneAddr.Zone, dotEscape(zoneName), dotEscape(zoneSysop))
-
-	nets := sortedNetKeys(byNet)
-	for _, net := range nets {
-		if scope == DiagramPerHub && net != onlyNet {
-			continue
-		}
-		entries := byNet[net]
-		host := findNetHost(entries)
-
-		hostID := fmt.Sprintf("host_%d", net)
-		hostName, hostSysop := zoneName, zoneSysop
-		hostNode := "1"
-		if host != nil {
-			hostName, hostSysop = host.Name, host.Sysop
-			if host.Node != 0 {
-				hostNode = fmt.Sprintf("%d", host.Node)
-			}
-		}
-		fmt.Fprintf(&b, "  %s [label=\"%d:%d/%s\\n%s\\n%s\", fillcolor=palegreen];\r\n",
-			hostID, zoneAddr.Zone, net, hostNode, dotEscape(hostName), dotEscape(hostSysop))
-		fmt.Fprintf(&b, "  %s -> %s;\r\n", zoneID, hostID)
-
-		if scope == DiagramHubsOnly {
-			continue
-		}
-		for i, e := range entries {
-			if !isDiagramMember(&e, host) {
-				continue
-			}
-			memberID := fmt.Sprintf("m_%d_%d", net, i)
-			fmt.Fprintf(&b, "  %s [label=\"%s\\n%s\\n%s\", fillcolor=lightpink];\r\n",
-				memberID, dotEscape(e.Addr4D()), dotEscape(e.Name), dotEscape(e.Sysop))
-			fmt.Fprintf(&b, "  %s -> %s;\r\n", hostID, memberID)
-		}
+// buildDOT renders nodelist entries into Graphviz DOT text using the same
+// hierarchy rules as node2dot.py (Fernando Toledo / FidoNet zone maps).
+func buildDOT(network string, zoneAddr Addr, zoneName, zoneSysop string, nodes []NodeEntry, scope DiagramScope, onlyNet int) string {
+	zone := zoneAddr.Zone
+	entries := filterDiagramZone(nodes, zone)
+	if scope == DiagramPerHub && onlyNet != 0 {
+		entries = filterEntriesPerHub(entries, zone, onlyNet)
 	}
+	entries = orderDiagramEntries(entries, zone)
 
+	g := newDotGraph(network, zone, zoneName, zoneSysop)
+	for i := range entries {
+		g.addEntry(&entries[i], scope)
+	}
+	g.ensureZoneNode()
+	return g.render()
+}
+
+type dotGraph struct {
+	digraphName   string
+	zone          int
+	zoneID        string
+	zoneName      string
+	zoneSysop     string
+	currentRegion string
+	currentHost   string
+	nodes         map[string]dotNode
+	edges         []dotEdge
+}
+
+type dotNode struct {
+	label    string
+	fillType string // zona, region, host, pvt, hold
+}
+
+type dotEdge struct {
+	from, to string
+}
+
+func newDotGraph(network string, zone int, zoneName, zoneSysop string) *dotGraph {
+	return &dotGraph{
+		digraphName: sanitizeNetworkFileToken(network),
+		zone:        zone,
+		zoneID:      fmt.Sprintf("%d", zone),
+		zoneName:    zoneName,
+		zoneSysop:   zoneSysop,
+		nodes:       map[string]dotNode{},
+	}
+}
+
+func (g *dotGraph) addEntry(e *NodeEntry, scope DiagramScope) {
+	switch e.Type {
+	case "Zone":
+		if e.Zone != g.zone {
+			return
+		}
+		sysop := dotLabelText(e.Sysop)
+		if sysop == "" {
+			sysop = dotLabelText(g.zoneSysop)
+		}
+		g.nodes[g.zoneID] = dotNode{
+			label:    fmt.Sprintf("ZONA %d\\n(%s)", g.zone, dotEscape(sysop)),
+			fillType: "zona",
+		}
+	case "Region":
+		if e.Zone != g.zone {
+			return
+		}
+		g.currentRegion = fmt.Sprintf("%d:%d", e.Zone, e.Net)
+		g.currentHost = ""
+		name := dotLabelText(e.Name)
+		if name == "" {
+			name = dotLabelText(e.Location)
+		}
+		g.nodes[g.currentRegion] = dotNode{
+			label:    fmt.Sprintf("%s\\n(%s)", g.currentRegion, dotEscape(name)),
+			fillType: "region",
+		}
+		g.edges = append(g.edges, dotEdge{g.zoneID, g.currentRegion})
+	case "Host":
+		if e.Zone != g.zone {
+			return
+		}
+		g.currentHost = fmt.Sprintf("%d:%d", e.Zone, e.Net)
+		name := dotLabelText(e.Name)
+		sysop := dotLabelText(e.Sysop)
+		g.nodes[g.currentHost] = dotNode{
+			label:    fmt.Sprintf("%s\\n(%s)\\n(%s)", g.currentHost, dotEscape(name), dotEscape(sysop)),
+			fillType: "host",
+		}
+		g.edges = append(g.edges, g.hostEdge(g.currentHost)...)
+	case "Hub", "Node", "Pvt", "Boss", "":
+		if scope == DiagramHubsOnly {
+			return
+		}
+		g.addMemberNode(e, "pvt")
+	case "Hold", "Down":
+		if scope == DiagramHubsOnly {
+			return
+		}
+		g.addMemberNode(e, "hold")
+	}
+}
+
+func (g *dotGraph) hostEdge(hostID string) []dotEdge {
+	if g.currentRegion != "" {
+		hubID := g.currentRegion + "/1"
+		if _, ok := g.nodes[hubID]; ok {
+			return []dotEdge{{hubID, hostID}}
+		}
+		return []dotEdge{{g.currentRegion, hostID}}
+	}
+	return []dotEdge{{g.zoneID, hostID}}
+}
+
+func (g *dotGraph) addMemberNode(e *NodeEntry, fillType string) {
+	if e.Zone != g.zone || e.Node == 0 {
+		return
+	}
+	parent := g.currentHost
+	if parent == "" {
+		parent = g.currentRegion
+	}
+	if parent == "" {
+		parent = g.zoneID
+	}
+	nodeID := fmt.Sprintf("%s/%d", parent, e.Node)
+	name := dotLabelText(e.Name)
+	sysop := dotLabelText(e.Sysop)
+	label := nodeID + "\\n" + dotEscape(name)
+	if sysop != "" {
+		label += "\\n(" + dotEscape(sysop) + ")"
+	}
+	if e.Type == "Hold" || e.Type == "Down" {
+		fillType = "hold"
+	}
+	g.nodes[nodeID] = dotNode{label: label, fillType: fillType}
+	g.edges = append(g.edges, dotEdge{parent, nodeID})
+}
+
+func (g *dotGraph) ensureZoneNode() {
+	if g.zone == 0 {
+		return
+	}
+	if _, ok := g.nodes[g.zoneID]; ok {
+		return
+	}
+	sysop := dotLabelText(g.zoneSysop)
+	g.nodes[g.zoneID] = dotNode{
+		label:    fmt.Sprintf("ZONA %d\\n(%s)", g.zone, dotEscape(sysop)),
+		fillType: "zona",
+	}
+}
+
+func (g *dotGraph) render() string {
+	colorMap := map[string]string{
+		"zona":   "lightblue",
+		"region": "palegreen",
+		"host":   "lightpink",
+		"pvt":    "lightyellow",
+		"hold":   "lightcoral",
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "digraph %s {\r\n", dotEscape(g.digraphName))
+	b.WriteString("node [shape=tab, style=filled]\r\n")
+	b.WriteString("rankdir=LR\r\n\r\n")
+
+	ids := make([]string, 0, len(g.nodes))
+	for id := range g.nodes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		n := g.nodes[id]
+		fill := colorMap[n.fillType]
+		if fill == "" {
+			fill = "lightyellow"
+		}
+		fmt.Fprintf(&b, "\"%s\" [label=\"%s\", fillcolor=%s]\r\n", dotEscape(id), n.label, fill)
+	}
+	for _, e := range g.edges {
+		fmt.Fprintf(&b, "\"%s\" -> \"%s\"\r\n", dotEscape(e.from), dotEscape(e.to))
+	}
 	b.WriteString("}\r\n")
 	return b.String()
+}
+
+func dotLabelText(s string) string {
+	return strings.ReplaceAll(strings.TrimSpace(s), "_", " ")
+}
+
+// orderDiagramEntries orders nodes like node2dot.py: Zone, then per Region block
+// (region → nodes on that net → host nets → nodes on host nets). Without Region
+// lines (VirtNet), uses Zone → Host → members per net.
+func orderDiagramEntries(entries []NodeEntry, zone int) []NodeEntry {
+	var zoneEntry *NodeEntry
+	var regions []NodeEntry
+	hosts := map[int]NodeEntry{}
+	var members []NodeEntry
+	for i := range entries {
+		e := &entries[i]
+		if e.Type != "Zone" && e.Zone != zone {
+			continue
+		}
+		switch e.Type {
+		case "Zone":
+			zoneEntry = e
+		case "Region":
+			regions = append(regions, *e)
+		case "Host":
+			hosts[e.Net] = *e
+		default:
+			if e.Node != 0 {
+				members = append(members, *e)
+			}
+		}
+	}
+	sort.Slice(regions, func(i, j int) bool { return regions[i].Net < regions[j].Net })
+
+	var out []NodeEntry
+	if zoneEntry != nil {
+		out = append(out, *zoneEntry)
+	}
+	if len(regions) == 0 {
+		return orderDiagramEntriesNoRegion(out, hosts, members)
+	}
+
+	hostNets := make([]int, 0, len(hosts))
+	for n := range hosts {
+		hostNets = append(hostNets, n)
+	}
+	sort.Ints(hostNets)
+
+	for ri, reg := range regions {
+		out = append(out, reg)
+		nextReg := 0
+		if ri+1 < len(regions) {
+			nextReg = regions[ri+1].Net
+		}
+		for _, m := range sortMembers(membersOnNet(members, reg.Net)) {
+			out = append(out, m)
+		}
+		for _, hostNet := range hostNets {
+			if hostNet <= reg.Net {
+				continue
+			}
+			if nextReg != 0 && hostNet >= nextReg {
+				continue
+			}
+			if h, ok := hosts[hostNet]; ok {
+				out = append(out, h)
+				for _, m := range sortMembers(membersOnNet(members, hostNet)) {
+					out = append(out, m)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func orderDiagramEntriesNoRegion(out []NodeEntry, hosts map[int]NodeEntry, members []NodeEntry) []NodeEntry {
+	hostNets := make([]int, 0, len(hosts))
+	for n := range hosts {
+		hostNets = append(hostNets, n)
+	}
+	sort.Ints(hostNets)
+	if len(hostNets) == 0 {
+		for _, m := range sortMembers(members) {
+			out = append(out, m)
+		}
+		return out
+	}
+	for _, hostNet := range hostNets {
+		out = append(out, hosts[hostNet])
+		for _, m := range sortMembers(membersOnNet(members, hostNet)) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func membersOnNet(members []NodeEntry, net int) []NodeEntry {
+	var out []NodeEntry
+	for _, m := range members {
+		if m.Net == net {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func sortMembers(members []NodeEntry) []NodeEntry {
+	sort.Slice(members, func(i, j int) bool {
+		if members[i].Net != members[j].Net {
+			return members[i].Net < members[j].Net
+		}
+		return members[i].Node < members[j].Node
+	})
+	return members
 }
 
 func dotEscape(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, `\`, `\\`), `"`, `\"`)
 }
 
-func groupNodesByNet(nodes []NodeEntry) map[int][]NodeEntry {
-	out := map[int][]NodeEntry{}
+func filterDiagramZone(nodes []NodeEntry, zone int) []NodeEntry {
+	if zone == 0 {
+		return append([]NodeEntry(nil), nodes...)
+	}
+	out := make([]NodeEntry, 0, len(nodes))
 	for _, n := range nodes {
-		if n.Type == "Zone" {
-			continue
+		if n.Type == "Zone" || n.Zone == zone {
+			out = append(out, n)
 		}
-		out[n.Net] = append(out[n.Net], n)
 	}
 	return out
 }
 
-func sortedNetKeys(byNet map[int][]NodeEntry) []int {
-	nets := make([]int, 0, len(byNet))
-	for n := range byNet {
-		nets = append(nets, n)
+func filterEntriesPerHub(entries []NodeEntry, zone, onlyNet int) []NodeEntry {
+	regionNets := map[int]bool{}
+	for _, e := range entries {
+		if e.Zone == zone && e.Type == "Region" {
+			regionNets[e.Net] = true
+		}
+	}
+	out := make([]NodeEntry, 0, len(entries))
+	for _, e := range entries {
+		switch e.Type {
+		case "Zone":
+			out = append(out, e)
+		case "Region":
+			if e.Zone == zone {
+				out = append(out, e)
+			}
+		case "Host":
+			if e.Zone == zone && e.Net == onlyNet {
+				out = append(out, e)
+			}
+		default:
+			if e.Zone != zone {
+				continue
+			}
+			if e.Net == onlyNet {
+				out = append(out, e)
+			} else if e.Node == 1 && regionNets[e.Net] {
+				out = append(out, e)
+			}
+		}
+	}
+	return out
+}
+
+func netsForPerHubDiagrams(entries []NodeEntry, zone int) []int {
+	seen := map[int]bool{}
+	var nets []int
+	for _, e := range entries {
+		if e.Zone != zone {
+			continue
+		}
+		if e.Type == "Zone" {
+			continue
+		}
+		if e.Type == "Host" && e.Node == 0 {
+			if !seen[e.Net] {
+				seen[e.Net] = true
+				nets = append(nets, e.Net)
+			}
+			continue
+		}
+		if e.Type == "Region" {
+			if !seen[e.Net] {
+				seen[e.Net] = true
+				nets = append(nets, e.Net)
+			}
+			continue
+		}
+		if e.Node != 0 && !seen[e.Net] {
+			seen[e.Net] = true
+			nets = append(nets, e.Net)
+		}
 	}
 	sort.Ints(nets)
 	return nets
-}
-
-func findNetHost(entries []NodeEntry) *NodeEntry {
-	for i := range entries {
-		e := &entries[i]
-		if e.Node == 0 && (e.Type == "Host" || e.Type == "Region") {
-			return e
-		}
-	}
-	for i := range entries {
-		e := &entries[i]
-		if e.Type == "Host" {
-			return e
-		}
-	}
-	return nil
-}
-
-func isDiagramMember(e *NodeEntry, host *NodeEntry) bool {
-	if host != nil && e.ID == host.ID {
-		return false
-	}
-	if e.Node == 0 && (e.Type == "Host" || e.Type == "Region") {
-		return false
-	}
-	return true
 }
 
 func zoneLabelForDiagram(nd *NetworkDef, nodes []NodeEntry, bbsName, sysopName string) (Addr, string, string) {
@@ -270,7 +555,6 @@ func renderPNGWithDot(dotBin, dot, outPath string) error {
 // for network from fido_nodes rows, renders each to PNG, and returns a map
 // of {filename: pngBytes} ready for writeMultiZipAndRegister.
 func GenerateDiagramsFromNodes(network string, nd *NetworkDef, bbsName, sysopName string, nodes []NodeEntry) (map[string][]byte, []string) {
-	byNet := groupNodesByNet(nodes)
 	prefix := NetworkDiagPrefix(network)
 	zoneAddr, zoneName, zoneSysop := zoneLabelForDiagram(nd, nodes, bbsName, sysopName)
 
@@ -297,11 +581,11 @@ func GenerateDiagramsFromNodes(network string, nd *NetworkDef, bbsName, sysopNam
 		pngs[name] = data
 	}
 
-	render(prefix+"_Full.png", buildDOT(network, zoneAddr, zoneName, zoneSysop, byNet, DiagramFull, 0))
-	render(prefix+"_Hubs.png", buildDOT(network, zoneAddr, zoneName, zoneSysop, byNet, DiagramHubsOnly, 0))
-	for _, net := range sortedNetKeys(byNet) {
+	render(prefix+"_Full.png", buildDOT(network, zoneAddr, zoneName, zoneSysop, nodes, DiagramFull, 0))
+	render(prefix+"_Hubs.png", buildDOT(network, zoneAddr, zoneName, zoneSysop, nodes, DiagramHubsOnly, 0))
+	for _, net := range netsForPerHubDiagrams(nodes, zoneAddr.Zone) {
 		name := fmt.Sprintf("Hub_%d-%d.png", zoneAddr.Zone, net)
-		render(name, buildDOT(network, zoneAddr, zoneName, zoneSysop, byNet, DiagramPerHub, net))
+		render(name, buildDOT(network, zoneAddr, zoneName, zoneSysop, nodes, DiagramPerHub, net))
 	}
 
 	return pngs, warnings

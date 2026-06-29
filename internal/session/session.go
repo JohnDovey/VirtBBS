@@ -59,6 +59,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/postname"
 	"github.com/virtbbs/virtbbs/internal/ppl"
 	"github.com/virtbbs/virtbbs/internal/transfer"
+	"github.com/virtbbs/virtbbs/internal/uptime"
 	"github.com/virtbbs/virtbbs/internal/users"
 )
 
@@ -2882,6 +2883,11 @@ type bbsStats struct {
 	BBSFileTotal        int
 	BBSFileToday        int
 	BBSFileMonth        int
+	BBSUptimeDays       int
+	BBSUptimeMinutes    int
+	BBSUptimeSeconds    int
+	BBSUptimeSinceDate  string
+	BBSUptimeSinceTime  string
 }
 
 func (s *session) gatherStats() bbsStats {
@@ -2922,6 +2928,11 @@ func (s *session) gatherStats() bbsStats {
 		st.BBSFileTotal = cat.Total
 		st.BBSFileToday = cat.Today
 		st.BBSFileMonth = cat.LastMonth
+	}
+	st.BBSUptimeDays, st.BBSUptimeMinutes, st.BBSUptimeSeconds = uptime.Breakdown(uptime.Elapsed())
+	if since := uptime.StartedAt(); !since.IsZero() {
+		st.BBSUptimeSinceDate = since.Format("2006-01-02")
+		st.BBSUptimeSinceTime = since.Format("15:04:05")
 	}
 	return st
 }
@@ -3017,6 +3028,10 @@ func (s *session) showStats() {
 	p.section("System Today")
 	p.line("Calls today", fmt.Sprintf("%d", st.BBSCallsToday))
 	p.line("Unique users", fmt.Sprintf("%d", st.BBSUniqueToday))
+	p.line("BBS uptime", fmt.Sprintf("%d days, %d minutes, %d seconds", st.BBSUptimeDays, st.BBSUptimeMinutes, st.BBSUptimeSeconds))
+	if st.BBSUptimeSinceDate != "" {
+		p.line("Up since", st.BBSUptimeSinceDate+" "+st.BBSUptimeSinceTime)
+	}
 
 	p.section("Message Base")
 	p.line("Conferences", fmt.Sprintf("%d", st.BBSConfCount))
@@ -3077,6 +3092,11 @@ func (s *session) populatePplStats(env *ppl.Environment) {
 	env.BBSFileTotal = st.BBSFileTotal
 	env.BBSFileToday = st.BBSFileToday
 	env.BBSFileMonth = st.BBSFileMonth
+	env.BBSUptimeDays = st.BBSUptimeDays
+	env.BBSUptimeMinutes = st.BBSUptimeMinutes
+	env.BBSUptimeSeconds = st.BBSUptimeSeconds
+	env.BBSUptimeSinceDate = st.BBSUptimeSinceDate
+	env.BBSUptimeSinceTime = st.BBSUptimeSinceTime
 }
 
 // runPPE executes a PPL source file (.PPS) in the context of this session.

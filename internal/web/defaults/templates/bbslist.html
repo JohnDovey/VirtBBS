@@ -6,6 +6,18 @@
     <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
     <p class="meta">{{t .Locale "bbslist.help"}}</p>
 
+    <div class="bbslist-search row g-2 align-items-end mb-4">
+      <div class="col-sm-8 col-md-6">
+        <label for="bbslist-search-input" class="form-label">{{t .Locale "bbslist.search_label"}}</label>
+        <input type="search" class="form-control" id="bbslist-search-input"
+               placeholder="{{t .Locale "bbslist.search_placeholder"}}" autocomplete="off">
+      </div>
+      <div class="col-auto d-flex gap-2 pb-1">
+        <button type="button" class="btn btn-primary" id="bbslist-search-btn">{{t .Locale "bbslist.search_btn"}}</button>
+        <button type="button" class="btn btn-outline-secondary" id="bbslist-search-clear">{{t .Locale "bbslist.search_clear"}}</button>
+      </div>
+    </div>
+
     <section class="bbslist-section mb-4" id="bbslist-echomail-section">
       <h3 class="section-head">{{t .Locale "bbslist.section.echomail"}}</h3>
       <div class="bbslist-scroll" id="bbslist-echomail-wrap">
@@ -77,7 +89,7 @@
 </div>
 
 <script type="application/json" id="bbslist-page-config">{{bbsListPageJSON .Locale}}</script>
-<script src="/static/chart.umd.min.js"></script>
-<script src="/static/bbslist.js"></script>
+<script src="/static/chart.umd.min.js" defer></script>
+<script src="/static/bbslist.js" defer></script>
 {{template "footer" .}}
 {{end}}

@@ -24,7 +24,7 @@ func TestBBSListRecordAndQuery(t *testing.T) {
 	recordEnd(db, "FidoNet", our, remote, "Alice", true, false)
 	recordEnd(db, "FidoNet", our, remote, "Alice", false, true)
 
-	page, err := ListBBSNodesEchomail(db, 1, 10)
+	page, err := ListBBSNodesEchomail(db, 1, 10, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestBBSListRecordAndQuery(t *testing.T) {
 		t.Fatalf("echomail count: got %d want 1", page.Nodes[0].EchomailCount)
 	}
 
-	nmPage, err := ListBBSNodesNetmail(db, 1, 10)
+	nmPage, err := ListBBSNodesNetmail(db, 1, 10, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestBBSListRecordAndQuery(t *testing.T) {
 
 	// Our own node should not be recorded.
 	recordEnd(db, "FidoNet", our, our, "Sysop", true, false)
-	page2, _ := ListBBSNodesEchomail(db, 1, 10)
+	page2, _ := ListBBSNodesEchomail(db, 1, 10, "")
 	if page2.Total != 1 {
 		t.Fatalf("our node recorded: total=%d", page2.Total)
 	}
@@ -88,7 +88,7 @@ func TestBBSListBackfillSingleConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	page, err := ListBBSNodesEchomail(sqlDB, 1, 10)
+	page, err := ListBBSNodesEchomail(sqlDB, 1, 10, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -21,6 +21,8 @@
     <tr><th>{{t .Locale "stats.calls_today"}}</th><td>{{.Stats.BBSCallsToday}}</td></tr>
     <tr><th>{{t .Locale "stats.unique_users"}}</th><td>{{.Stats.BBSUniqueToday}}</td></tr>
     <tr><th>{{t .Locale "stats.nodes_online"}}</th><td>{{.Stats.OnlineNodes}}</td></tr>
+    <tr><th>{{t .Locale "stats.uptime"}}</th><td>{{tf .Locale "stats.uptime_value" .Stats.BBSUptimeDays .Stats.BBSUptimeMinutes .Stats.BBSUptimeSeconds}}</td></tr>
+    <tr><th>{{t .Locale "stats.uptime_since"}}</th><td>{{tf .Locale "stats.uptime_since_value" .Stats.BBSUptimeSinceDate .Stats.BBSUptimeSinceTime}}</td></tr>
   </table>
   </div>
 
