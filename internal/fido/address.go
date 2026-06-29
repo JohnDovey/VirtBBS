@@ -59,6 +59,11 @@ func (a Addr) String() string {
 	return fmt.Sprintf("%d:%d/%d", a.Zone, a.Net, a.Node)
 }
 
+// BossString returns the boss-node address (point stripped).
+func (a Addr) BossString() string {
+	return fmt.Sprintf("%d:%d/%d", a.Zone, a.Net, a.Node)
+}
+
 // ParseAddr parses a FidoNet address string in any of:
 //
 //	Zone:Net/Node

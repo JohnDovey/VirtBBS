@@ -20,6 +20,8 @@
   var filter = 'all';
   var selectedNum = null;
   var taglines = [];
+  var composeNetwork = '';
+  var composeReplyMsgID = '';
 
   function esc(s) {
     var d = document.createElement('div');
@@ -76,6 +78,26 @@
       });
   }
 
+  function formatPerson(name, addr) {
+    name = (name || '').trim();
+    addr = (addr || '').trim();
+    if (name && addr) return name + ' (' + addr + ')';
+    return name || addr || '';
+  }
+
+  function parseIntlDest(kludges) {
+    if (!kludges) return '';
+    var lines = kludges.split('\r');
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].replace(/^\x01/, '').trim();
+      if (line.indexOf('INTL ') === 0) {
+        var addrs = line.slice(5).trim().split(/\s+/);
+        return addrs[0] || '';
+      }
+    }
+    return '';
+  }
+
   function renderList() {
     var visible = messages.filter(function (m) {
       return filter !== 'unread' || m.Unread;
@@ -90,7 +112,7 @@
       var unread = m.Unread ? ' fw-semibold' : '';
       html += '<button type="button" class="list-group-item list-group-item-action netmail-list-item' + active + unread + '" data-num="' + m.MsgNumber + '">' +
         '<div class="netmail-list-subject text-truncate">' + esc(m.Subject) + '</div>' +
-        '<div class="meta small text-truncate">' + esc(m.FromName) + ' · ' + esc(formatDate(m.DatePosted)) + '</div>' +
+        '<div class="meta small text-truncate">' + esc(formatPerson(m.FromName, m.FidoOrigin)) + ' · ' + esc(formatDate(m.DatePosted)) + '</div>' +
         '</button>';
     });
     html += '</div>';
@@ -121,10 +143,16 @@
   function showCompose(prefill) {
     var panel = document.getElementById('netmail-compose-panel');
     if (panel) panel.classList.remove('d-none');
+    composeReplyMsgID = '';
+    if (!prefill || !prefill.network) composeNetwork = '';
     if (prefill) {
+      if (prefill.network) composeNetwork = prefill.network;
+      if (prefill.reply_msgid) composeReplyMsgID = prefill.reply_msgid;
       document.getElementById('nm-to-name').value = prefill.to_name || '';
       document.getElementById('nm-to-addr').value = prefill.to_addr || '';
       document.getElementById('nm-subject').value = prefill.subject || '';
+      var netSel = document.getElementById('nm-network');
+      if (netSel && prefill.network) netSel.value = prefill.network;
       var body = document.getElementById('nm-body');
       if (body) {
         body.value = prefill.body || '';
@@ -143,12 +171,13 @@
     selectedNum = m.MsgNumber;
     renderList();
     var fromLine = t('netmail.app.from', 'From %s · #%d')
-      .replace('%s', m.FromName || '')
+      .replace('%s', formatPerson(m.FromName, m.FidoOrigin))
       .replace('%d', String(m.MsgNumber));
+    var toAddr = parseIntlDest(m.FidoKludges);
+    var toDisplay = formatPerson(m.ToName, toAddr);
     var originBlock = '';
     if (m.FidoOrigin) {
       originBlock = '<p class="meta small d-flex flex-wrap align-items-center gap-2 mb-2">' +
-        esc(t('read.fido_origin', 'Origin')) + ' <code>' + esc(m.FidoOrigin) + '</code>' +
         '<button type="button" class="btn btn-sm btn-outline-secondary" id="netmail-add-contact-btn">' +
         esc(t('netmail.app.add_to_contacts', 'Add to contacts')) + '</button></p>';
     }
@@ -161,7 +190,7 @@
       '<button type="button" class="btn btn-outline-danger" id="netmail-delete-btn">' + esc(t('common.delete', 'Delete')) + '</button>' +
       '</div></div>' +
       '<p class="meta">' + esc(fromLine) +
-      ' · ' + esc(t('netmail.app.to_prefix', 'To')) + ' <strong>' + esc(m.ToName) + '</strong>' +
+      ' · ' + esc(t('netmail.app.to_prefix', 'To')) + ' <strong>' + esc(toDisplay) + '</strong>' +
       ' · ' + esc(formatDate(m.DatePosted)) +
       (m.LangLabel ? ' <span class="badge bg-secondary">' + esc(m.LangLabel) + '</span>' : '') +
       '</p>' + originBlock + bodyHtml(m) + '</div>';
@@ -359,6 +388,7 @@
         results.querySelectorAll('.nm-pick-node').forEach(function (btn, i) {
           var n = nodes[i];
           btn.addEventListener('click', function () {
+            composeNetwork = network;
             document.getElementById('nm-to-name').value = n.sysop || n.name || '';
             document.getElementById('nm-to-addr').value = n.addr || '';
             var modal = bootstrap.Modal.getInstance(document.getElementById('netmail-nodelist-modal'));
@@ -426,6 +456,8 @@
       if (tagline) {
         bodyText = bodyText.replace(/\s+$/, '') + '\r\n\r\n-- \r\n' + tagline + '\r\n';
       }
+      var netSel = document.getElementById('nm-network');
+      if (netSel) composeNetwork = netSel.value || composeNetwork;
       fetch('/api/netmail/compose', {
         method: 'POST',
         credentials: 'same-origin',
@@ -435,13 +467,19 @@
           to_addr: document.getElementById('nm-to-addr').value,
           subject: document.getElementById('nm-subject').value,
           body: bodyText,
-          crash: document.getElementById('nm-crash').checked
+          network: composeNetwork,
+          crash: document.getElementById('nm-crash').checked,
+          reply_msgid: composeReplyMsgID
         })
       }).then(function (r) {
-        if (!r.ok) throw new Error('send failed');
+        if (!r.ok) {
+          return r.text().then(function (txt) { throw new Error(txt || 'send failed'); });
+        }
         return r.json();
       }).then(function () {
         status.textContent = t('netmail.app.queued', 'Queued for next poll.');
+        composeNetwork = '';
+        composeReplyMsgID = '';
         form.reset();
         var bodyEl = document.getElementById('nm-body');
         if (bodyEl) {
@@ -449,17 +487,26 @@
           bodyEl.dispatchEvent(new Event('input', { bubbles: true }));
         }
         hideCompose();
-      }).catch(function () {
-        status.textContent = t('netmail.app.send_failed', 'Send failed.');
+      }).catch(function (err) {
+        status.textContent = err.message || t('netmail.app.send_failed', 'Send failed.');
       });
     });
   }
 
   var params = new URLSearchParams(window.location.search);
   var openNum = parseInt(params.get('num') || '0', 10);
+  var replyNum = parseInt(params.get('reply') || '0', 10);
 
   loadList();
   loadAddressBook('');
   loadTaglines();
-  if (openNum > 0) loadMessage(openNum);
+  if (replyNum > 0) {
+    fetch('/api/netmail?num=' + replyNum, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (m) {
+        if (m && m.Reply) showCompose(m.Reply);
+      });
+  } else if (openNum > 0) {
+    loadMessage(openNum);
+  }
 })();

@@ -519,6 +519,10 @@ func (s *session) enterMessage() {
 }
 
 func (s *session) enterReply(orig *messages.Message) {
+	if messages.IsNetmail(orig) {
+		s.netmailReply(orig)
+		return
+	}
 	subj := orig.Subject
 	if !strings.HasPrefix(strings.ToUpper(subj), "RE:") {
 		subj = "RE: " + subj
@@ -2149,7 +2153,6 @@ func (s *session) netmailReply(orig *messages.Message) {
 
 	msg := &fido.NetmailMsg{
 		FromName:   s.user.Name,
-		FromAddr:   cfg.Fido.Address,
 		ToName:     orig.FromName,
 		ToAddr:     orig.FidoOrigin,
 		Subject:    subj,
@@ -2158,14 +2161,21 @@ func (s *session) netmailReply(orig *messages.Message) {
 		AuthorLang: fido.NormalizeLangCode(s.user.Locale),
 	}
 
-	nd := cfg.Fido.AllNetworks()[0]
-	nextHop, err := fido.RouteAddr(s.deps.Messages.DB(), msg, &nd)
+	network := fido.InferNetmailNetwork(s.deps.Messages.DB(), orig.FidoNetwork, orig.FidoOrigin, orig.FidoKludges, cfg.Fido.AllNetworks())
+	nd := cfg.Fido.NetworkByName(network)
+	if nd == nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Network not found for netmail reply."))
+		return
+	}
+	msg.Network = nd.Name
+	msg.FromAddr = nd.Address
+	nextHop, err := fido.RouteAddr(s.deps.Messages.DB(), msg, nd)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Routing error: "+err.Error()))
 		return
 	}
 	outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), false)
-	origAddr, _ := fido.ParseAddr(cfg.Fido.Address)
+	origAddr, _ := fido.ParseAddr(nd.Address)
 
 	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg}, nd.Name)
 	if err != nil {

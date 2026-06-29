@@ -64,6 +64,7 @@ type Message struct {
 	FidoSeenBy     string // space-separated net/node tokens from SEEN-BY lines
 	FidoPath       string // space-separated net/node tokens from ^APATH kludge
 	FidoOrigin     string // originating zone:net/node if received via FidoNet toss
+	FidoNetwork    string // Fido network name when received via toss
 	FidoExportedAt time.Time // zero if not yet written to an outbound PKT
 }
 
@@ -95,6 +96,7 @@ func (s *Store) migrate() error {
 		`ALTER TABLE messages ADD COLUMN fido_seenby TEXT`,
 		`ALTER TABLE messages ADD COLUMN fido_path TEXT`,
 		`ALTER TABLE messages ADD COLUMN fido_origin TEXT`,
+		`ALTER TABLE messages ADD COLUMN fido_network TEXT`,
 		`ALTER TABLE messages ADD COLUMN fido_exported_at TEXT`,
 		`ALTER TABLE fido_netmail ADD COLUMN author_lang TEXT NOT NULL DEFAULT 'en'`,
 	}
@@ -146,12 +148,12 @@ func (s *Store) PostWithNumber(m *Message) error {
 	res, err := s.db.Exec(`
 		INSERT OR IGNORE INTO messages
 		  (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
-		   fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		   fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ConferenceID, m.MsgNumber, m.FromName, m.ToName, m.Subject,
 		m.DatePosted.Format(time.RFC3339), m.Status, boolInt(m.Echo), m.Body,
 		nullable(m.FidoMsgID), nullable(m.FidoReply), nullable(m.FidoKludges),
-		nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin),
+		nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin), nullable(m.FidoNetwork),
 	)
 	if err != nil {
 		return err
@@ -173,12 +175,12 @@ func (s *Store) Post(m *Message) error {
 	}
 	res, err := s.db.Exec(`
 		INSERT INTO messages (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
-		                       fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		                       fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ConferenceID, m.MsgNumber, m.FromName, m.ToName, m.Subject,
 		m.DatePosted.Format(time.RFC3339), m.Status, boolInt(m.Echo), m.Body,
 		nullable(m.FidoMsgID), nullable(m.FidoReply), nullable(m.FidoKludges),
-		nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin),
+		nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin), nullable(m.FidoNetwork),
 	)
 	if err != nil {
 		return err
@@ -188,13 +190,39 @@ func (s *Store) Post(m *Message) error {
 }
 
 const messageCols = `id, conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
-		fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_exported_at`
+		fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network, fido_exported_at`
+
+// IsNetmail reports whether m is inbound FidoNet netmail (stored in conference 0).
+func IsNetmail(m *Message) bool {
+	return m != nil && m.ConferenceID == 0 && !m.Echo && strings.TrimSpace(m.FidoOrigin) != ""
+}
+
+// CanViewNetmail reports whether forUser may read inbound netmail m.
+func CanViewNetmail(forUser string, sysop bool, m *Message) bool {
+	if !IsNetmail(m) {
+		return true
+	}
+	if sysop {
+		return true
+	}
+	tn := strings.ToLower(strings.TrimSpace(m.ToName))
+	u := strings.ToLower(strings.TrimSpace(forUser))
+	return tn == u || tn == "all"
+}
+
+// generalExcludeNetmailSQL keeps inbound FidoNet netmail out of General conference
+// browsing; use ListNetmail / the netmail UI instead.
+const generalExcludeNetmailSQL = ` AND NOT (echo=0 AND fido_origin IS NOT NULL AND fido_origin != '')`
 
 // List returns messages in a conference, newest first.
 func (s *Store) List(conferenceID, limit, offset int) ([]*Message, error) {
+	extra := ""
+	if conferenceID == 0 {
+		extra = generalExcludeNetmailSQL
+	}
 	rows, err := s.db.Query(`
 		SELECT `+messageCols+`
-		FROM messages WHERE conference_id=? AND status!='D'
+		FROM messages WHERE conference_id=? AND status!='D'`+extra+`
 		ORDER BY msg_number DESC LIMIT ? OFFSET ?`,
 		conferenceID, limit, offset)
 	if err != nil {
@@ -206,9 +234,13 @@ func (s *Store) List(conferenceID, limit, offset int) ([]*Message, error) {
 
 // ListFrom returns messages in a conference with msg_number >= startNum, oldest first.
 func (s *Store) ListFrom(conferenceID, startNum, limit int) ([]*Message, error) {
+	extra := ""
+	if conferenceID == 0 {
+		extra = generalExcludeNetmailSQL
+	}
 	rows, err := s.db.Query(`
 		SELECT `+messageCols+`
-		FROM messages WHERE conference_id=? AND msg_number>=? AND status!='D'
+		FROM messages WHERE conference_id=? AND msg_number>=? AND status!='D'`+extra+`
 		ORDER BY msg_number ASC LIMIT ?`,
 		conferenceID, startNum, limit)
 	if err != nil {
@@ -548,10 +580,10 @@ func scanMessage(sc scanner) (*Message, error) {
 	var m Message
 	var dateStr string
 	var echo int
-	var msgID, reply, kludges, seenBy, path, origin, exportedAt sql.NullString
+	var msgID, reply, kludges, seenBy, path, origin, network, exportedAt sql.NullString
 	err := sc.Scan(&m.ID, &m.ConferenceID, &m.MsgNumber, &m.FromName, &m.ToName,
 		&m.Subject, &dateStr, &m.Status, &echo, &m.Body,
-		&msgID, &reply, &kludges, &seenBy, &path, &origin, &exportedAt)
+		&msgID, &reply, &kludges, &seenBy, &path, &origin, &network, &exportedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -563,6 +595,7 @@ func scanMessage(sc scanner) (*Message, error) {
 	m.FidoSeenBy = seenBy.String
 	m.FidoPath = path.String
 	m.FidoOrigin = origin.String
+	m.FidoNetwork = network.String
 	if exportedAt.Valid {
 		m.FidoExportedAt, _ = time.Parse(time.RFC3339, exportedAt.String)
 	}

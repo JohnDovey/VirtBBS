@@ -1,6 +1,7 @@
 package web
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -26,10 +27,12 @@ type netmailStatsResponse struct {
 }
 
 type netmailReplyInfo struct {
-	ToName  string `json:"to_name"`
-	ToAddr  string `json:"to_addr"`
-	Subject string `json:"subject"`
-	Body    string `json:"body"`
+	ToName     string `json:"to_name"`
+	ToAddr     string `json:"to_addr"`
+	Subject    string `json:"subject"`
+	Body       string `json:"body"`
+	Network    string `json:"network"`
+	ReplyMsgID string `json:"reply_msgid"`
 }
 
 type addressBookItem struct {
@@ -71,14 +74,23 @@ func netmailListItems(msgs []*messages.Message, lastRead int) []netmailListItem 
 	return out
 }
 
-func buildNetmailReplyInfo(m *messages.Message) netmailReplyInfo {
+func buildNetmailReplyInfo(db *sql.DB, m *messages.Message) netmailReplyInfo {
+	cfg := config.Get()
+	network := fido.InferNetmailNetwork(db, m.FidoNetwork, m.FidoOrigin, m.FidoKludges, cfg.Fido.AllNetworks())
 	toName := strings.TrimSpace(m.FromName)
 	toAddr := strings.TrimSpace(m.FidoOrigin)
+	if toAddr == "" {
+		if _, orig := fido.ParseIntlFromKludges(m.FidoKludges); orig != "" {
+			toAddr = orig
+		}
+	}
 	return netmailReplyInfo{
-		ToName:  toName,
-		ToAddr:  toAddr,
-		Subject: replySubject(m.Subject),
-		Body:    quoteReplyBody(m),
+		ToName:     toName,
+		ToAddr:     toAddr,
+		Network:    network,
+		Subject:    replySubject(m.Subject),
+		Body:       quoteReplyBody(m),
+		ReplyMsgID: strings.TrimSpace(m.FidoMsgID),
 	}
 }
 
@@ -255,13 +267,13 @@ func (s *Server) handleAPINetmailStats(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(netmailStatsResponse{Total: total, Unread: unread})
 }
 
-func writeNetmailMessageJSON(w http.ResponseWriter, locale string, u *users.User, m *messages.Message) {
+func writeNetmailMessageJSON(w http.ResponseWriter, db *sql.DB, locale string, u *users.User, m *messages.Message) {
 	displayBody := FormatMessageBodyHTML(m.Body)
 	if u.Sysop {
 		displayBody = fido.ReconstructSource(fidoSourceOpts(m, ""))
 	}
 	resp := buildMessageViewJSON(locale, m, displayBody)
-	reply := buildNetmailReplyInfo(m)
+	reply := buildNetmailReplyInfo(db, m)
 	resp.Reply = &reply
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(resp)

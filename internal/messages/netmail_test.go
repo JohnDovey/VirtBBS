@@ -102,3 +102,37 @@ func TestCountNetmailUnread_andGetNetmail(t *testing.T) {
 		t.Fatalf("GetNetmail msg_number = %d, want 2", m.MsgNumber)
 	}
 }
+
+func TestList_generalExcludesNetmail(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store, err := Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Post(&Message{
+		ConferenceID: 0, FromName: "Local", ToName: "All", Subject: "Bulletin",
+		DatePosted: time.Now(), Status: "A", Body: "hi",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Post(&Message{
+		ConferenceID: 0, FromName: "Remote", ToName: "Alice", Subject: "Netmail",
+		DatePosted: time.Now(), Status: "A", Body: "secret", FidoOrigin: "1:2/3",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := store.List(0, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("General list len = %d, want 1 (local only)", len(msgs))
+	}
+	if msgs[0].Subject != "Bulletin" {
+		t.Fatalf("got subject %q, want Bulletin", msgs[0].Subject)
+	}
+}

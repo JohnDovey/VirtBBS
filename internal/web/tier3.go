@@ -173,7 +173,7 @@ func (s *Server) handleAPINetmail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = s.Deps.Users.SetLastRead(u.ID, netmailConferenceID, num)
-		writeNetmailMessageJSON(w, localeFromRequest(r), u, m)
+		writeNetmailMessageJSON(w, s.Deps.Messages.DB(), localeFromRequest(r), u, m)
 		return
 	}
 	msgs, err := s.Deps.Messages.ListNetmail(u.Name, u.Sysop, 0, 200)
@@ -199,12 +199,13 @@ func (s *Server) handleAPINetmailCompose(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var body struct {
-		ToAddr  string `json:"to_addr"`
-		ToName  string `json:"to_name"`
-		Subject string `json:"subject"`
-		Body    string `json:"body"`
-		Network string `json:"network"`
-		Crash   bool   `json:"crash"`
+		ToAddr     string `json:"to_addr"`
+		ToName     string `json:"to_name"`
+		Subject    string `json:"subject"`
+		Body       string `json:"body"`
+		Network    string `json:"network"`
+		Crash      bool   `json:"crash"`
+		ReplyMsgID string `json:"reply_msgid"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
@@ -215,9 +216,9 @@ func (s *Server) handleAPINetmailCompose(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "FidoNet not enabled", http.StatusBadRequest)
 		return
 	}
-	netName := body.Network
+	netName := strings.TrimSpace(body.Network)
 	if netName == "" {
-		netName = cfg.Fido.Name
+		netName = cfg.Fido.EffectivePrimaryName()
 	}
 	nd := cfg.Fido.NetworkByName(netName)
 	if nd == nil {
@@ -225,7 +226,7 @@ func (s *Server) handleAPINetmailCompose(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	m := fido.NetmailMsg{
-		Network:    netName,
+		Network:    nd.Name,
 		FromName:   u.Name,
 		FromAddr:   nd.Address,
 		ToName:     body.ToName,
@@ -233,6 +234,7 @@ func (s *Server) handleAPINetmailCompose(w http.ResponseWriter, r *http.Request)
 		Subject:    body.Subject,
 		Body:       body.Body,
 		Crash:      body.Crash,
+		ReplyMsgID: strings.TrimSpace(body.ReplyMsgID),
 		AuthorLang: authorLangCode(u, r),
 	}
 	ndb := fido.OpenNetmailDB(s.Deps.Messages.DB())
@@ -320,9 +322,9 @@ func (s *Server) handleAdminBinkP(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method == http.MethodPost {
 		_ = r.ParseForm()
-		netName := r.FormValue("network")
+		netName := strings.TrimSpace(r.FormValue("network"))
 		if netName == "" {
-			netName = cfg.Fido.Name
+			netName = cfg.Fido.EffectivePrimaryName()
 		}
 		nd := cfg.Fido.NetworkByName(netName)
 		if nd == nil {

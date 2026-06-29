@@ -8,7 +8,11 @@
     <label>{{t .Locale "admin_messages.conference"}}
       <select class="form-select" name="conf" onchange="this.form.submit()">
         <option value="">{{t .Locale "common.select"}}</option>
-        {{range .Conferences}}<option value="{{.ID}}" {{if eq $.ConfID .ID}}selected{{end}}>{{.ID}}: {{.Name}}</option>{{end}}
+        {{range .Groups}}
+        <optgroup label="{{if .Network}}{{.Network}}{{else}}{{t $.Locale "conferences.group.local"}}{{end}}">
+        {{range .List}}<option value="{{.ID}}" {{if eq $.ConfID .ID}}selected{{end}}>{{.ID}}: {{.Name}}</option>{{end}}
+        </optgroup>
+        {{end}}
       </select>
     </label>
   </form>

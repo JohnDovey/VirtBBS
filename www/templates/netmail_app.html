@@ -43,11 +43,17 @@
           <div class="card-body">
             <form id="netmail-compose">
               <div class="row g-3 mb-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
+                  <label class="form-label" for="nm-network">{{t .Locale "common.network"}}</label>
+                  <select class="form-select" id="nm-network">
+                    {{range .Networks}}<option value="{{.}}">{{.}}</option>{{end}}
+                  </select>
+                </div>
+                <div class="col-md-4">
                   <label class="form-label" for="nm-to-name">{{t .Locale "netmail.app.to_name"}}</label>
                   <input class="form-control" type="text" id="nm-to-name" required>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                   <label class="form-label" for="nm-to-addr">{{t .Locale "netmail.app.to_addr"}}</label>
                   <div class="input-group">
                     <input class="form-control" type="text" id="nm-to-addr" placeholder="{{t .Locale "netmail.app.addr_placeholder"}}" required>

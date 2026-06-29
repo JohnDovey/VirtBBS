@@ -259,6 +259,14 @@ func (s *Server) handleMessageRead(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "message not found", http.StatusNotFound)
 		return
 	}
+	if messages.IsNetmail(msg) {
+		if !messages.CanViewNetmail(u.Name, u.Sysop, msg) {
+			http.Error(w, "access denied", http.StatusForbidden)
+			return
+		}
+		http.Redirect(w, r, fmt.Sprintf("/netmail/app?num=%d", msgNum), http.StatusSeeOther)
+		return
+	}
 	_ = s.Deps.Users.SetLastRead(u.ID, confID, msgNum)
 	showSource := u.Sysop && c.Echo && r.URL.Query().Get("source") == "1"
 	displayBody := FormatMessageBodyHTML(msg.Body)
@@ -304,14 +312,44 @@ func (s *Server) handleMessagePost(w http.ResponseWriter, r *http.Request) {
 	if replyNum > 0 {
 		if orig, err := s.Deps.Messages.Get(confID, replyNum); err == nil {
 			origMsg = orig
-			toName = orig.FromName
-			subject = replySubject(orig.Subject)
-			body = quoteReplyBody(orig)
+			if messages.IsNetmail(orig) && messages.CanViewNetmail(u.Name, u.Sysop, orig) {
+				if r.Method == http.MethodGet {
+					s.redirectNetmailReply(w, r, replyNum)
+					return
+				}
+			} else {
+				toName = orig.FromName
+				subject = replySubject(orig.Subject)
+				body = quoteReplyBody(orig)
+			}
 		}
 	}
 	if r.Method == http.MethodPost {
 		if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		if origMsg != nil && messages.IsNetmail(origMsg) && messages.CanViewNetmail(u.Name, u.Sysop, origMsg) {
+			subject = strings.TrimSpace(r.FormValue("subject"))
+			body := r.FormValue("body")
+			if subject == "" || body == "" {
+				http.Error(w, "subject and body required", http.StatusBadRequest)
+				return
+			}
+			reply := buildNetmailReplyInfo(s.Deps.Messages.DB(), origMsg)
+			nm := &fido.NetmailMsg{
+				ToName:     reply.ToName,
+				ToAddr:     reply.ToAddr,
+				Subject:    subject,
+				Body:       body,
+				Network:    reply.Network,
+				ReplyMsgID: reply.ReplyMsgID,
+			}
+			if _, err := s.enqueueUserNetmail(u, nm); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			http.Redirect(w, r, "/netmail/app?flash=queued", http.StatusSeeOther)
 			return
 		}
 		subject = strings.TrimSpace(r.FormValue("subject"))

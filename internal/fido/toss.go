@@ -264,6 +264,13 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 		area := pb.AreaTag
 		isNetmail := area == ""
 
+		if isNetmail && pm.Attrib&AttribPrivate != 0 && ParseFlagsFromKludges(pb.Kludges) == "" {
+			if pb.Kludges != "" {
+				pb.Kludges += "\r"
+			}
+			pb.Kludges += strings.TrimRight(FlagsKludgeLine(NetmailFlagsDefault), "\r")
+		}
+
 		if isNetmail {
 			// Auto-respond to PING test messages with a PONG reply. IsPing
 			// only matches "PING" exactly, so a PONG reaching us here never
@@ -419,6 +426,7 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 			FidoSeenBy:   strings.Join(pb.SeenBy, " "),
 			FidoPath:     strings.Join(pb.Path, " "),
 			FidoOrigin:   pm.OrigAddr.String(),
+			FidoNetwork:  nd.Name,
 		}
 		if err := store.Post(m); err != nil {
 			errs = append(errs, fmt.Sprintf("insert: %v", err))

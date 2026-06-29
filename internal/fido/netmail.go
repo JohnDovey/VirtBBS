@@ -219,7 +219,7 @@ func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailM
 			ToName:   m.ToName,
 			FromName: m.FromName,
 			Subject:  m.Subject,
-			Body:     buildBody(m, from, to, origAddr.Zone),
+			Body:     buildBody(m, from, to),
 			Attrib:   attr,
 		})
 	}
@@ -235,7 +235,7 @@ func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailM
 }
 
 // buildBody prepends FTS KLUDGE lines and MSGID to the body.
-func buildBody(m *NetmailMsg, from, to Addr, localZone int) string {
+func buildBody(m *NetmailMsg, from, to Addr) string {
 	var sb strings.Builder
 
 	msgID := m.MsgID
@@ -255,13 +255,11 @@ func buildBody(m *NetmailMsg, from, to Addr, localZone int) string {
 	sb.WriteByte('\r')
 	sb.WriteByte('\n')
 
-	// INTL kludge: required when source/dest zones differ or either is non-local.
-	if from.Zone != to.Zone || from.Zone != localZone {
-		intl := fmt.Sprintf("\x01INTL %d:%d/%d %d:%d/%d\r\n",
-			to.Zone, to.Net, to.Node,
-			from.Zone, from.Net, from.Node)
-		sb.WriteString(intl)
-	}
+	// FLAGS kludge (private netmail).
+	sb.WriteString(FlagsKludgeLine(NetmailFlagsDefault))
+
+	// INTL kludge: destination then origin on all outbound netmail.
+	sb.WriteString(IntlKludgeLine(from, to))
 
 	// FMPT kludge for point source.
 	if from.Point != 0 {
