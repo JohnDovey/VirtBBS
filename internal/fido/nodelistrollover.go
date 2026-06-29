@@ -114,7 +114,7 @@ func RunDayRollover(nd *NetworkDef, db *sql.DB, confStore *conferences.Store, ms
 		warn("generate nodelist: %v", err)
 		return warnings
 	}
-	diffData, diffName, err := GenerateNodelistDiff(db, nd)
+	diffData, diffName, err := GenerateNodelistDiff(db, nd, hubBBSName)
 	if err != nil {
 		warn("generate nodelist diff: %v", err)
 	}
@@ -161,20 +161,21 @@ func RunDayRollover(nd *NetworkDef, db *sql.DB, confStore *conferences.Store, ms
 		warn("ensure Nodelist Files area: %v", err)
 		return warnings
 	}
-	writeAndRegister := func(filename string, data []byte) {
-		if err := os.WriteFile(dirPath+"/"+filename, data, 0644); err != nil {
-			warn("write %s: %v", filename, err)
-			return
+	writeNodelistArchive := func(filename string, data []byte, isDiff bool) {
+		addr := nd.Address
+		if addr == "" {
+			addr = nd.NodeAddr().String()
 		}
-		if err := fileArea.RegisterUpload(dirID, filename, "VirtNet nodelist", "VirtBBS"); err != nil {
-			warn("register %s: %v", filename, err)
+		diz := NodelistFileIDDiz(nd.Name, hubBBSName, addr, filename, isDiff, time.Now())
+		if err := writeZipAndRegister(dirPath, dirID, fileArea, filename, filename, data, diz); err != nil {
+			warn("zip %s: %v", filename, err)
 		}
 	}
 	if fullName != "" {
-		writeAndRegister(fullName, fullData)
+		writeNodelistArchive(fullName, fullData, false)
 	}
 	if diffData != nil {
-		writeAndRegister(diffName, diffData)
+		writeNodelistArchive(diffName, diffData, true)
 	}
 	if chgsText, err := BuildNodeChgsText(db, nd.Name); err != nil {
 		warn("build NodeChgs.txt: %v", err)

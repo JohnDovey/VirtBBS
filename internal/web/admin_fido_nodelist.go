@@ -20,19 +20,23 @@ func (s *Server) handleAdminFidoNodelist(w http.ResponseWriter, r *http.Request)
 	locale := localeFromRequest(r)
 	data := struct {
 		pageData
-		Networks    []string
-		Network     string
-		Query       string
-		Results     *fido.SearchResult
-		VersionText string
-		Flash       string
-		Error       string
-		CanEdit     bool
+		Networks           []string
+		Network            string
+		Query              string
+		Results            *fido.SearchResult
+		VersionText        string
+		Flash              string
+		Error              string
+		CanEdit            bool
+		CanRebuildMembers  bool
 	}{
 		pageData: s.page(r),
 		Networks: fidoNetworkNamesList(),
 		Network:  network,
 		CanEdit:  true,
+	}
+	if nd, err := networkDefByName(network); err == nil && nd.UsesMemberNodelist() {
+		data.CanRebuildMembers = true
 	}
 
 	db := s.Deps.Messages.DB()
@@ -81,6 +85,21 @@ func (s *Server) handleAdminFidoNodelist(w http.ResponseWriter, r *http.Request)
 					w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filePath))
 					_, _ = w.Write(body)
 					return
+				}
+			}
+		case "rebuild_members":
+			nd, err := networkDefByName(network)
+			if err != nil {
+				data.Error = err.Error()
+			} else if !nd.UsesMemberNodelist() {
+				data.Error = tr(locale, "admin_fido_nodelist.error_not_member_hub")
+			} else {
+				cfg := config.Get()
+				if err := fido.ForceRebuildHubNodelistFromMembers(db, nd, cfg.BBS.Name, cfg.Sysop.Name); err != nil {
+					data.Error = err.Error()
+				} else {
+					data.Flash = tr(locale, "admin_fido_nodelist.flash_rebuilt_members")
+					importedThisRequest = true
 				}
 			}
 		case "save_node":

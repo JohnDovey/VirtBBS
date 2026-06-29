@@ -45,8 +45,6 @@ package fido
 import (
 	"database/sql"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -69,10 +67,7 @@ func GenerateNodelist(db *sql.DB, nd *NetworkDef, hubBBSName, hubSysopName strin
 		return data, "", nil
 	}
 	filename := NodelistFullFilename(now)
-	if err := os.MkdirAll(nd.NodelistDir, 0755); err != nil {
-		return nil, "", err
-	}
-	if err := os.WriteFile(filepath.Join(nd.NodelistDir, filename), data, 0644); err != nil {
+	if err := writeNodelistZArchive(nd.NodelistDir, filename, data, nd, hubBBSName, false, now); err != nil {
 		return nil, "", err
 	}
 	return data, filename, nil
@@ -89,8 +84,22 @@ func UpdateHubNodelistFromMembers(db *sql.DB, nd *NetworkDef, hubBBSName, hubSys
 	if fullName != "" {
 		return nil
 	}
-	_, _, err = GenerateNodelistDiff(db, nd)
+	_, _, err = GenerateNodelistDiff(db, nd, hubBBSName)
 	return err
+}
+
+// ForceRebuildHubNodelistFromMembers replaces fido_nodes from fido_members,
+// clearing manual-import preservation, and writes the appropriate on-disk
+// nodelist artifact (full list on weekly days, diff otherwise).
+func ForceRebuildHubNodelistFromMembers(db *sql.DB, nd *NetworkDef, hubBBSName, hubSysopName string) error {
+	if nd == nil || !nd.UsesMemberNodelist() {
+		name := ""
+		if nd != nil {
+			name = nd.Name
+		}
+		return fmt.Errorf("network %q does not publish a member-based nodelist", name)
+	}
+	return UpdateHubNodelistFromMembers(db, nd, hubBBSName, hubSysopName)
 }
 
 func buildHubNodelist(db *sql.DB, nd *NetworkDef, hubBBSName, hubSysopName string) ([]byte, []NodeEntry, error) {
@@ -429,12 +438,10 @@ type snapshotEntry struct {
 }
 
 // GenerateNodelistDiff diffs today's fido_members against the most recent
-// fido_members_snapshot rows for network, producing a VirtNet-flavored
-// NODEDIFF-style file: added/changed nodes as full FTS lines, removed
-// nodes as an address-only deletion marker ("-Zone:Net/Node"). This is not
-// byte-compatible with the historical binary NODEDIFF patch format — not
-// needed for an internal, single-network use case.
-func GenerateNodelistDiff(db *sql.DB, nd *NetworkDef) ([]byte, string, error) {
+// fido_members_snapshot rows for network, producing a NODEDIFF.Z## ZIP in
+// nodelist_dir (plain diff text inside). Returns the plain diff bytes and
+// filename when changes exist.
+func GenerateNodelistDiff(db *sql.DB, nd *NetworkDef, hubBBSName string) ([]byte, string, error) {
 	mdb := OpenMembersDB(db)
 	current, err := mdb.ListMembers(nd.Name)
 	if err != nil {
@@ -476,10 +483,8 @@ func GenerateNodelistDiff(db *sql.DB, nd *NetworkDef) ([]byte, string, error) {
 	if !nodelistBodyHasChanges(data) {
 		return nil, "", nil
 	}
-	if err := os.MkdirAll(nd.NodelistDir, 0755); err != nil {
-		return nil, "", err
-	}
-	if err := os.WriteFile(filepath.Join(nd.NodelistDir, filename), data, 0644); err != nil {
+	now := time.Now()
+	if err := writeNodelistZArchive(nd.NodelistDir, filename, data, nd, hubBBSName, true, now); err != nil {
 		return nil, "", err
 	}
 	return data, filename, nil

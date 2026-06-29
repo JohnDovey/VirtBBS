@@ -48,6 +48,13 @@
         <input type="hidden" name="action" value="export_local">
         <button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.export_local"}}</button>
       </form>
+      {{if .CanRebuildMembers}}
+      <form method="post" class="d-inline ms-2" onsubmit="return confirm('{{t .Locale "admin_fido_nodelist.rebuild_members_confirm"}}');">
+        <input type="hidden" name="network" value="{{.Network}}">
+        <input type="hidden" name="action" value="rebuild_members">
+        <button class="btn btn-warning" type="submit">{{t .Locale "admin_fido_nodelist.rebuild_members"}}</button>
+      </form>
+      {{end}}
     </div>
   </div>
 
