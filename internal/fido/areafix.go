@@ -210,6 +210,7 @@ func ProcessAreaFixRequest(nd *NetworkDef, msgStore *messages.Store, confStore *
 	if !passwordOK {
 		return replyAreaFix(nd, our, pm, "Invalid password.\r\n")
 	}
+	RecordAreaFixRecv(networkName, "downlink", pm.OrigAddr.String())
 
 	areafixDB := OpenAreaFixDB(db)
 	downlinkAddr := pm.OrigAddr.String()
@@ -450,6 +451,9 @@ func replyAreaFix(nd *NetworkDef, our Addr, pm *Message, body string) error {
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply}, nd.Name)
+	if err == nil {
+		RecordAreaFixSent(nd.Name, "downlink", pm.OrigAddr.String())
+	}
 	return err
 }
 
@@ -489,5 +493,9 @@ func RequestAreaFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
-	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
+	path, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
+	if err == nil {
+		RecordAreaFixSent(nd.Name, "uplink", uplink.String())
+	}
+	return path, err
 }

@@ -8,6 +8,9 @@
     · {{t .Locale "menu.last_login"}} {{.User.LastLoginDate}} {{.User.LastLoginTime}}
     · {{t .Locale "menu.times_on"}} {{.User.TimesOnline}}
   </p>
+  {{range .UptimeLines}}
+  <p class="meta mb-0">{{.}}</p>
+  {{end}}
   </div>
 </div>
 
@@ -52,6 +55,16 @@
         <span class="dashboard-stat-label">{{t .Locale "menu.stat.online_now"}}</span>
         <span class="dashboard-stat-value">{{.Stats.OnlineNodes}}</span>
       </div>
+      <div class="dashboard-stat-item">
+        <span class="dashboard-stat-label">{{t .Locale "stats.uptime"}}</span>
+        <span class="dashboard-stat-value">{{tf .Locale "stats.uptime_value" .Stats.BBSUptimeDays .Stats.BBSUptimeMinutes .Stats.BBSUptimeSeconds}}</span>
+      </div>
+      {{if .Stats.BBSUptimeSinceDate}}
+      <div class="dashboard-stat-item">
+        <span class="dashboard-stat-label">{{t .Locale "stats.uptime_since"}}</span>
+        <span class="dashboard-stat-value">{{tf .Locale "stats.uptime_since_value" .Stats.BBSUptimeSinceDate .Stats.BBSUptimeSinceTime}}</span>
+      </div>
+      {{end}}
       <div class="dashboard-stat-item">
         <span class="dashboard-stat-label">{{t .Locale "menu.stat.calls_today"}}</span>
         <span class="dashboard-stat-value">{{.Stats.BBSCallsToday}}</span>

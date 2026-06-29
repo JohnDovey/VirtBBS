@@ -30,7 +30,7 @@ func (s *Store) RegisterNew(name, realName, city, password, locale string) (*Use
 	}
 	locale = strings.TrimSpace(locale)
 	switch locale {
-	case "es", "af":
+	case "es", "af", "fr", "zu":
 	default:
 		locale = "en"
 	}

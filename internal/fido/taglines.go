@@ -31,9 +31,13 @@
 package fido
 
 import (
+	"database/sql"
 	"math/rand"
 	"os"
 	"strings"
+
+	"github.com/virtbbs/virtbbs/internal/conferences"
+	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
 // LoadTaglines reads one tagline per line from path, skipping blank lines.
@@ -64,4 +68,70 @@ func PickTagline(taglines []string) string {
 		return ""
 	}
 	return taglines[rand.Intn(len(taglines))]
+}
+
+// ResolveTaglinesPath returns the taglines_file for a conference's Fido network,
+// falling back to the primary network file when the network leaves it blank.
+func ResolveTaglinesPath(cfg *Config, conf *conferences.Conference) string {
+	if cfg == nil {
+		return ""
+	}
+	path := strings.TrimSpace(cfg.TaglinesFile)
+	if conf == nil {
+		return path
+	}
+	netName := conferences.EffectiveNetwork(conf, cfg.EffectivePrimaryName())
+	for _, nd := range cfg.AllNetworks() {
+		if nd.Name == netName {
+			if p := strings.TrimSpace(nd.TaglinesFile); p != "" {
+				return p
+			}
+			break
+		}
+	}
+	return path
+}
+
+// resolveNetworkTaglinesPath returns the taglines file for one network definition.
+func resolveNetworkTaglinesPath(cfg *Config, nd *NetworkDef) string {
+	if nd != nil {
+		if p := strings.TrimSpace(nd.TaglinesFile); p != "" {
+			return p
+		}
+	}
+	if cfg != nil {
+		return strings.TrimSpace(cfg.TaglinesFile)
+	}
+	return ""
+}
+
+// AppendEchoTagline appends a random tagline to a locally originated echomail
+// message body when taglines are configured and the body has none yet.
+func AppendEchoTagline(m *messages.Message, db *sql.DB, taglinesPath string) {
+	if m == nil || !m.Echo || strings.TrimSpace(m.FidoOrigin) != "" {
+		return
+	}
+	existing, _, _ := ParseEchoFooters(m.Body)
+	if len(existing) > 0 {
+		return
+	}
+	taglines := LoadTaglinesForUse(db, taglinesPath)
+	if tl := PickTagline(taglines); tl != "" {
+		body := strings.TrimRight(m.Body, "\r\n")
+		m.Body = body + "\r\n\r\n" + tl + "\r\n"
+	}
+}
+
+// taglineForEchoExport picks a tagline for outbound export of a local echo
+// message. Returns "" when the message was received via toss or already carries
+// a tagline in its stored body.
+func taglineForEchoExport(m *messages.Message, taglines []string) string {
+	if m == nil || strings.TrimSpace(m.FidoOrigin) != "" {
+		return ""
+	}
+	existing, _, _ := ParseEchoFooters(m.Body)
+	if len(existing) > 0 {
+		return ""
+	}
+	return PickTagline(taglines)
 }

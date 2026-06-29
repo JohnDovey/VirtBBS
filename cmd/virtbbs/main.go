@@ -395,8 +395,13 @@ func main() {
 	}
 
 	log.Printf("VirtBBS %s starting", version.Version)
+	if err := uptime.InitFirstOnAir(filepath.Dir(cfg.Paths.DB)); err != nil {
+		log.Printf("uptime: first on air: %v", err)
+	}
 	uptime.RecordStart()
-	log.Print(uptime.Message(cfg.BBS.Name))
+	for _, line := range uptime.MessageLines(cfg.BBS.Name) {
+		log.Print(line)
+	}
 
 	// User API (VirtAnd) — token-authenticated JSON-over-TCP on a separate port.
 	userAPIAddr := fmt.Sprintf("%s:%d", cfg.Network.UserAPIBind, cfg.Network.UserAPIPort)

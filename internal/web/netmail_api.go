@@ -94,7 +94,7 @@ func buildNetmailReplyInfo(db *sql.DB, m *messages.Message) netmailReplyInfo {
 	}
 }
 
-func loadNetmailTaglines() []string {
+func loadNetmailTaglines(db *sql.DB) []string {
 	cfg := config.Get()
 	path := strings.TrimSpace(cfg.Fido.TaglinesFile)
 	if path == "" {
@@ -102,7 +102,7 @@ func loadNetmailTaglines() []string {
 			path = strings.TrimSpace(nd.TaglinesFile)
 		}
 	}
-	return fido.LoadTaglines(path)
+	return fido.LoadTaglinesForUse(db, path)
 }
 
 func (s *Server) handleAPINetmailDelete(w http.ResponseWriter, r *http.Request) {
@@ -251,7 +251,7 @@ func (s *Server) handleAPINetmailTaglines(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(loadNetmailTaglines())
+	_ = json.NewEncoder(w).Encode(loadNetmailTaglines(s.Deps.Messages.DB()))
 }
 
 func (s *Server) handleAPINetmailStats(w http.ResponseWriter, r *http.Request) {

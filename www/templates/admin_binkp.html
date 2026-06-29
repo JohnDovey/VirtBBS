@@ -84,6 +84,22 @@
           <span class="stat-value"><span class="stat-num">{{.Stats.EchomailRecv}}</span> {{t $.Locale "admin_binkp.recv"}} / <span class="stat-num">{{.Stats.EchomailSent}}</span> {{t $.Locale "admin_binkp.sent"}}</span>
         </div>
         <div class="stat-row">
+          <span class="stat-label">{{t $.Locale "admin_binkp.stat.areafix"}}</span>
+          <span class="stat-value"><span class="stat-num">{{.Stats.AreaFixRecv}}</span> {{t $.Locale "admin_binkp.recv"}} / <span class="stat-num">{{.Stats.AreaFixSent}}</span> {{t $.Locale "admin_binkp.sent"}}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">{{t $.Locale "admin_binkp.stat.filefix"}}</span>
+          <span class="stat-value"><span class="stat-num">{{.Stats.FileFixRecv}}</span> {{t $.Locale "admin_binkp.recv"}} / <span class="stat-num">{{.Stats.FileFixSent}}</span> {{t $.Locale "admin_binkp.sent"}}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">{{t $.Locale "admin_binkp.stat.tic"}}</span>
+          <span class="stat-value"><span class="stat-num">{{.Stats.TICRecv}}</span> {{t $.Locale "admin_binkp.recv"}} / <span class="stat-num">{{.Stats.TICSent}}</span> {{t $.Locale "admin_binkp.sent"}}</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">{{t $.Locale "admin_binkp.stat.tic_data"}}</span>
+          <span class="stat-value">{{formatSize $.Locale .Stats.TICBytesRecv}} {{t $.Locale "admin_binkp.recv"}} / {{formatSize $.Locale .Stats.TICBytesSent}} {{t $.Locale "admin_binkp.sent"}}</span>
+        </div>
+        <div class="stat-row">
           <span class="stat-label">{{t $.Locale "admin_binkp.stat.toss"}}</span>
           <span class="stat-value"><span class="stat-num">{{.Stats.TossImported}}</span> {{t $.Locale "admin_binkp.imported"}} / <span class="stat-num">{{.Stats.TossSkipped}}</span> {{t $.Locale "admin_binkp.skipped"}} / <span class="stat-num">{{.Stats.TossHeld}}</span> {{t $.Locale "admin_binkp.held"}}</span>
         </div>
@@ -119,6 +135,7 @@
             <th class="text-end">{{t $.Locale "admin_binkp.col.files"}}</th>
             <th class="text-end">{{t $.Locale "admin_binkp.col.netmail"}}</th>
             <th class="text-end">{{t $.Locale "admin_binkp.col.echomail"}}</th>
+            <th class="text-end">{{t $.Locale "admin_binkp.col.robots_tic"}}</th>
           </tr>
         </thead>
         <tbody>
@@ -130,6 +147,10 @@
           <td class="text-end stat-num">{{.FilesSent}} / {{.FilesRecv}}</td>
           <td class="text-end stat-num">{{.NetmailSent}} / {{.NetmailRecv}}</td>
           <td class="text-end stat-num">{{.EchomailSent}} / {{.EchomailRecv}}</td>
+          <td class="text-end stat-num small">
+            AF {{.AreaFixRecv}}/{{.AreaFixSent}} · FF {{.FileFixRecv}}/{{.FileFixSent}} · TIC {{.TICRecv}}/{{.TICSent}}
+            <span class="text-muted">({{formatSize $.Locale .TICBytesRecv}}/{{formatSize $.Locale .TICBytesSent}})</span>
+          </td>
         </tr>
         {{end}}
         </tbody>

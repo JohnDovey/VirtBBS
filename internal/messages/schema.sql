@@ -282,6 +282,14 @@ CREATE TABLE IF NOT EXISTS fido_binkp_stats (
     toss_held                  INTEGER NOT NULL DEFAULT 0,
     toss_packets               INTEGER NOT NULL DEFAULT 0,
     session_errors             INTEGER NOT NULL DEFAULT 0,
+    areafix_sent               INTEGER NOT NULL DEFAULT 0,
+    areafix_recv               INTEGER NOT NULL DEFAULT 0,
+    filefix_sent               INTEGER NOT NULL DEFAULT 0,
+    filefix_recv               INTEGER NOT NULL DEFAULT 0,
+    tic_sent                   INTEGER NOT NULL DEFAULT 0,
+    tic_recv                   INTEGER NOT NULL DEFAULT 0,
+    tic_bytes_sent             INTEGER NOT NULL DEFAULT 0,
+    tic_bytes_recv             INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (network, period, period_key)
 );
 
@@ -300,6 +308,14 @@ CREATE TABLE IF NOT EXISTS fido_binkp_link_stats (
     echomail_sent  INTEGER NOT NULL DEFAULT 0,
     netmail_recv   INTEGER NOT NULL DEFAULT 0,
     echomail_recv  INTEGER NOT NULL DEFAULT 0,
+    areafix_sent   INTEGER NOT NULL DEFAULT 0,
+    areafix_recv   INTEGER NOT NULL DEFAULT 0,
+    filefix_sent   INTEGER NOT NULL DEFAULT 0,
+    filefix_recv   INTEGER NOT NULL DEFAULT 0,
+    tic_sent       INTEGER NOT NULL DEFAULT 0,
+    tic_recv       INTEGER NOT NULL DEFAULT 0,
+    tic_bytes_sent INTEGER NOT NULL DEFAULT 0,
+    tic_bytes_recv INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (network, period, period_key, link_type, peer_key)
 );
 
@@ -338,4 +354,16 @@ CREATE TABLE IF NOT EXISTS fido_bbs_daily (
     echomail_count  INTEGER NOT NULL DEFAULT 0,
     netmail_count   INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, network)
+);
+
+-- Harvested and sysop-managed echomail taglines (replaces taglines_file at runtime).
+CREATE TABLE IF NOT EXISTS fido_taglines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    text TEXT NOT NULL,
+    normalized TEXT NOT NULL,
+    source TEXT NOT NULL DEFAULT 'harvest',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    hit_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(normalized)
 );

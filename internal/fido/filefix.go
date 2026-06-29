@@ -171,6 +171,7 @@ func ProcessFileFixRequest(nd *NetworkDef, db *sql.DB, filesRoot string, pm *Mes
 	if !passwordOK {
 		return replyFileFix(nd, our, pm, "Invalid password.\r\n")
 	}
+	RecordFileFixRecv(nd.Name, "downlink", pm.OrigAddr.String())
 
 	filefixDB := OpenFileFixDB(db)
 	downlinkAddr := pm.OrigAddr.String()
@@ -352,6 +353,9 @@ func replyFileFix(nd *NetworkDef, our Addr, pm *Message, body string) error {
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply}, nd.Name)
+	if err == nil {
+		RecordFileFixSent(nd.Name, "downlink", pm.OrigAddr.String())
+	}
 	return err
 }
 
@@ -391,5 +395,9 @@ func RequestFileFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
-	return WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
+	path, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
+	if err == nil {
+		RecordFileFixSent(nd.Name, "uplink", uplink.String())
+	}
+	return path, err
 }

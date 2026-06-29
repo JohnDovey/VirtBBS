@@ -42,6 +42,14 @@ type BinkpStatsRow struct {
 	TossHeld                  int    `json:"toss_held"`
 	TossPackets             int    `json:"toss_packets"`
 	SessionErrors           int    `json:"session_errors"`
+	AreaFixSent             int    `json:"areafix_sent"`
+	AreaFixRecv             int    `json:"areafix_recv"`
+	FileFixSent             int    `json:"filefix_sent"`
+	FileFixRecv             int    `json:"filefix_recv"`
+	TICSent                 int    `json:"tic_sent"`
+	TICRecv                 int    `json:"tic_recv"`
+	TICBytesSent            int64  `json:"tic_bytes_sent"`
+	TICBytesRecv            int64  `json:"tic_bytes_recv"`
 }
 
 // BinkpLinkStatsRow holds per-peer counters.
@@ -59,6 +67,14 @@ type BinkpLinkStatsRow struct {
 	EchomailSent int    `json:"echomail_sent"`
 	NetmailRecv  int    `json:"netmail_recv"`
 	EchomailRecv int    `json:"echomail_recv"`
+	AreaFixSent  int    `json:"areafix_sent"`
+	AreaFixRecv  int    `json:"areafix_recv"`
+	FileFixSent  int    `json:"filefix_sent"`
+	FileFixRecv  int    `json:"filefix_recv"`
+	TICSent      int    `json:"tic_sent"`
+	TICRecv      int    `json:"tic_recv"`
+	TICBytesSent int64  `json:"tic_bytes_sent"`
+	TICBytesRecv int64  `json:"tic_bytes_recv"`
 }
 
 // BinkpStatsQueryResult is returned by the management API.
@@ -98,6 +114,7 @@ func InitBinkpStats(db *sql.DB) {
 	statsDBMu.Unlock()
 	if db != nil {
 		_ = migrateBinkpStats(db)
+		_ = migrateRobotStats(db)
 	}
 }
 
@@ -342,7 +359,9 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 		poll_server_downlink_ok, poll_server_downlink_fail, poll_server_downlink_sent, poll_server_downlink_recv,
 		netmail_recv, echomail_recv, netmail_sent, echomail_sent,
 		toss_imported, toss_skipped, toss_skipped_duplicate, toss_skipped_hold_failed, toss_skipped_insert_failed,
-		toss_held, toss_packets, session_errors
+		toss_held, toss_packets, session_errors,
+		areafix_sent, areafix_recv, filefix_sent, filefix_recv,
+		tic_sent, tic_recv, tic_bytes_sent, tic_bytes_recv
 		FROM fido_binkp_stats WHERE period=? AND period_key=?`
 	args := []any{period, periodKey}
 	if network != "" {
@@ -365,7 +384,9 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 			&r.NetmailRecv, &r.EchomailRecv, &r.NetmailSent, &r.EchomailSent,
 			&r.TossImported, &r.TossSkipped,
 			&r.TossSkippedDuplicate, &r.TossSkippedHoldFailed, &r.TossSkippedInsertFailed,
-			&r.TossHeld, &r.TossPackets, &r.SessionErrors); err != nil {
+			&r.TossHeld, &r.TossPackets, &r.SessionErrors,
+			&r.AreaFixSent, &r.AreaFixRecv, &r.FileFixSent, &r.FileFixRecv,
+			&r.TICSent, &r.TICRecv, &r.TICBytesSent, &r.TICBytesRecv); err != nil {
 			return nil, err
 		}
 		res.Networks = append(res.Networks, r)
@@ -376,7 +397,9 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 
 	linkSQL := `SELECT network, period, period_key, link_type, peer_key,
 		poll_ok, poll_fail, files_sent, files_recv,
-		netmail_sent, echomail_sent, netmail_recv, echomail_recv
+		netmail_sent, echomail_sent, netmail_recv, echomail_recv,
+		areafix_sent, areafix_recv, filefix_sent, filefix_recv,
+		tic_sent, tic_recv, tic_bytes_sent, tic_bytes_recv
 		FROM fido_binkp_link_stats WHERE period=? AND period_key=?`
 	linkArgs := []any{period, periodKey}
 	if network != "" {
@@ -394,7 +417,9 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 		var r BinkpLinkStatsRow
 		if err := lrows.Scan(&r.Network, &r.Period, &r.PeriodKey, &r.LinkType, &r.PeerKey,
 			&r.PollOK, &r.PollFail, &r.FilesSent, &r.FilesRecv,
-			&r.NetmailSent, &r.EchomailSent, &r.NetmailRecv, &r.EchomailRecv); err != nil {
+			&r.NetmailSent, &r.EchomailSent, &r.NetmailRecv, &r.EchomailRecv,
+			&r.AreaFixSent, &r.AreaFixRecv, &r.FileFixSent, &r.FileFixRecv,
+			&r.TICSent, &r.TICRecv, &r.TICBytesSent, &r.TICBytesRecv); err != nil {
 			return nil, err
 		}
 		res.Links = append(res.Links, r)

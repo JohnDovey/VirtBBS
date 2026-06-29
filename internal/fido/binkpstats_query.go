@@ -149,6 +149,14 @@ func addNetworkRows(a, b BinkpStatsRow) BinkpStatsRow {
 	a.TossHeld += b.TossHeld
 	a.TossPackets += b.TossPackets
 	a.SessionErrors += b.SessionErrors
+	a.AreaFixSent += b.AreaFixSent
+	a.AreaFixRecv += b.AreaFixRecv
+	a.FileFixSent += b.FileFixSent
+	a.FileFixRecv += b.FileFixRecv
+	a.TICSent += b.TICSent
+	a.TICRecv += b.TICRecv
+	a.TICBytesSent += b.TICBytesSent
+	a.TICBytesRecv += b.TICBytesRecv
 	return a
 }
 
@@ -161,6 +169,14 @@ func addLinkRows(a, b BinkpLinkStatsRow) BinkpLinkStatsRow {
 	a.EchomailSent += b.EchomailSent
 	a.NetmailRecv += b.NetmailRecv
 	a.EchomailRecv += b.EchomailRecv
+	a.AreaFixSent += b.AreaFixSent
+	a.AreaFixRecv += b.AreaFixRecv
+	a.FileFixSent += b.FileFixSent
+	a.FileFixRecv += b.FileFixRecv
+	a.TICSent += b.TICSent
+	a.TICRecv += b.TICRecv
+	a.TICBytesSent += b.TICBytesSent
+	a.TICBytesRecv += b.TICBytesRecv
 	return a
 }
 

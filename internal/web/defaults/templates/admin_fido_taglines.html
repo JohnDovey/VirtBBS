@@ -1,0 +1,83 @@
+{{define "admin_fido_taglines.html"}}
+{{template "header" .}}
+<div class="card mb-3 sysop-panel">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "admin_fido_taglines.title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/admin/fido">{{t .Locale "common.fido_back"}}</a></p>
+  <p class="meta">{{t .Locale "admin_fido_taglines.intro"}}</p>
+  {{if .Flash}}<p class="alert alert-success">{{.Flash}}</p>{{end}}
+  {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
+
+  <h3 class="h6 section-head">{{t .Locale "admin_fido_taglines.add_heading"}}</h3>
+  <form method="post" class="admin-form mb-4">
+    <input type="hidden" name="action" value="add">
+    <label>{{t .Locale "admin_fido_taglines.col.text"}}
+      <input class="form-control" name="text" required placeholder='{{t .Locale "admin_fido_taglines.placeholder"}}'>
+    </label>
+    <button class="btn btn-primary" type="submit">{{t .Locale "admin_fido_taglines.add_btn"}}</button>
+  </form>
+
+  <h3 class="h6 section-head">{{t .Locale "admin_fido_taglines.import_heading"}}</h3>
+  <form method="post" class="admin-form mb-3">
+    <input type="hidden" name="action" value="import_path">
+    <label>{{t .Locale "admin_fido_taglines.import_path"}}
+      <input class="form-control" name="import_path" value="{{.ImportPath}}">
+    </label>
+    <button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_taglines.import_path_btn"}}</button>
+  </form>
+  <form method="post" class="admin-form mb-4">
+    <input type="hidden" name="action" value="import_text">
+    <label>{{t .Locale "admin_fido_taglines.import_text"}}
+      <textarea class="form-control" name="import_text" rows="4" placeholder='{{t .Locale "admin_fido_taglines.import_text_hint"}}'></textarea>
+    </label>
+    <button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_taglines.import_text_btn"}}</button>
+  </form>
+
+  <h3 class="h6 section-head">{{t .Locale "admin_fido_taglines.list_heading"}} ({{len .Taglines}})</h3>
+  {{if not .Taglines}}
+  <p class="meta">{{t .Locale "admin_fido_taglines.empty"}}</p>
+  {{else}}
+  <div class="table-responsive">
+  <table class="table table-sm table-striped">
+    <thead>
+      <tr>
+        <th>{{t .Locale "admin_fido_taglines.col.text"}}</th>
+        <th>{{t .Locale "admin_fido_taglines.col.source"}}</th>
+        <th>{{t .Locale "admin_fido_taglines.col.hits"}}</th>
+        <th>{{t .Locale "admin_fido_taglines.col.enabled"}}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {{range .Taglines}}
+      <tr>
+        <td colspan="5">
+          <form method="post" class="row g-2 align-items-center">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <div class="col-md-6">
+              <input class="form-control form-control-sm" name="text" value="{{.Text}}">
+            </div>
+            <div class="col-md-2"><span class="meta">{{.Source}}</span></div>
+            <div class="col-md-1"><span class="meta">{{.HitCount}}</span></div>
+            <div class="col-md-1">
+              <select class="form-select form-select-sm" name="enabled">
+                <option value="1" {{if .Enabled}}selected{{end}}>{{t $.Locale "common.yes"}}</option>
+                <option value="0" {{if not .Enabled}}selected{{end}}>{{t $.Locale "common.no"}}</option>
+              </select>
+            </div>
+            <div class="col-md-2 text-end">
+              <button class="btn btn-sm btn-primary" type="submit" name="action" value="update">{{t $.Locale "common.save"}}</button>
+              <button class="btn btn-sm btn-outline-danger" type="submit" name="action" value="delete" onclick="return confirm('{{t $.Locale "admin_fido_taglines.confirm_delete"}}')">{{t $.Locale "common.delete"}}</button>
+            </div>
+          </form>
+        </td>
+      </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+  {{end}}
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

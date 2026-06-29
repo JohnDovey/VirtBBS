@@ -227,6 +227,8 @@ func PollAndTossDebug(nd *NetworkDef, store *messages.Store, confStore *conferen
 	if pollResult.Error != nil {
 		logPollResult(nd.Name, "client", len(pollResult.Sent), len(pollResult.Received), pollResult.Error)
 		RecordClientPoll(nd.Name, uplinkKey, false, len(pollResult.Sent), len(pollResult.Received))
+		RecordBinkpTransferredTICs(nd.Name, "uplink", uplinkKey, nd.OutboundDir, pollResult.Sent, true)
+		RecordBinkpTransferredTICs(nd.Name, "uplink", uplinkKey, nd.InboundDir, pollResult.Received, false)
 		return result
 	}
 
@@ -248,6 +250,8 @@ func PollAndTossDebug(nd *NetworkDef, store *messages.Store, confStore *conferen
 	logPollResult(nd.Name, "client", len(pollResult.Sent), len(pollResult.Received), nil)
 	logTossResult(nd.Name, "client", result.Toss)
 	RecordClientPoll(nd.Name, uplinkKey, true, len(pollResult.Sent), len(pollResult.Received))
+	RecordBinkpTransferredTICs(nd.Name, "uplink", uplinkKey, nd.OutboundDir, pollResult.Sent, true)
+	RecordBinkpTransferredTICs(nd.Name, "uplink", uplinkKey, nd.InboundDir, pollResult.Received, false)
 	for _, w := range RunNodelistMonitorForNetwork(nd, store.DB(), confStore, store, fileArea, sysopName) {
 		LogBinkp(fmt.Sprintf("nodelist monitor [%s]: %s", nd.Name, w))
 	}
@@ -420,6 +424,12 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	LogBinkp(fmt.Sprintf("binkp server [%s]: session with %s (%v) complete — received %d, sent %d",
 		nd.Name, who, peerAddrs, len(received), len(sent)))
 	RecordServerSession(nd.Name, linkType, peerKey, true, len(sent), len(received))
+	var sentNames []string
+	for _, f := range sent {
+		sentNames = append(sentNames, filepath.Base(f))
+	}
+	RecordBinkpTransferredTICs(nd.Name, linkType, peerKey, nd.OutboundDir, sentNames, true)
+	RecordBinkpTransferredTICs(nd.Name, linkType, peerKey, nd.InboundDir, received, false)
 
 	if len(received) > 0 {
 		if tr, err := TossDir(nd, store, confStore, sysopName, fileArea, filesRoot); err != nil {

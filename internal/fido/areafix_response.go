@@ -242,6 +242,7 @@ func ProcessAreaFixResponse(nd *NetworkDef, confStore *conferences.Store, pm *Me
 	if !nd.IsUplinkFixRobot(pm.OrigAddr) {
 		return nil, nil
 	}
+	RecordAreaFixRecv(nd.Name, "uplink", pm.OrigAddr.String())
 
 	var notes []string
 	for _, act := range ParseAreaFixResponseBody(pm.Body) {
@@ -299,6 +300,7 @@ func ProcessFileFixResponse(nd *NetworkDef, fileArea FileArea, pm *Message) ([]s
 	if !nd.IsUplinkFixRobot(pm.OrigAddr) {
 		return nil, nil
 	}
+	RecordFileFixRecv(nd.Name, "uplink", pm.OrigAddr.String())
 
 	var notes []string
 	for _, act := range ParseAreaFixResponseBody(pm.Body) {

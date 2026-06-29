@@ -21,13 +21,19 @@ var localeES []byte
 //go:embed locales/af.json
 var localeAF []byte
 
+//go:embed locales/fr.json
+var localeFR []byte
+
+//go:embed locales/zu.json
+var localeZU []byte
+
 var localeData = map[string]map[string]string{}
 
 func initLocales() {
 	if len(localeData) > 0 {
 		return
 	}
-	for tag, raw := range map[string][]byte{"en": localeEN, "es": localeES, "af": localeAF} {
+	for tag, raw := range map[string][]byte{"en": localeEN, "es": localeES, "af": localeAF, "fr": localeFR, "zu": localeZU} {
 		m := map[string]string{}
 		if err := json.Unmarshal(raw, &m); err == nil {
 			localeData[tag] = m
@@ -40,7 +46,7 @@ func localeFromRequest(r *http.Request) string {
 		return c.Value
 	}
 	al := strings.ToLower(r.Header.Get("Accept-Language"))
-	for _, pref := range []string{"af", "es"} {
+	for _, pref := range []string{"zu", "af", "fr", "es"} {
 		if strings.HasPrefix(al, pref) && localeData[pref] != nil {
 			return pref
 		}

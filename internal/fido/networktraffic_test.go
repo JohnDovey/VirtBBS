@@ -50,7 +50,7 @@ func TestCollectEchoTraffic_buildsRoutesAndSeenBy(t *testing.T) {
 		Subject:      "Hello",
 		Status:       "A",
 		Echo:         true,
-		Body:         "body",
+		Body:         "body\r\n\r\nA tagline here.\r\n--- VirtBBS 1.7.5\r\n * Origin: Test (1:234/1)\r\n",
 		FidoOrigin:   "1:234/1",
 		FidoPath:     "234/2 100/1",
 		FidoSeenBy:   "234/2 234/5",
@@ -75,6 +75,13 @@ func TestCollectEchoTraffic_buildsRoutesAndSeenBy(t *testing.T) {
 	ascii := buildTrafficASCII(report)
 	if !strings.Contains(ascii, "TEST_ECHO") || !strings.Contains(ascii, "1:234/1") {
 		t.Fatalf("ascii missing data: %q", ascii)
+	}
+	if !strings.Contains(ascii, "VirtBBS") || !strings.Contains(ascii, "BBS software") {
+		t.Fatalf("ascii missing software table: %q", ascii)
+	}
+	tdb := OpenTaglineDB(sqlDB)
+	if texts := tdb.EnabledTexts(); len(texts) == 0 {
+		t.Fatalf("expected harvested tagline")
 	}
 }
 

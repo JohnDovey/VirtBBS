@@ -242,8 +242,9 @@ func (s *session) banner() {
 }
 
 func (s *session) showServerUptime() {
-	msg := uptime.Message(config.Get().BBS.Name)
-	s.writeln(ansi.Color(ansi.White) + msg + ansi.Reset())
+	for _, msg := range uptime.MessageLines(config.Get().BBS.Name) {
+		s.writeln(ansi.Color(ansi.White) + msg + ansi.Reset())
+	}
 	s.writeln("")
 }
 
@@ -585,7 +586,7 @@ func (s *session) applyFidoPostMeta(m *messages.Message, replyTo *messages.Messa
 	if s.user != nil && strings.TrimSpace(s.user.Locale) != "" {
 		lang = fido.NormalizeLangCode(s.user.Locale)
 	}
-	fido.ApplyLocalEchoMeta(m, conf, postname.EchoOrigAddr(conf), lang, replyTo)
+	fido.ApplyLocalEchoMeta(m, conf, postname.EchoOrigAddr(conf), lang, replyTo, s.deps.Messages.DB(), &config.Get().Fido)
 }
 
 // runEditor invokes the user's preferred editor and returns the result.

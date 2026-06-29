@@ -62,3 +62,12 @@ func Message(bbsName string) string {
 		bbsName, days, minutes, seconds,
 		since.Format("2006-01-02"), since.Format("15:04:05"))
 }
+
+// MessageLines returns the process uptime line and the first-on-air history line.
+func MessageLines(bbsName string) []string {
+	lines := []string{Message(bbsName)}
+	if msg := FirstOnAirMessage(bbsName); msg != "" {
+		lines = append(lines, msg)
+	}
+	return lines
+}

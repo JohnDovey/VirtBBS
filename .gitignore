@@ -40,3 +40,9 @@ display/BINKPALL.ANS
 # OS / editor
 .DS_Store
 *.swp
+
+# Runtime-generated network diagram PNG cache
+www/static/network-maps/
+
+# Locale generation venv (scripts/generate_fr_zu_locales.py)
+.locale-venv/

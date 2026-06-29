@@ -70,6 +70,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/fido"
 	"github.com/virtbbs/virtbbs/internal/messages"
@@ -450,7 +451,7 @@ func PostReplies(msgStore *messages.Store, confStore *conferences.Store, u *user
 		if u != nil && strings.TrimSpace(u.Locale) != "" {
 			lang = fido.NormalizeLangCode(u.Locale)
 		}
-		fido.ApplyLocalEchoMeta(m, conf, postname.EchoOrigAddr(conf), lang, replyTo)
+		fido.ApplyLocalEchoMeta(m, conf, postname.EchoOrigAddr(conf), lang, replyTo, msgStore.DB(), &config.Get().Fido)
 		if err := msgStore.Post(m); err != nil {
 			return posted, fmt.Errorf("qwk: post reply to conference %d: %w", r.ConferenceID, err)
 		}

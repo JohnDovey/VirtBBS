@@ -14,7 +14,7 @@ const kludgeLANG = "LANG"
 // NormalizeLangCode returns a supported two-letter UI language code.
 func NormalizeLangCode(code string) string {
 	switch strings.ToLower(strings.TrimSpace(code)) {
-	case "es", "af":
+	case "es", "af", "fr", "zu":
 		return strings.ToLower(strings.TrimSpace(code))
 	default:
 		return "en"

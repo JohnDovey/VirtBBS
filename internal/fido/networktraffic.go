@@ -31,6 +31,7 @@ type EchoTrafficReport struct {
 	Nodes     map[string]*trafficNode
 	RouteEdge map[string]int // "from|to" -> count
 	SeenEdge  map[string]int // origin|seen -> count
+	Software  map[string]int // "software version" -> count
 }
 
 type trafficNode struct {
@@ -176,12 +177,21 @@ func CollectEchoTraffic(msgStore *messages.Store, ndb *NodelistDB, conf *confere
 		Nodes:     map[string]*trafficNode{},
 		RouteEdge: map[string]int{},
 		SeenEdge:  map[string]int{},
+		Software:  map[string]int{},
 	}
+	tagDB := OpenTaglineDB(msgStore.DB())
 	for _, m := range msgs {
 		if m == nil {
 			continue
 		}
 		report.MsgCount++
+		if tagDB != nil {
+			tagDB.HarvestFromBody(m.Body)
+		}
+		_, sw, ver := ParseEchoFooters(m.Body)
+		if key := softwareCountKey(sw, ver); key != "" {
+			report.Software[key]++
+		}
 		origin, err := ParseAddr(strings.TrimSpace(m.FidoOrigin))
 		if err != nil || origin == (Addr{}) {
 			continue
@@ -342,7 +352,27 @@ func buildTrafficASCII(r *EchoTrafficReport) string {
 			}
 		}
 	}
+
+	b.WriteString("\r\n── BBS software (tear lines) ──────────────────────────\r\n")
+	swKeys := sortedEdgeKeys(r.Software)
+	if len(swKeys) == 0 {
+		b.WriteString("  (no tear-line data)\r\n")
+	} else {
+		b.WriteString("  Software              Version    Count\r\n")
+		for _, k := range swKeys {
+			sw, ver := splitSoftwareKey(k)
+			fmt.Fprintf(&b, "  %-22s %-10s %d\r\n", sw, ver, r.Software[k])
+		}
+	}
 	return b.String()
+}
+
+func splitSoftwareKey(k string) (software, version string) {
+	parts := strings.SplitN(k, " ", 2)
+	if len(parts) == 2 {
+		return parts[0], parts[1]
+	}
+	return k, ""
 }
 
 func sortedEdgeKeys(m map[string]int) []string {
@@ -483,6 +513,9 @@ func RunWeeklyNetworkTrafficReports(db *sql.DB, msgStore *messages.Store, confSt
 	warn := func(format string, args ...any) { warnings = append(warnings, fmt.Sprintf(format, args...)) }
 
 	if err := migrateNetworkTrafficState(db); err != nil {
+		return []string{err.Error()}
+	}
+	if err := MigrateTaglines(db); err != nil {
 		return []string{err.Error()}
 	}
 	if msgStore == nil || confStore == nil {

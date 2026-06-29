@@ -7,7 +7,7 @@ import (
 
 func TestNormalizeLangCode(t *testing.T) {
 	tests := map[string]string{
-		"en": "en", "ES": "es", "af": "af", "": "en", "fr": "en",
+		"en": "en", "ES": "es", "af": "af", "fr": "fr", "zu": "zu", "": "en", "de": "en",
 	}
 	for in, want := range tests {
 		if got := NormalizeLangCode(in); got != want {

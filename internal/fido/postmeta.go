@@ -1,14 +1,16 @@
 package fido
 
 import (
+	"database/sql"
+
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
-// ApplyLocalEchoMeta assigns MSGID, REPLY, echo flag, and origin kludges (LANG, TZUTC)
-// for a locally posted conference message. orig must be the sending node's address;
-// pass Addr{} to skip when FidoNet is disabled or unconfigured.
-func ApplyLocalEchoMeta(m *messages.Message, conf *conferences.Conference, orig Addr, lang string, replyTo *messages.Message) {
+// ApplyLocalEchoMeta assigns MSGID, REPLY, echo flag, origin kludges (LANG, TZUTC),
+// and a random tagline for locally posted echomail. orig must be the sending node's
+// address; pass Addr{} to skip when FidoNet is disabled or unconfigured.
+func ApplyLocalEchoMeta(m *messages.Message, conf *conferences.Conference, orig Addr, lang string, replyTo *messages.Message, db *sql.DB, cfg *Config) {
 	if m == nil || orig == (Addr{}) {
 		return
 	}
@@ -19,5 +21,8 @@ func ApplyLocalEchoMeta(m *messages.Message, conf *conferences.Conference, orig 
 	m.FidoKludges = MergeOriginKludges(m.FidoKludges, lang)
 	if replyTo != nil && replyTo.FidoMsgID != "" {
 		m.FidoReply = replyTo.FidoMsgID
+	}
+	if conf != nil && conf.Echo {
+		AppendEchoTagline(m, db, ResolveTaglinesPath(cfg, conf))
 	}
 }

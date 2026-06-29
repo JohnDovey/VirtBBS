@@ -92,7 +92,7 @@ func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store, b
 		if !nd.Enabled {
 			continue
 		}
-		taglines := LoadTaglines(nd.TaglinesFile)
+		taglines := LoadTaglinesForUse(store.DB(), resolveNetworkTaglinesPath(cfg, &nd))
 		areafixDB := OpenAreaFixDB(store.DB())
 		before := result.Scanned
 		if err := scanNetwork(cfg, &nd, store, confStore, bbsName, taglines, areafixDB, result); err != nil {
@@ -268,7 +268,7 @@ func RescanEchoToDownlink(nd *NetworkDef, store *messages.Store, confStore *conf
 		return result, err
 	}
 
-	taglines := LoadTaglines(nd.TaglinesFile)
+	taglines := LoadTaglinesForUse(store.DB(), resolveNetworkTaglinesPath(nil, nd))
 	var pmsgs []*Message
 
 	for _, tag := range areaTags {
@@ -294,7 +294,7 @@ func RescanEchoToDownlink(nd *NetworkDef, store *messages.Store, confStore *conf
 			if m.FidoPath != "" {
 				inPath = strings.Fields(m.FidoPath)
 			}
-			tagline := PickTagline(taglines)
+			tagline := taglineForEchoExport(m, taglines)
 			body := buildEchoBody(tag, orig, bbsName, m.Body, tagline, m.FidoMsgID, m.FidoReply, m.FidoKludges, inSeenBy, inPath)
 			pmsgs = append(pmsgs, &Message{
 				OrigAddr: orig,
@@ -364,7 +364,7 @@ func appendEchoMessage(buckets map[string][]bucketEntry, destAddrs map[string]Ad
 	if m.FidoPath != "" {
 		inPath = strings.Fields(m.FidoPath)
 	}
-	tagline := PickTagline(taglines)
+	tagline := taglineForEchoExport(m, taglines)
 
 	body := buildEchoBody(areaTag, orig, bbsName, m.Body, tagline, m.FidoMsgID, m.FidoReply, m.FidoKludges, inSeenBy, inPath)
 	entry := bucketEntry{

@@ -302,6 +302,8 @@
 //                        Fido ops page layout improvements.
 //   v1.5.0  2026-06-28  Cleanup and web UI for admin: remove management API, BinkP stats
 //                        page with charts, networks nav, LANG badges, admin fixes.
+//   v1.7.6  2026-06-29  Random taglines on all locally originated echomail at post and export;
+//                        French and isiZulu web UI locales; BinkP AreaFix/FileFix/TIC stats.
 //   v1.4.0  2026-06-28  Documentation overhaul (README, guides, BinktermPHP ack); fix
 //                        entering conference 0 (General) on web messages; template cleanup.
 // ============================================================================
@@ -314,4 +316,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "1.7.5"
+const Version = "1.7.6"

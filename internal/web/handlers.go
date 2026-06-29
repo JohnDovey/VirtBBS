@@ -19,6 +19,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/postname"
+	"github.com/virtbbs/virtbbs/internal/uptime"
 )
 
 // queryConfSelected parses ?conf= from the URL. The second return is false when the
@@ -85,11 +86,12 @@ func (s *Server) handleMenu(w http.ResponseWriter, r *http.Request) {
 	}
 	data := struct {
 		pageData
-		NetmailCount int
-		NewMessages  []NewMessageLine
-		Stats        DashboardStats
-		Bulletins    []BulletinView
-		LogonHTML    string
+		NetmailCount  int
+		NewMessages   []NewMessageLine
+		Stats         DashboardStats
+		Bulletins     []BulletinView
+		LogonHTML     string
+		UptimeLines   []string
 	}{
 		pageData: s.page(r),
 	}
@@ -98,6 +100,7 @@ func (s *Server) handleMenu(w http.ResponseWriter, r *http.Request) {
 	}
 	data.NewMessages = s.gatherNewMessageLines(u)
 	data.Stats = s.gatherDashboardStats(u)
+	data.UptimeLines = uptime.MessageLines(config.Get().BBS.Name)
 	data.Bulletins = s.listBulletins()
 	if html, err := s.renderDisplayHTML("LOGON", u); err == nil {
 		data.LogonHTML = html
@@ -419,7 +422,7 @@ func (s *Server) handleMessagePost(w http.ResponseWriter, r *http.Request) {
 			Status:       "P",
 			Echo:         c.Echo,
 		}
-		fido.ApplyLocalEchoMeta(m, c, postname.EchoOrigAddr(c), authorLangCode(u, r), origMsg)
+	fido.ApplyLocalEchoMeta(m, c, postname.EchoOrigAddr(c), authorLangCode(u, r), origMsg, s.Deps.Messages.DB(), &config.Get().Fido)
 		if err := s.Deps.Messages.Post(m); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
