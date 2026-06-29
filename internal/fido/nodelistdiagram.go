@@ -124,7 +124,7 @@ type dotGraph struct {
 
 type dotNode struct {
 	label    string
-	fillType string // zona, region, host, pvt, hold
+	fillType string // zone, region, host, pvt, hold
 }
 
 type dotEdge struct {
@@ -153,8 +153,8 @@ func (g *dotGraph) addEntry(e *NodeEntry, scope DiagramScope) {
 			sysop = dotLabelText(g.zoneSysop)
 		}
 		g.nodes[g.zoneID] = dotNode{
-			label:    fmt.Sprintf("ZONA %d\\n(%s)", g.zone, dotEscape(sysop)),
-			fillType: "zona",
+			label:    fmt.Sprintf("Zone %d\\n(%s)", g.zone, dotEscape(sysop)),
+			fillType: "zone",
 		}
 	case "Region":
 		if e.Zone != g.zone {
@@ -241,14 +241,14 @@ func (g *dotGraph) ensureZoneNode() {
 	}
 	sysop := dotLabelText(g.zoneSysop)
 	g.nodes[g.zoneID] = dotNode{
-		label:    fmt.Sprintf("ZONA %d\\n(%s)", g.zone, dotEscape(sysop)),
-		fillType: "zona",
+		label:    fmt.Sprintf("Zone %d\\n(%s)", g.zone, dotEscape(sysop)),
+		fillType: "zone",
 	}
 }
 
 func (g *dotGraph) render() string {
 	colorMap := map[string]string{
-		"zona":   "lightblue",
+		"zone":   "lightblue",
 		"region": "palegreen",
 		"host":   "lightpink",
 		"pvt":    "lightyellow",

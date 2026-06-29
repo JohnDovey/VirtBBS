@@ -9,8 +9,9 @@ import (
 )
 
 var (
-	bbsListDB   *sql.DB
-	bbsListDBMu sync.Mutex
+	bbsListDB       *sql.DB
+	bbsListDBMu     sync.Mutex
+	bbsListNetworks []NetworkDef
 )
 
 // BBSListNode is one remote BBS node that has exchanged mail with us.
@@ -60,14 +61,19 @@ type BBSListCharts struct {
 }
 
 // InitBBSList attaches the shared database and ensures schema exists.
-func InitBBSList(db *sql.DB) {
+// networks is used to infer the correct Fido network for each node address.
+func InitBBSList(db *sql.DB, networks []NetworkDef) {
 	bbsListDBMu.Lock()
 	bbsListDB = db
+	bbsListNetworks = append([]NetworkDef(nil), networks...)
 	bbsListDBMu.Unlock()
 	if db == nil {
 		return
 	}
-	_ = migrateBBSList(db)
+	if err := migrateBBSList(db); err != nil {
+		return
+	}
+	repairBBSListNetworks(db)
 }
 
 func migrateBBSList(db *sql.DB) error {
@@ -148,6 +154,10 @@ func recordEnd(db *sql.DB, network string, our, remote Addr, userName string, ec
 		return
 	}
 	if our != (Addr{}) && remote.BossString() == our.BossString() {
+		return
+	}
+	network = InferNetworkForAddr(db, remote, bbsListNetworks, network)
+	if network == "" {
 		return
 	}
 	userName = strings.TrimSpace(userName)
@@ -311,7 +321,6 @@ func bbsListSearchSQL(search string) (string, []any) {
 		EXISTS (
 			SELECT 1 FROM fido_nodes fn
 			WHERE fn.zone = n.zone AND fn.net = n.net AND fn.node_num = n.node_num AND fn.point = 0
-				AND (fn.network = n.network OR fn.network = '')
 				AND (fn.name LIKE ? OR fn.location LIKE ? OR fn.sysop LIKE ?)
 		) OR
 		EXISTS (
@@ -330,11 +339,11 @@ func enrichBBSNode(ndb *NodelistDB, n *BBSListNode) {
 	if err != nil {
 		return
 	}
-	entry, err := ndb.LookupAddr(n.Network, a)
-	if err != nil || entry == nil {
-		entry, _ = ndb.LookupAddr("", a)
-	}
+	entry := LookupNodelistEntry(ndb, a, n.Network, bbsListNetworks)
 	if entry != nil {
+		if entry.Network != "" {
+			n.Network = entry.Network
+		}
 		n.Name = entry.Name
 		n.Location = entry.Location
 		n.Sysop = entry.Sysop
@@ -426,8 +435,7 @@ func backfillBBSList(db *sql.DB) error {
 		network, origin, fromName string
 		echo, confID              int
 	}
-	rows, err := db.Query(`SELECT COALESCE(NULLIF(TRIM(fido_network),''), 'FidoNet'),
-		fido_origin, from_name, echo, conference_id
+	rows, err := db.Query(`SELECT NULLIF(TRIM(fido_network),''), fido_origin, from_name, echo, conference_id
 		FROM messages WHERE fido_origin IS NOT NULL AND TRIM(fido_origin) != ''`)
 	if err != nil {
 		return err
@@ -453,7 +461,11 @@ func backfillBBSList(db *sql.DB) error {
 			continue
 		}
 		isNetmail := r.confID == 0 && r.echo == 0
-		recordEnd(db, r.network, Addr{}, addr, r.fromName, r.echo != 0, isNetmail)
+		network := InferNetworkForAddr(db, addr, bbsListNetworks, r.network)
+		if network == "" {
+			continue
+		}
+		recordEnd(db, network, Addr{}, addr, r.fromName, r.echo != 0, isNetmail)
 	}
 
 	var netmailTbl int
@@ -464,8 +476,7 @@ func backfillBBSList(db *sql.DB) error {
 	type netmailRow struct {
 		network, toAddr, toName string
 	}
-	nmRows, err := db.Query(`SELECT COALESCE(NULLIF(TRIM(network),''), 'FidoNet'),
-		to_addr, to_name FROM fido_netmail WHERE sent_at IS NOT NULL AND TRIM(sent_at) != ''`)
+	nmRows, err := db.Query(`SELECT NULLIF(TRIM(network),''), to_addr, to_name FROM fido_netmail WHERE sent_at IS NOT NULL AND TRIM(sent_at) != ''`)
 	if err != nil {
 		return err
 	}
@@ -489,7 +500,75 @@ func backfillBBSList(db *sql.DB) error {
 		if err != nil {
 			continue
 		}
-		recordEnd(db, r.network, Addr{}, addr, r.toName, false, true)
+		network := InferNetworkForAddr(db, addr, bbsListNetworks, r.network)
+		if network == "" {
+			continue
+		}
+		recordEnd(db, network, Addr{}, addr, r.toName, false, true)
 	}
 	return nil
+}
+
+func repairBBSListNetworks(db *sql.DB) {
+	if db == nil || len(bbsListNetworks) == 0 {
+		return
+	}
+	rows, err := db.Query(`SELECT network, node_addr, zone, net, node_num, echomail_count, netmail_count, last_seen
+		FROM fido_bbs_nodes`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	type nodeRow struct {
+		network, nodeAddr, lastSeen       string
+		zone, net, nodeNum, echo, netmail int
+	}
+	var all []nodeRow
+	for rows.Next() {
+		var r nodeRow
+		if err := rows.Scan(&r.network, &r.nodeAddr, &r.zone, &r.net, &r.nodeNum, &r.echo, &r.netmail, &r.lastSeen); err != nil {
+			return
+		}
+		all = append(all, r)
+	}
+	if err := rows.Err(); err != nil {
+		return
+	}
+	for _, r := range all {
+		addr := Addr{Zone: r.zone, Net: r.net, Node: r.nodeNum}
+		correct := InferNetworkForAddr(db, addr, bbsListNetworks, r.network)
+		if correct == "" || correct == r.network {
+			continue
+		}
+		relocateBBSListNode(db, r.network, correct, r.nodeAddr, r.echo, r.netmail, r.lastSeen)
+	}
+}
+
+func relocateBBSListNode(db *sql.DB, fromNet, toNet, nodeAddr string, echo, netmail int, lastSeen string) {
+	if fromNet == "" || toNet == "" || fromNet == toNet || nodeAddr == "" {
+		return
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var zone, net, nodeNum int
+	if err := tx.QueryRow(`SELECT zone, net, node_num FROM fido_bbs_nodes WHERE network=? AND node_addr=?`,
+		fromNet, nodeAddr).Scan(&zone, &net, &nodeNum); err != nil {
+		return
+	}
+	_, _ = tx.Exec(`INSERT INTO fido_bbs_nodes
+		(network, node_addr, zone, net, node_num, echomail_count, netmail_count, last_seen)
+		VALUES (?,?,?,?,?,?,?,?)
+		ON CONFLICT(network, node_addr) DO UPDATE SET
+			echomail_count = echomail_count + excluded.echomail_count,
+			netmail_count = netmail_count + excluded.netmail_count,
+			last_seen = CASE WHEN excluded.last_seen > last_seen THEN excluded.last_seen ELSE last_seen END`,
+		toNet, nodeAddr, zone, net, nodeNum, echo, netmail, lastSeen)
+	_, _ = tx.Exec(`UPDATE fido_bbs_users SET network=?, node_addr=?
+		WHERE network=? AND node_addr=?`, toNet, nodeAddr, fromNet, nodeAddr)
+	_, _ = tx.Exec(`DELETE FROM fido_bbs_nodes WHERE network=? AND node_addr=?`, fromNet, nodeAddr)
+	_ = tx.Commit()
 }

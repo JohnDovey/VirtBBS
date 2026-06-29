@@ -103,10 +103,12 @@ func (s *Server) lookupNodeDetail(network, addrStr string) (*nodeDetailJSON, err
 		return nil, err
 	}
 	ndb := fido.OpenNodelistDB(s.Deps.Messages.DB())
-	entry, err := ndb.LookupAddr(network, a)
-	if err != nil || entry == nil {
-		return nil, err
+	networks := config.Get().Fido.AllNetworks()
+	entry := fido.LookupNodelistEntry(ndb, a, network, networks)
+	if entry == nil {
+		return nil, nil
 	}
+	network = entry.Network
 	aka := entry.AKA
 	linked := []*fido.NodeEntry{entry}
 	fido.LinkHostAKAsPtrs(linked)

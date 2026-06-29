@@ -52,6 +52,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
 // NetmailMsg holds the fields for one outbound netmail message.
@@ -79,17 +81,31 @@ type NetmailDB struct{ db *sql.DB }
 // OpenNetmailDB returns a NetmailDB using the shared database connection.
 func OpenNetmailDB(db *sql.DB) *NetmailDB { return &NetmailDB{db: db} }
 
+// EnsureNetmailMsgID assigns an FTS MSGID when m.MsgID is empty.
+func EnsureNetmailMsgID(m *NetmailMsg) {
+	if strings.TrimSpace(m.MsgID) != "" {
+		return
+	}
+	from, err := ParseAddr(m.FromAddr)
+	if err != nil {
+		from = Addr{}
+	}
+	m.MsgID = FormatMSGID(from, NewMSGIDSerial())
+}
+
 // Enqueue stores a netmail in the queue for the next poll cycle.
 func (ndb *NetmailDB) Enqueue(m *NetmailMsg) (int64, error) {
+	EnsureNetmailMsgID(m)
 	crash := 0
 	if m.Crash {
 		crash = 1
 	}
 	res, err := ndb.db.Exec(`INSERT INTO fido_netmail
-		(from_name, from_addr, to_name, to_addr, subject, body, crash, network, author_lang)
-		VALUES (?,?,?,?,?,?,?,?,?)`,
+		(from_name, from_addr, to_name, to_addr, subject, body, crash, network, author_lang, msg_id, reply_msgid)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		m.FromName, m.FromAddr, m.ToName, m.ToAddr,
-		m.Subject, m.Body, crash, m.Network, NormalizeLangCode(m.AuthorLang))
+		m.Subject, m.Body, crash, m.Network, NormalizeLangCode(m.AuthorLang),
+		nullableStr(m.MsgID), nullableStr(m.ReplyMsgID))
 	if err != nil {
 		return 0, err
 	}
@@ -98,7 +114,7 @@ func (ndb *NetmailDB) Enqueue(m *NetmailMsg) (int64, error) {
 
 // Pending returns all unsent netmails.
 func (ndb *NetmailDB) Pending() ([]*NetmailMsg, []int64, error) {
-	rows, err := ndb.db.Query(`SELECT id, from_name, from_addr, to_name, to_addr, subject, body, crash, network, author_lang
+	rows, err := ndb.db.Query(`SELECT id, from_name, from_addr, to_name, to_addr, subject, body, crash, network, author_lang, msg_id, reply_msgid
 		FROM fido_netmail WHERE sent_at IS NULL ORDER BY id`)
 	if err != nil {
 		return nil, nil, err
@@ -110,11 +126,14 @@ func (ndb *NetmailDB) Pending() ([]*NetmailMsg, []int64, error) {
 		m := &NetmailMsg{}
 		var id int64
 		var crash int
+		var msgID, replyMsgID sql.NullString
 		if err := rows.Scan(&id, &m.FromName, &m.FromAddr, &m.ToName, &m.ToAddr,
-			&m.Subject, &m.Body, &crash, &m.Network, &m.AuthorLang); err != nil {
+			&m.Subject, &m.Body, &crash, &m.Network, &m.AuthorLang, &msgID, &replyMsgID); err != nil {
 			return nil, nil, err
 		}
 		m.Crash = crash != 0
+		m.MsgID = msgID.String
+		m.ReplyMsgID = replyMsgID.String
 		msgs = append(msgs, m)
 		ids = append(ids, id)
 	}
@@ -125,6 +144,39 @@ func (ndb *NetmailDB) Pending() ([]*NetmailMsg, []int64, error) {
 func (ndb *NetmailDB) MarkSent(id int64) error {
 	_, err := ndb.db.Exec(`UPDATE fido_netmail SET sent_at=datetime('now') WHERE id=?`, id)
 	return err
+}
+
+// RecordSentNetmail stores a copy of outbound netmail in conference 0 for threading.
+func RecordSentNetmail(store *messages.Store, nd *NetworkDef, m *NetmailMsg) error {
+	if store == nil || m == nil {
+		return nil
+	}
+	EnsureNetmailMsgID(m)
+	network := ""
+	if nd != nil {
+		network = nd.Name
+	}
+	return store.Post(&messages.Message{
+		ConferenceID:    0,
+		FromName:        m.FromName,
+		ToName:          m.ToName,
+		Subject:         m.Subject,
+		Body:            m.Body,
+		Status:          "A",
+		DatePosted:      time.Now(),
+		FidoMsgID:       m.MsgID,
+		FidoReply:       m.ReplyMsgID,
+		FidoOrigin:      m.FromAddr,
+		FidoNetwork:     network,
+		NetmailOutbound: true,
+	})
+}
+
+func nullableStr(s string) any {
+	if strings.TrimSpace(s) == "" {
+		return nil
+	}
+	return s
 }
 
 // ScanNetmailResult summarises flushing the fido_netmail queue to outbound PKTs.
@@ -157,6 +209,7 @@ func ScanNetmailQueue(nd *NetworkDef, db *sql.DB) *ScanNetmailResult {
 		if m.Network != nd.Name {
 			continue
 		}
+		EnsureNetmailMsgID(m)
 		nextHop, err := RouteAddr(db, m, nd)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("id %d: %v", ids[i], err))
@@ -170,6 +223,11 @@ func ScanNetmailQueue(nd *NetworkDef, db *sql.DB) *ScanNetmailResult {
 		if err := ndb.MarkSent(ids[i]); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("id %d mark sent: %v", ids[i], err))
 			continue
+		}
+		if store, err := messages.Open(db); err == nil {
+			if err := RecordSentNetmail(store, nd, m); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("id %d record sent: %v", ids[i], err))
+			}
 		}
 		result.Exported++
 	}

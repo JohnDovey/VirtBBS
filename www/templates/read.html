@@ -24,6 +24,11 @@
   {{else}}
   <div class="msg-body msg-body-formatted">{{safeHTML .DisplayBody}}</div>
   {{end}}
+  {{if or .Message.FidoMsgID .Message.FidoReply}}
+  <p>
+    <button type="button" class="btn btn-outline-secondary btn-sm" id="msg-thread-btn">{{t .Locale "read.thread"}}</button>
+  </p>
+  {{end}}
   {{if .CanWrite}}
   <p>
     <a class="btn" href="/messages/post?conf={{.Conference.ID}}&amp;reply={{.Message.MsgNumber}}">{{t .Locale "common.reply"}}</a>
@@ -37,5 +42,34 @@
   {{end}}
   </div>
 </div>
+{{if or .Message.FidoMsgID .Message.FidoReply}}
+<div id="msg-thread-panel" class="card mb-3 d-none"></div>
+<script defer>
+(function () {
+  var btn = document.getElementById('msg-thread-btn');
+  var panel = document.getElementById('msg-thread-panel');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', function () {
+    panel.classList.remove('d-none');
+    panel.innerHTML = '<div class="card-body"><p class="meta">Loading…</p></div>';
+    fetch('/api/messages/thread?conf={{.Conference.ID}}&num={{.Message.MsgNumber}}', { credentials: 'same-origin' })
+      .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+      .then(function (data) {
+        var items = (data && data.messages) || [];
+        var html = '<div class="card-body"><h3 class="h6 mb-3">{{t .Locale "read.thread"}} (' + items.length + ')</h3>';
+        items.forEach(function (tm) {
+          html += '<div class="border-top pt-2 mt-2"><p class="meta small mb-1"><strong>#' + tm.MsgNumber + '</strong> · ' +
+            (tm.FromName || '') + '</p><div class="msg-body msg-body-formatted small">' + (tm.DisplayBody || '') + '</div></div>';
+        });
+        html += '</div>';
+        panel.innerHTML = html;
+      })
+      .catch(function () {
+        panel.innerHTML = '<div class="card-body"><p class="meta mb-0">Thread not available.</p></div>';
+      });
+  });
+})();
+</script>
+{{end}}
 {{template "footer" .}}
 {{end}}

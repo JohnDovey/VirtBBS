@@ -20,7 +20,7 @@ func TestBuildDOT_node2dotHierarchy(t *testing.T) {
 	for _, want := range []string{
 		"shape=tab",
 		"rankdir=LR",
-		`"4" [label="ZONA 4\n(Fernando Toledo)", fillcolor=lightblue]`,
+		`"4" [label="Zone 4\n(Fernando Toledo)", fillcolor=lightblue]`,
 		`"4:80" [label="4:80\n(Rede Brasil)", fillcolor=palegreen]`,
 		`"4:80/1"`,
 		`fillcolor=lightyellow`,

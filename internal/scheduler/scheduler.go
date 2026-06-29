@@ -30,8 +30,7 @@
 //   v0.5.0  2026-06-25  Add a second per-network ticker for automatic
 //                        nodelist fetching (fido.FetchAndImport)
 //   v1.6.0  2026-06-28  Member networks: drain nodelist echo queue on
-//                        startup, after poll+toss, and every 1 minute
-//                        (ProcessPendingNodelistEchoesForNetwork).
+//                        startup and after each successful poll+toss.
 // ============================================================================
 
 // Package scheduler runs background tasks for the VirtBBS server. Currently
@@ -80,7 +79,6 @@ func Start(store *messages.Store, confStore *conferences.Store, fileStore *files
 			continue
 		}
 		name := nd.Name
-		go runNodelistMonitor(name, store, confStore, fileStore, stopCh)
 		if nd.Uplink != "" {
 			go runNetwork(name, store, confStore, fileStore, stopCh)
 			if nd.NodelistFetchEnabled() {
@@ -92,6 +90,9 @@ func Start(store *messages.Store, confStore *conferences.Store, fileStore *files
 			go runDayRollover(name, store, confStore, fileStore, stopCh)
 		}
 	}
+	go runNetworkTraffic(store, confStore, fileStore, stopCh)
+
+	runNodelistMonitorAtStartup(cfg, store, confStore, fileStore)
 
 	return func() {
 		if !stopped {
@@ -103,8 +104,7 @@ func Start(store *messages.Store, confStore *conferences.Store, fileStore *files
 
 // runDayRollover regenerates a hub network's VirtNet nodelist/diff/change-
 // log/diagrams once every 24h, and once immediately at startup (files only —
-// no echo conference posts until the first daily rollover). Also drains any
-// pending inbound nodelist echoes for this network once per minute.
+// no echo conference posts until the first daily rollover).
 func runDayRollover(networkName string, store *messages.Store, confStore *conferences.Store, fileStore *files.Store, stop <-chan struct{}) {
 	nd := config.Get().Fido.NetworkByName(networkName)
 	if nd == nil {
@@ -138,53 +138,24 @@ func runDayRollover(networkName string, store *messages.Store, confStore *confer
 	}
 }
 
-// runNodelistMonitor scans each network's Nodelist Files area and Nodelists
-// conference every minute, applying nodelists/diffs newer than the current import.
-func runNodelistMonitor(networkName string, store *messages.Store, confStore *conferences.Store, fileStore *files.Store, stop <-chan struct{}) {
-	log.Printf("nodelist monitor: %s — checking file area and conference every 1m", networkName)
-	drainPendingNodelistEchoes(networkName, store, confStore, fileStore)
-
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-stop:
-			return
-		case <-ticker.C:
-			nd := config.Get().Fido.NetworkByName(networkName)
-			if nd == nil || !nd.Enabled {
-				continue
-			}
-			drainPendingNodelistEchoes(networkName, store, confStore, fileStore)
+func runNodelistMonitorAtStartup(cfg *config.Config, store *messages.Store, confStore *conferences.Store, fileStore *files.Store) {
+	if fileStore == nil {
+		return
+	}
+	for _, nd := range cfg.Fido.AllNetworks() {
+		if !nd.Enabled {
+			continue
+		}
+		ndCopy := nd
+		for _, w := range fido.RunNodelistMonitorForNetwork(&ndCopy, store.DB(), confStore, store, fileStore, cfg.Sysop.Name) {
+			log.Printf("nodelist monitor [%s]: %s", nd.Name, w)
 		}
 	}
 }
 
-func drainPendingNodelistEchoes(networkName string, store *messages.Store, confStore *conferences.Store, fileStore *files.Store) {
-	if fileStore == nil {
-		return
-	}
-	cfg := config.Get()
-	nd := cfg.Fido.NetworkByName(networkName)
-	var ndPtr *fido.NetworkDef
-	bbsName, sysopName := "", ""
-	telnetPort := 0
-	if nd != nil {
-		ndCopy := *nd
-		ndPtr = &ndCopy
-		bbsName = cfg.BBS.Name
-		sysopName = cfg.Sysop.Name
-		telnetPort = cfg.Network.TelnetPort
-	}
-	for _, w := range fido.MonitorNetworkNodelists(store.DB(), confStore, store, fileStore, ndPtr, bbsName, sysopName, telnetPort) {
-		log.Printf("nodelist monitor [%s]: %s", networkName, w)
-	}
-}
-
 // runNetwork polls and tosses one network on its own ticker until stop is
-// closed, re-reading live config every tick. After each poll+toss, TossDir
-// applies any queued VirtNet nodelist echoes; a 1-minute backup ticker also
-// drains the queue for this network (covers manual toss without poll).
+// closed, re-reading live config every tick. After each successful poll+toss,
+// PollAndToss runs the nodelist monitor for that network.
 func runNetwork(networkName string, store *messages.Store, confStore *conferences.Store, fileStore *files.Store, stop <-chan struct{}) {
 	nd := config.Get().Fido.NetworkByName(networkName)
 	if nd == nil {
@@ -234,7 +205,6 @@ func runNetwork(networkName string, store *messages.Store, confStore *conference
 					fido.LogBinkp(fmt.Sprintf("fido scheduler: %s toss error: %s", networkName, e))
 				}
 			}
-			drainPendingNodelistEchoes(networkName, store, confStore, fileStore)
 		}
 	}
 }
@@ -299,6 +269,48 @@ func runNodelistFetch(networkName string, store *messages.Store, fileStore *file
 					log.Printf("nodelist scheduler: %s diagram: %s", networkName, w)
 				}
 			}
+		}
+	}
+}
+
+// runNetworkTraffic publishes weekly echomail propagation maps to the
+// auto-created Network Traffic conference and file area.
+func runNetworkTraffic(store *messages.Store, confStore *conferences.Store, fileStore *files.Store, stop <-chan struct{}) {
+	log.Printf("network traffic: weekly echomail map reports (Mondays 03:00)")
+
+	run := func() {
+		cfg := config.Get()
+		if !cfg.Fido.Enabled {
+			return
+		}
+		var fileArea fido.FileArea
+		if fileStore != nil {
+			fileArea = fileStore
+		}
+		for _, w := range fido.RunWeeklyNetworkTrafficReports(store.DB(), store, confStore, fileArea, cfg.Fido.AllNetworks()) {
+			log.Printf("network traffic: %s", w)
+		}
+	}
+
+	now := time.Now()
+	daysUntilMonday := (8 - int(now.Weekday())) % 7
+	if daysUntilMonday == 0 && now.Hour() >= 3 {
+		daysUntilMonday = 7
+	}
+	next := time.Date(now.Year(), now.Month(), now.Day()+daysUntilMonday, 3, 0, 0, 0, now.Location())
+	if next.Sub(now) < time.Hour {
+		next = next.Add(7 * 24 * time.Hour)
+	}
+
+	timer := time.NewTimer(time.Until(next))
+	defer timer.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-timer.C:
+			run()
+			timer.Reset(7 * 24 * time.Hour)
 		}
 	}
 }

@@ -55,6 +55,70 @@ func TestFindThread_followsReplyChain(t *testing.T) {
 	}
 }
 
+func TestFindNetmailThread_linksInboundAndOutbound(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	store, err := Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	inboundID := "1:234/567 INBOUND01"
+	if err := store.Post(&Message{
+		ConferenceID: 0,
+		FromName:     "Remote",
+		ToName:       "Alice",
+		Subject:      "Question",
+		DatePosted:   time.Now(),
+		Status:       "A",
+		Body:         "inbound",
+		FidoMsgID:    inboundID,
+		FidoOrigin:   "1:234/567",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	outboundID := "1:234/1 OUTBOUND1"
+	if err := store.Post(&Message{
+		ConferenceID:    0,
+		FromName:        "Alice",
+		ToName:          "Remote",
+		Subject:         "Re: Question",
+		DatePosted:      time.Now(),
+		Status:          "A",
+		Body:            "reply",
+		FidoMsgID:       outboundID,
+		FidoReply:       inboundID,
+		FidoOrigin:      "1:234/1",
+		FidoNetwork:     "FidoNet",
+		NetmailOutbound: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	thread, err := store.FindNetmailThread("Alice", false, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(thread) != 2 {
+		t.Fatalf("thread len = %d, want 2", len(thread))
+	}
+	if thread[0].FidoMsgID != inboundID {
+		t.Errorf("root = %q", thread[0].FidoMsgID)
+	}
+	if thread[1].FidoMsgID != outboundID {
+		t.Errorf("reply = %q", thread[1].FidoMsgID)
+	}
+
+	// Bob cannot see Alice's outbound copy.
+	if _, err := store.FindNetmailThread("Bob", false, 2); err == nil {
+		t.Fatal("Bob should not access Alice's outbound netmail thread start")
+	}
+}
+
 func TestCountReplies(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {

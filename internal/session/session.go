@@ -188,6 +188,7 @@ func Run(rw io.ReadWriteCloser, remoteAddr string, deps Deps, echoInput bool) {
 		bbsName := config.Get().BBS.Name
 		s.write(ansi.Banner(bbsName))
 	}
+	s.showServerUptime()
 
 	// Show new message counts across all conferences.
 	s.showNewMessages()
@@ -237,6 +238,12 @@ func (s *session) banner() {
 	s.writeln(line(cfg.BBS.Name))
 	s.writeln(line("Powered by VirtBBS"))
 	s.writeln(border + "╚" + strings.Repeat("═", innerW) + "╝" + ansi.Reset())
+	s.writeln("")
+}
+
+func (s *session) showServerUptime() {
+	msg := uptime.Message(config.Get().BBS.Name)
+	s.writeln(ansi.Color(ansi.White) + msg + ansi.Reset())
 	s.writeln("")
 }
 
@@ -2178,10 +2185,14 @@ func (s *session) netmailReply(orig *messages.Message) {
 	outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), false)
 	origAddr, _ := fido.ParseAddr(nd.Address)
 
+	fido.EnsureNetmailMsgID(msg)
 	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg}, nd.Name)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Error writing PKT: "+err.Error()))
 		return
+	}
+	if err := fido.RecordSentNetmail(s.deps.Messages, nd, msg); err != nil {
+		s.writeln(ansi.Colorize(ansi.Yellow, "Warning: could not record sent netmail: "+err.Error()))
 	}
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
 		"NetMail reply queued → %s (next hop: %s)", pktPath, nextHop.String())))
@@ -2267,10 +2278,14 @@ func (s *session) netmailCompose() {
 	outDir := fido.OutboundDir(nd.OutboundDir, nextHop, nd.UplinkAddr(), crash)
 	origAddr, _ := fido.ParseAddr(cfg.Fido.Address)
 
+	fido.EnsureNetmailMsgID(msg)
 	pktPath, err := fido.WritePKT(origAddr, nextHop, nd.Password, outDir, []*fido.NetmailMsg{msg}, nd.Name)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Error writing PKT: "+err.Error()))
 		return
+	}
+	if err := fido.RecordSentNetmail(s.deps.Messages, &nd, msg); err != nil {
+		s.writeln(ansi.Colorize(ansi.Yellow, "Warning: could not record sent netmail: "+err.Error()))
 	}
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
 		"NetMail queued → %s (next hop: %s)", pktPath, nextHop.String())))

@@ -568,6 +568,45 @@ func (ndb *NodelistDB) LookupAddr(network string, a Addr) (*NodeEntry, error) {
 	return nodes[0], nil
 }
 
+// LookupAddrAny returns the first nodelist entry for an address in any network.
+func (ndb *NodelistDB) LookupAddrAny(a Addr) *NodeEntry {
+	if ndb == nil || ndb.db == nil {
+		return nil
+	}
+	rows, err := ndb.db.Query(`SELECT id, network, zone, net, node_num, point, name, location, sysop, phone, baud, flags, node_type, is_active
+		FROM fido_nodes WHERE zone=? AND net=? AND node_num=? AND point=?
+		ORDER BY network`,
+		a.Zone, a.Net, a.Node, a.Point)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	ptrs, err := scanNodes(rows)
+	if err != nil || len(ptrs) == 0 {
+		return nil
+	}
+	return ptrs[0]
+}
+
+// LookupNodelistEntry finds a node in the nodelist, trying hintNetwork first,
+// then configured networks, then any imported network.
+func LookupNodelistEntry(ndb *NodelistDB, addr Addr, hintNetwork string, networks []NetworkDef) *NodeEntry {
+	if ndb == nil {
+		return nil
+	}
+	if n := strings.TrimSpace(hintNetwork); n != "" {
+		if e, _ := ndb.LookupAddr(n, addr); e != nil {
+			return e
+		}
+	}
+	for _, nd := range networks {
+		if e, _ := ndb.LookupAddr(nd.Name, addr); e != nil {
+			return e
+		}
+	}
+	return ndb.LookupAddrAny(addr)
+}
+
 // LookupHub returns the hub (or Host) for a given zone:net.
 // Used for routing: if no hub is known, returns the host (node 0).
 func (ndb *NodelistDB) LookupHub(network string, zone, net int) (*NodeEntry, error) {

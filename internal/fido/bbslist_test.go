@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/virtbbs/virtbbs/internal/db"
+	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
 func TestBBSListRecordAndQuery(t *testing.T) {
@@ -94,5 +95,56 @@ func TestBBSListBackfillSingleConnection(t *testing.T) {
 	}
 	if page.Total < 1 {
 		t.Fatalf("expected backfill nodes, got %+v", page)
+	}
+}
+
+func TestBBSListNetworkInferenceAndRepair(t *testing.T) {
+	sqlDB, err := db.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqlDB.Close()
+	if _, err := messages.Open(sqlDB); err != nil {
+		t.Fatal(err)
+	}
+
+	addr, _ := ParseAddr("227:1/1")
+	_, err = sqlDB.Exec(`INSERT INTO fido_nodes
+		(network, zone, net, node_num, point, name, location, sysop, phone, baud, flags, node_type, is_active)
+		VALUES ('LovlyNet', ?, ?, ?, 0, 'Lovely BBS', 'Somewhere', 'John', '', 33600, 'CM,IBN', 'Node', 1)`,
+		addr.Zone, addr.Net, addr.Node)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateBBSList(sqlDB); err != nil {
+		t.Fatal(err)
+	}
+	_, err = sqlDB.Exec(`INSERT INTO fido_bbs_nodes
+		(network, node_addr, zone, net, node_num, echomail_count, netmail_count, last_seen)
+		VALUES ('FidoNet', '227:1/1', ?, ?, ?, 0, 5, '2026-01-01T00:00:00Z')`,
+		addr.Zone, addr.Net, addr.Node)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	networks := []NetworkDef{
+		{Name: "FidoNet", Address: "1:100/1"},
+		{Name: "LovlyNet", Address: "227:1/1"},
+	}
+	InitBBSList(sqlDB, networks)
+
+	var network string
+	if err := sqlDB.QueryRow(`SELECT network FROM fido_bbs_nodes WHERE node_addr='227:1/1'`).Scan(&network); err != nil {
+		t.Fatal(err)
+	}
+	if network != "LovlyNet" {
+		t.Fatalf("network after repair: got %q want LovlyNet", network)
+	}
+
+	ndb := OpenNodelistDB(sqlDB)
+	node := &BBSListNode{Network: "FidoNet", NodeAddr: "227:1/1"}
+	enrichBBSNode(ndb, node)
+	if node.Network != "LovlyNet" || node.Name != "Lovely BBS" || node.Sysop != "John" {
+		t.Fatalf("enriched node: %+v", node)
 	}
 }

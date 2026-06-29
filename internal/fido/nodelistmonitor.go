@@ -19,6 +19,29 @@ const (
 	nodelistAppliedSourceQueue = "queue"
 )
 
+var (
+	nodelistMonitorBBSName    string
+	nodelistMonitorTelnetPort int
+)
+
+// SetNodelistMonitorContext supplies BBS metadata used when applying imported
+// nodelists after a successful poll (set once from main).
+func SetNodelistMonitorContext(bbsName string, telnetPort int) {
+	nodelistMonitorBBSName = strings.TrimSpace(bbsName)
+	nodelistMonitorTelnetPort = telnetPort
+}
+
+// RunNodelistMonitorForNetwork scans the echo queue, nodelist file area, and
+// Nodelists conference for one network. Call after a successful poll+toss.
+func RunNodelistMonitorForNetwork(nd *NetworkDef, db *sql.DB, confStore *conferences.Store,
+	msgStore *messages.Store, fileArea FileArea, sysopName string) []string {
+	if nd == nil {
+		return nil
+	}
+	return MonitorNetworkNodelists(db, confStore, msgStore, fileArea, nd,
+		nodelistMonitorBBSName, sysopName, nodelistMonitorTelnetPort)
+}
+
 // MonitorNetworkNodelists scans the pending echo queue, the "<Network> Nodelist
 // Files" area, and the "<Network> Nodelists" conference for nodelists and
 // diffs newer than the current import, applying them automatically.

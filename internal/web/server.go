@@ -99,6 +99,8 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/api/netmail/delete", s.handleAPINetmailDelete)
 	mux.HandleFunc("/api/netmail/stats", s.handleAPINetmailStats)
 	mux.HandleFunc("/api/netmail/taglines", s.handleAPINetmailTaglines)
+	mux.HandleFunc("/api/netmail/thread", s.handleAPINetmailThread)
+	mux.HandleFunc("/api/messages/thread", s.handleAPIMessageThread)
 	mux.HandleFunc("/api/addressbook", s.handleAPIAddressBook)
 	mux.HandleFunc("/api/nodelist/search", s.handleAPINodelistSearch)
 	mux.HandleFunc("/admin", s.handleAdmin)

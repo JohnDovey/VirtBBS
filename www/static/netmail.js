@@ -47,6 +47,38 @@
     return '<div class="msg-body">' + esc(html || m.Body) + '</div>';
   }
 
+  function renderThreadItem(tm) {
+    return '<div class="border-top pt-2 mt-2">' +
+      '<p class="meta small mb-1"><strong>#' + esc(String(tm.MsgNumber)) + '</strong> · ' +
+      esc(tm.FromName || '') + ' · ' + esc(formatDate(tm.DatePosted)) + '</p>' +
+      '<div class="small">' + (tm.DisplayBody || esc(tm.Body || '')) + '</div></div>';
+  }
+
+  function loadThread(num, panelEl) {
+    panelEl.classList.remove('d-none');
+    panelEl.innerHTML = '<div class="card-body"><p class="meta">' + esc(t('common.loading', 'Loading…')) + '</p></div>';
+    fetch('/api/netmail/thread?num=' + encodeURIComponent(num), { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('thread failed');
+        return r.json();
+      })
+      .then(function (data) {
+        var items = (data && data.messages) || [];
+        if (!items.length) {
+          panelEl.innerHTML = '<div class="card-body"><p class="meta mb-0">' + esc(t('netmail.empty', 'No netmail.')) + '</p></div>';
+          return;
+        }
+        var html = '<div class="card-body"><h4 class="h6">' + esc(t('netmail.app.thread', 'Thread')) +
+          ' (' + items.length + ')</h4>';
+        items.forEach(function (tm) { html += renderThreadItem(tm); });
+        html += '</div>';
+        panelEl.innerHTML = html;
+      })
+      .catch(function () {
+        panelEl.innerHTML = '<div class="card-body"><p class="meta mb-0">' + esc(t('netmail.app.load_failed', 'Could not load netmail.')) + '</p></div>';
+      });
+  }
+
   function syncComposeEditor() {
     var body = document.getElementById('nm-body');
     if (body) body.dispatchEvent(new Event('input', { bubbles: true }));
@@ -181,23 +213,39 @@
         '<button type="button" class="btn btn-sm btn-outline-secondary" id="netmail-add-contact-btn">' +
         esc(t('netmail.app.add_to_contacts', 'Add to contacts')) + '</button></p>';
     }
+    var threadBtn = '';
+    if (m.ThreadAvailable) {
+      threadBtn = '<button type="button" class="btn btn-outline-secondary" id="netmail-thread-btn">' +
+        esc(t('netmail.app.thread', 'Thread')) + '</button>';
+    }
     paneEl.innerHTML =
       '<div class="card-body">' +
       '<div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">' +
       '<h3 class="h5 mb-0">' + esc(m.Subject) + '</h3>' +
       '<div class="btn-group btn-group-sm">' +
+      threadBtn +
       '<button type="button" class="btn btn-outline-primary" id="netmail-reply-btn">' + esc(t('common.reply', 'Reply')) + '</button>' +
       '<button type="button" class="btn btn-outline-danger" id="netmail-delete-btn">' + esc(t('common.delete', 'Delete')) + '</button>' +
       '</div></div>' +
       '<p class="meta">' + esc(fromLine) +
       ' · ' + esc(t('netmail.app.to_prefix', 'To')) + ' <strong>' + esc(toDisplay) + '</strong>' +
       ' · ' + esc(formatDate(m.DatePosted)) +
+      (m.ReplyToNum ? ' · <span class="text-muted">↩ #' + esc(String(m.ReplyToNum)) + '</span>' : '') +
+      (m.ReplyCount ? ' · <span class="text-muted">' + esc(String(m.ReplyCount)) + ' ' + esc(t('common.reply', 'Reply').toLowerCase()) + (m.ReplyCount === 1 ? '' : 's') + '</span>' : '') +
       (m.LangLabel ? ' <span class="badge bg-secondary">' + esc(m.LangLabel) + '</span>' : '') +
-      '</p>' + originBlock + bodyHtml(m) + '</div>';
+      '</p>' + originBlock + bodyHtml(m) +
+      '<div id="netmail-thread-panel" class="d-none card mt-3 mb-0"></div></div>';
 
     document.getElementById('netmail-reply-btn').addEventListener('click', function () {
       if (m.Reply) showCompose(m.Reply);
     });
+    var threadBtnEl = document.getElementById('netmail-thread-btn');
+    if (threadBtnEl) {
+      var threadPanel = document.getElementById('netmail-thread-panel');
+      threadBtnEl.addEventListener('click', function () {
+        loadThread(m.MsgNumber, threadPanel);
+      });
+    }
     document.getElementById('netmail-delete-btn').addEventListener('click', function () {
       deleteMessage(m.MsgNumber);
     });

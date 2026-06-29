@@ -178,7 +178,7 @@ func main() {
 	}
 
 	if *fidoToss || *fidoScan || *fidoFileScan || *fidoRebuildMaps {
-		fido.InitBBSList(sqlDB)
+		fido.InitBBSList(sqlDB, cfg.Fido.AllNetworks())
 		msgStore, err := messages.Open(sqlDB)
 		if err != nil {
 			log.Fatalf("messages store: %v", err)
@@ -317,7 +317,7 @@ func main() {
 	}
 	fido.SetBinkpDebugEnabled(cfg.Fido.BinkpDebug)
 	fido.InitBinkpStats(sqlDB)
-	fido.InitBBSList(sqlDB)
+	fido.InitBBSList(sqlDB, cfg.Fido.AllNetworks())
 
 	fileStore, err := files.Open(sqlDB, cfg.Paths.Files)
 	if err != nil {
@@ -389,6 +389,7 @@ func main() {
 		}
 
 		fido.StartBinkpStatsBulletins(sqlDB, cfg.Session.DisplayDir, cfg.BBS.Name)
+		fido.SetNodelistMonitorContext(cfg.BBS.Name, cfg.Network.TelnetPort)
 
 		fido.EnsureAllNetworkOwnNodes(sqlDB, cfg.Fido.AllNetworks(), cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort)
 	}

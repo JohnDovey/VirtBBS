@@ -267,12 +267,12 @@ func (s *Server) handleAPINetmailStats(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(netmailStatsResponse{Total: total, Unread: unread})
 }
 
-func writeNetmailMessageJSON(w http.ResponseWriter, db *sql.DB, locale string, u *users.User, m *messages.Message) {
+func writeNetmailMessageJSON(w http.ResponseWriter, store *messages.Store, db *sql.DB, locale string, u *users.User, m *messages.Message) {
 	displayBody := FormatMessageBodyHTML(m.Body)
 	if u.Sysop {
 		displayBody = fido.ReconstructSource(fidoSourceOpts(m, ""))
 	}
-	resp := buildMessageViewJSON(locale, m, displayBody)
+	resp := buildMessageViewJSON(store, locale, m, displayBody)
 	reply := buildNetmailReplyInfo(db, m)
 	resp.Reply = &reply
 	w.Header().Set("Content-Type", "application/json")
@@ -320,6 +320,8 @@ func netmailI18nJSON(locale string) string {
 		"addressbook.flash.deleted",
 		"addressbook.delete_confirm",
 		"netmail.app.add_to_contacts",
+		"netmail.app.thread",
+		"common.thread",
 		"nodelist.col.address",
 		"nodelist.col.sysop",
 		"read.fido_origin",

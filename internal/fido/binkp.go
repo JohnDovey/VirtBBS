@@ -248,6 +248,9 @@ func PollAndTossDebug(nd *NetworkDef, store *messages.Store, confStore *conferen
 	logPollResult(nd.Name, "client", len(pollResult.Sent), len(pollResult.Received), nil)
 	logTossResult(nd.Name, "client", result.Toss)
 	RecordClientPoll(nd.Name, uplinkKey, true, len(pollResult.Sent), len(pollResult.Received))
+	for _, w := range RunNodelistMonitorForNetwork(nd, store.DB(), confStore, store, fileArea, sysopName) {
+		LogBinkp(fmt.Sprintf("nodelist monitor [%s]: %s", nd.Name, w))
+	}
 	return result
 }
 
@@ -423,6 +426,9 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 			LogBinkp(fmt.Sprintf("binkp server [%s]: auto-toss error: %v", nd.Name, err))
 		} else {
 			logTossResult(nd.Name, "server", tr)
+			for _, w := range RunNodelistMonitorForNetwork(nd, store.DB(), confStore, store, fileArea, sysopName) {
+				LogBinkp(fmt.Sprintf("nodelist monitor [%s]: %s", nd.Name, w))
+			}
 		}
 	}
 }

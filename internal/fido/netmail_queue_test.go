@@ -11,6 +11,97 @@ import (
 	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
+func TestEnqueue_pendingPreservesReplyMsgID(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store, err := messages.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = store
+
+	ndb := OpenNetmailDB(db)
+	replyID := "1:234/1 PARENTMSG"
+	_, err = ndb.Enqueue(&NetmailMsg{
+		Network:    "TestNet",
+		FromName:   "Alice",
+		FromAddr:   "1:234/1",
+		ToName:     "Bob",
+		ToAddr:     "1:234/3",
+		Subject:    "Re: Hello",
+		Body:       "reply body",
+		ReplyMsgID: replyID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msgs, _, err := ndb.Pending()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("pending len = %d, want 1", len(msgs))
+	}
+	if msgs[0].ReplyMsgID != replyID {
+		t.Fatalf("ReplyMsgID = %q, want %q", msgs[0].ReplyMsgID, replyID)
+	}
+	if msgs[0].MsgID == "" {
+		t.Fatal("expected MsgID to be assigned on enqueue")
+	}
+}
+
+func TestRecordSentNetmail_postsOutboundCopy(t *testing.T) {
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+
+	store, err := messages.Open(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	nd := &NetworkDef{Name: "TestNet", Address: "1:234/1"}
+	m := &NetmailMsg{
+		FromName:   "Alice",
+		FromAddr:   "1:234/1",
+		ToName:     "Bob",
+		ToAddr:     "1:234/3",
+		Subject:    "Hello",
+		Body:       "body",
+		ReplyMsgID: "1:234/3 PARENT",
+	}
+	if err := RecordSentNetmail(store, nd, m); err != nil {
+		t.Fatal(err)
+	}
+	if m.MsgID == "" {
+		t.Fatal("MsgID should be set")
+	}
+
+	posted, err := store.Get(0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !posted.NetmailOutbound {
+		t.Fatal("expected NetmailOutbound=true")
+	}
+	if posted.FidoMsgID != m.MsgID {
+		t.Fatalf("FidoMsgID = %q, want %q", posted.FidoMsgID, m.MsgID)
+	}
+	if posted.FidoReply != m.ReplyMsgID {
+		t.Fatalf("FidoReply = %q, want %q", posted.FidoReply, m.ReplyMsgID)
+	}
+	if posted.FidoOrigin != "1:234/1" {
+		t.Fatalf("FidoOrigin = %q", posted.FidoOrigin)
+	}
+}
+
 func TestScanNetmailQueue_writesPKTAndMarksSent(t *testing.T) {
 	db, err := sql.Open("sqlite", ":memory:")
 	if err != nil {

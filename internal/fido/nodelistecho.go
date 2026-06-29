@@ -116,7 +116,7 @@ func ApplyPendingNodelistEcho(db *sql.DB, p *PendingNodelistEcho, fileArea FileA
 
 // ProcessPendingNodelistEchoes drains the whole queue, applying each entry
 // via ApplyPendingNodelistEcho and clearing it on success. Call after every
-// toss (TossDir) and from the scheduler's 1-minute echo ticker on hub and
+// toss (TossDir) and after each successful BinkP poll (client or inbound server).
 // member networks.
 func ProcessPendingNodelistEchoes(db *sql.DB, fileArea FileArea) []string {
 	return processPendingNodelistEchoes(db, fileArea, "", nil, "", "")

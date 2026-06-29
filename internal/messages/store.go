@@ -66,6 +66,7 @@ type Message struct {
 	FidoOrigin     string // originating zone:net/node if received via FidoNet toss
 	FidoNetwork    string // Fido network name when received via toss
 	FidoExportedAt time.Time // zero if not yet written to an outbound PKT
+	NetmailOutbound bool // true for locally-sent netmail stored for threading
 }
 
 // Store manages messages in SQLite.
@@ -99,6 +100,9 @@ func (s *Store) migrate() error {
 		`ALTER TABLE messages ADD COLUMN fido_network TEXT`,
 		`ALTER TABLE messages ADD COLUMN fido_exported_at TEXT`,
 		`ALTER TABLE fido_netmail ADD COLUMN author_lang TEXT NOT NULL DEFAULT 'en'`,
+		`ALTER TABLE messages ADD COLUMN netmail_outbound INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fido_netmail ADD COLUMN msg_id TEXT`,
+		`ALTER TABLE fido_netmail ADD COLUMN reply_msgid TEXT`,
 		`ALTER TABLE fido_nodelist_versions ADD COLUMN source TEXT NOT NULL DEFAULT 'import'`,
 		`CREATE TABLE IF NOT EXISTS fido_nodelist_applied (
 			network TEXT NOT NULL,
@@ -157,12 +161,13 @@ func (s *Store) PostWithNumber(m *Message) error {
 	res, err := s.db.Exec(`
 		INSERT OR IGNORE INTO messages
 		  (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
-		   fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		   fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network, netmail_outbound)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ConferenceID, m.MsgNumber, m.FromName, m.ToName, m.Subject,
 		m.DatePosted.Format(time.RFC3339), m.Status, boolInt(m.Echo), m.Body,
 		nullable(m.FidoMsgID), nullable(m.FidoReply), nullable(m.FidoKludges),
 		nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin), nullable(m.FidoNetwork),
+		boolInt(m.NetmailOutbound),
 	)
 	if err != nil {
 		return err
@@ -184,12 +189,13 @@ func (s *Store) Post(m *Message) error {
 	}
 	res, err := s.db.Exec(`
 		INSERT INTO messages (conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
-		                       fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		                       fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network, netmail_outbound)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		m.ConferenceID, m.MsgNumber, m.FromName, m.ToName, m.Subject,
 		m.DatePosted.Format(time.RFC3339), m.Status, boolInt(m.Echo), m.Body,
 		nullable(m.FidoMsgID), nullable(m.FidoReply), nullable(m.FidoKludges),
 		nullable(m.FidoSeenBy), nullable(m.FidoPath), nullable(m.FidoOrigin), nullable(m.FidoNetwork),
+		boolInt(m.NetmailOutbound),
 	)
 	if err != nil {
 		return err
@@ -199,14 +205,20 @@ func (s *Store) Post(m *Message) error {
 }
 
 const messageCols = `id, conference_id, msg_number, from_name, to_name, subject, date_posted, status, echo, body,
-		fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network, fido_exported_at`
+		fido_msgid, fido_reply, fido_kludges, fido_seenby, fido_path, fido_origin, fido_network, fido_exported_at, netmail_outbound`
 
-// IsNetmail reports whether m is inbound FidoNet netmail (stored in conference 0).
+// IsNetmail reports whether m is FidoNet netmail (inbound or locally-sent outbound).
 func IsNetmail(m *Message) bool {
-	return m != nil && m.ConferenceID == 0 && !m.Echo && strings.TrimSpace(m.FidoOrigin) != ""
+	if m == nil || m.ConferenceID != 0 || m.Echo {
+		return false
+	}
+	if m.NetmailOutbound {
+		return true
+	}
+	return strings.TrimSpace(m.FidoOrigin) != ""
 }
 
-// CanViewNetmail reports whether forUser may read inbound netmail m.
+// CanViewNetmail reports whether forUser may read netmail m.
 func CanViewNetmail(forUser string, sysop bool, m *Message) bool {
 	if !IsNetmail(m) {
 		return true
@@ -214,14 +226,17 @@ func CanViewNetmail(forUser string, sysop bool, m *Message) bool {
 	if sysop {
 		return true
 	}
-	tn := strings.ToLower(strings.TrimSpace(m.ToName))
 	u := strings.ToLower(strings.TrimSpace(forUser))
+	if m.NetmailOutbound {
+		return strings.ToLower(strings.TrimSpace(m.FromName)) == u
+	}
+	tn := strings.ToLower(strings.TrimSpace(m.ToName))
 	return tn == u || tn == "all"
 }
 
-// generalExcludeNetmailSQL keeps inbound FidoNet netmail out of General conference
+// generalExcludeNetmailSQL keeps FidoNet netmail out of General conference
 // browsing; use ListNetmail / the netmail UI instead.
-const generalExcludeNetmailSQL = ` AND NOT (echo=0 AND fido_origin IS NOT NULL AND fido_origin != '')`
+const generalExcludeNetmailSQL = ` AND NOT (echo=0 AND ((fido_origin IS NOT NULL AND fido_origin != '') OR netmail_outbound=1))`
 
 // List returns messages in a conference, newest first.
 func (s *Store) List(conferenceID, limit, offset int) ([]*Message, error) {
@@ -259,10 +274,10 @@ func (s *Store) ListFrom(conferenceID, startNum, limit int) ([]*Message, error) 
 	return scanMessages(rows)
 }
 
-// netmailBaseSQL is the shared WHERE clause for inbound FidoNet netmail stored
-// in conference 0 (General) by the toss pipeline — echo=0 plus a Fido origin.
+// netmailBaseSQL is the shared WHERE clause for FidoNet netmail in conference 0:
+// inbound (fido_origin set) or locally-sent outbound (netmail_outbound).
 const netmailBaseSQL = `conference_id=0 AND echo=0 AND status!='D'
-		AND fido_origin IS NOT NULL AND fido_origin != ''`
+		AND ((fido_origin IS NOT NULL AND fido_origin != '') OR netmail_outbound=1)`
 
 // CountNetmail returns how many netmail messages are visible to forUser.
 // Sysops see all netmail; other users see mail addressed to them or "All".
@@ -311,7 +326,7 @@ func netmailRecipientFilter(forUser string, sysop bool) (clause string, args []a
 	if sysop {
 		return "", nil
 	}
-	return ` AND (lower(to_name)=lower(?) OR lower(to_name)='all')`, []any{forUser}
+	return ` AND (lower(to_name)=lower(?) OR lower(to_name)='all' OR (netmail_outbound=1 AND lower(from_name)=lower(?)))`, []any{forUser, forUser}
 }
 
 // GetByFidoMsgID fetches a message by its FidoNet MSGID within a conference.
@@ -413,6 +428,45 @@ func (s *Store) FindThread(conferenceID, startMsgNumber int) ([]*Message, error)
 		WHERE conference_id=? AND status!='D' AND fido_msgid IN (%s)
 		ORDER BY msg_number ASC`, strings.Join(placeholders, ","))
 	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanMessages(rows)
+}
+
+// FindNetmailThread returns the netmail conversation thread containing
+// startMsgNumber, filtered to messages visible to forUser.
+func (s *Store) FindNetmailThread(forUser string, sysop bool, startMsgNumber int) ([]*Message, error) {
+	start, err := s.GetNetmail(forUser, sysop, startMsgNumber)
+	if err != nil {
+		return nil, err
+	}
+	thread, err := s.FindThread(0, start.MsgNumber)
+	if err != nil {
+		return nil, err
+	}
+	var out []*Message
+	for _, m := range thread {
+		if CanViewNetmail(forUser, sysop, m) {
+			out = append(out, m)
+		}
+	}
+	if len(out) == 0 {
+		return []*Message{start}, nil
+	}
+	return out, nil
+}
+
+// ListConferenceEchoSince returns echo messages in one conference since a time.
+func (s *Store) ListConferenceEchoSince(confID int, since time.Time, limit int) ([]*Message, error) {
+	if limit <= 0 {
+		limit = 10000
+	}
+	sinceStr := since.UTC().Format(time.RFC3339)
+	rows, err := s.db.Query(`SELECT `+messageCols+`
+		FROM messages WHERE conference_id=? AND echo=1 AND status!='D' AND date_posted >= ?
+		ORDER BY date_posted ASC LIMIT ?`, confID, sinceStr, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -590,9 +644,10 @@ func scanMessage(sc scanner) (*Message, error) {
 	var dateStr string
 	var echo int
 	var msgID, reply, kludges, seenBy, path, origin, network, exportedAt sql.NullString
+	var netmailOutbound int
 	err := sc.Scan(&m.ID, &m.ConferenceID, &m.MsgNumber, &m.FromName, &m.ToName,
 		&m.Subject, &dateStr, &m.Status, &echo, &m.Body,
-		&msgID, &reply, &kludges, &seenBy, &path, &origin, &network, &exportedAt)
+		&msgID, &reply, &kludges, &seenBy, &path, &origin, &network, &exportedAt, &netmailOutbound)
 	if err != nil {
 		return nil, err
 	}
@@ -608,6 +663,7 @@ func scanMessage(sc scanner) (*Message, error) {
 	if exportedAt.Valid {
 		m.FidoExportedAt, _ = time.Parse(time.RFC3339, exportedAt.String)
 	}
+	m.NetmailOutbound = netmailOutbound != 0
 	return &m, nil
 }
 

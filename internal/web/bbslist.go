@@ -146,16 +146,18 @@ func (s *Server) handleAPIBBSListNode(w http.ResponseWriter, r *http.Request) {
 	}
 	db := s.Deps.Messages.DB()
 
-	var echoCount, netmailCount int
-	_ = db.QueryRow(`SELECT echomail_count, netmail_count FROM fido_bbs_nodes
-		WHERE network=? AND node_addr=?`, network, addr).Scan(&echoCount, &netmailCount)
-
 	_ = s.maybeRebuildHubNodelist(network)
 	nodeDetail, err := s.lookupNodeDetail(network, addr)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	if nodeDetail != nil && nodeDetail.Network != "" {
+		network = nodeDetail.Network
+	}
+	var echoCount, netmailCount int
+	_ = db.QueryRow(`SELECT echomail_count, netmail_count FROM fido_bbs_nodes
+		WHERE network=? AND node_addr=?`, network, addr).Scan(&echoCount, &netmailCount)
 	if nodeDetail == nil {
 		nodeDetail = &nodeDetailJSON{
 			Network: network,

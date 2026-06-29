@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS messages (
     fido_seenby     TEXT,    -- space-separated net/node tokens from SEEN-BY lines
     fido_path       TEXT,    -- space-separated net/node tokens from ^APATH kludge
     fido_origin     TEXT,    -- originating zone:net/node if received via FidoNet toss
+    fido_network    TEXT,    -- Fido network name when received via toss
     fido_exported_at TEXT,   -- set once this message has been written to an outbound PKT
+    netmail_outbound INTEGER NOT NULL DEFAULT 0, -- 1 = locally-sent netmail copy for threading
     UNIQUE (conference_id, msg_number)
 );
 
@@ -84,6 +86,8 @@ CREATE TABLE IF NOT EXISTS fido_netmail (
     crash      INTEGER NOT NULL DEFAULT 0,   -- 1 = send directly (no routing)
     network    TEXT    NOT NULL DEFAULT '',  -- which network
     author_lang TEXT   NOT NULL DEFAULT 'en', -- ^ALANG kludge (en, es, af)
+    msg_id      TEXT,    -- FTS MSGID for threading
+    reply_msgid TEXT,    -- parent MSGID from ^AREPLY
     created_at TEXT    NOT NULL DEFAULT (datetime('now')),
     sent_at    TEXT
 );
