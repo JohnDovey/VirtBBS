@@ -100,6 +100,7 @@ func main() {
 	}
 	config.RegisterFidoMappingHooks()
 	fido.SetGraphvizDotPath(cfg.Paths.GraphvizDot)
+	fido.SetOutboundBBSName(cfg.BBS.Name)
 
 	// Ensure data directories exist
 	for _, dir := range []string{"data", cfg.Paths.Files, cfg.Paths.Logs, cfg.Paths.WWW} {
@@ -175,6 +176,7 @@ func main() {
 	}
 
 	if *fidoToss || *fidoScan || *fidoFileScan || *fidoRebuildMaps {
+		fido.InitBBSList(sqlDB)
 		msgStore, err := messages.Open(sqlDB)
 		if err != nil {
 			log.Fatalf("messages store: %v", err)
@@ -313,6 +315,7 @@ func main() {
 	}
 	fido.SetBinkpDebugEnabled(cfg.Fido.BinkpDebug)
 	fido.InitBinkpStats(sqlDB)
+	fido.InitBBSList(sqlDB)
 
 	fileStore, err := files.Open(sqlDB, cfg.Paths.Files)
 	if err != nil {

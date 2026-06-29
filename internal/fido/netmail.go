@@ -229,6 +229,10 @@ func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailM
 	}
 	if len(network) > 0 && network[0] != "" && len(msgs) > 0 {
 		RecordNetmailSent(network[0], destAddr.String(), len(msgs))
+		for _, m := range msgs {
+			to, _ := ParseAddr(m.ToAddr)
+			RecordOutboundMessage(nil, network[0], origAddr, to, m.ToName, false, true)
+		}
 	}
 
 	return path, nil
@@ -271,7 +275,7 @@ func buildBody(m *NetmailMsg, from, to Addr) string {
 	}
 
 	sb.WriteString(m.Body)
-	return sb.String()
+	return AppendOutboundSignature(sb.String(), "", from)
 }
 
 // ─── Routing helper ─────────────────────────────────────────────────────────

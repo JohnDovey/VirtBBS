@@ -74,6 +74,10 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/nodelist", s.handleNodelist)
 	mux.HandleFunc("/nodelist/node", s.handleNodelistNode)
 	mux.HandleFunc("/nodelist/export", s.handleNodelistExport)
+	mux.HandleFunc("/bbslist", s.handleBBSList)
+	mux.HandleFunc("/api/bbslist", s.handleAPIBBSList)
+	mux.HandleFunc("/api/bbslist/node", s.handleAPIBBSListNode)
+	mux.HandleFunc("/api/bbslist/charts", s.handleAPIBBSListCharts)
 	mux.HandleFunc("/networks/about", s.handleNetworkAbout)
 	mux.HandleFunc("/networks/map", s.handleNetworkMap)
 	mux.HandleFunc("/networks/diagram", s.handleNetworkDiagram)
@@ -163,6 +167,7 @@ func (s *Server) templates() (*template.Template, error) {
 			"chartJSON": func(s string) template.JS { return template.JS(s) },
 			"netmailI18nJSON": func(locale string) template.JS { return template.JS(netmailI18nJSON(locale)) },
 			"nodelistPageJSON": nodelistPageJSON,
+			"bbsListPageJSON":  bbsListPageJSON,
 			"webOp": func(locale, op string) string { return translateWebOp(locale, op) },
 			"safeHTML": func(s string) template.HTML { return template.HTML(s) },
 		}

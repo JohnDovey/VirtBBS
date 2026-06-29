@@ -1,0 +1,83 @@
+{{define "bbslist.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "bbslist.title"}}</h2></div>
+  <div class="card-body">
+    <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
+    <p class="meta">{{t .Locale "bbslist.help"}}</p>
+
+    <section class="bbslist-section mb-4" id="bbslist-echomail-section">
+      <h3 class="section-head">{{t .Locale "bbslist.section.echomail"}}</h3>
+      <div class="bbslist-scroll" id="bbslist-echomail-wrap">
+        <p class="meta small">{{t .Locale "common.loading"}}</p>
+      </div>
+      <nav class="bbslist-pager meta" id="bbslist-echomail-pager" hidden></nav>
+    </section>
+
+    <section class="bbslist-section mb-4" id="bbslist-netmail-section">
+      <h3 class="section-head">{{t .Locale "bbslist.section.netmail"}}</h3>
+      <div class="bbslist-scroll" id="bbslist-netmail-wrap">
+        <p class="meta small">{{t .Locale "common.loading"}}</p>
+      </div>
+      <nav class="bbslist-pager meta" id="bbslist-netmail-pager" hidden></nav>
+    </section>
+
+    <section class="bbslist-section mb-4" id="bbslist-network-section">
+      <h3 class="section-head">{{t .Locale "bbslist.section.network"}}</h3>
+      <div id="bbslist-network-groups">
+        {{if not .Networks}}
+        <p class="meta">{{t .Locale "bbslist.empty"}}</p>
+        {{else}}
+        {{range .Networks}}
+        <div class="bbslist-network-group mb-3" data-network="{{.}}">
+          <h4 class="h6">{{.}}</h4>
+          <div class="bbslist-scroll bbslist-network-wrap" data-network="{{.}}">
+            <p class="meta small">{{t $.Locale "common.loading"}}</p>
+          </div>
+          <nav class="bbslist-pager meta bbslist-network-pager" data-network="{{.}}" hidden></nav>
+        </div>
+        {{end}}
+        {{end}}
+      </div>
+    </section>
+
+    <section class="bbslist-section" id="bbslist-charts-section">
+      <h3 class="section-head">{{t .Locale "bbslist.stats_heading"}}</h3>
+      <div class="row g-4">
+        <div class="col-12 col-lg-6">
+          <div class="stats-chart-wrap">
+            <canvas id="bbslist-chart-echo" aria-label="{{t .Locale "bbslist.chart.echomail"}}"></canvas>
+          </div>
+        </div>
+        <div class="col-12 col-lg-6">
+          <div class="stats-chart-wrap">
+            <canvas id="bbslist-chart-netmail" aria-label="{{t .Locale "bbslist.chart.netmail"}}"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="modal fade" id="bbslist-detail-modal" tabindex="-1" aria-labelledby="bbslist-detail-title" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="bbslist-detail-title">{{t .Locale "bbslist.title"}}</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t .Locale "common.close"}}"></button>
+      </div>
+      <div class="modal-body" id="bbslist-detail-body">
+        <p class="meta">{{t .Locale "common.loading"}}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{t .Locale "common.close"}}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="bbslist-page-config">{{bbsListPageJSON .Locale}}</script>
+<script src="/static/chart.umd.min.js"></script>
+<script src="/static/bbslist.js"></script>
+{{template "footer" .}}
+{{end}}

@@ -58,7 +58,6 @@ import (
 
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/messages"
-	"github.com/virtbbs/virtbbs/internal/version"
 )
 
 // ScanResult summarises the outcome of a scan run.
@@ -233,6 +232,7 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 				result.Errors = append(result.Errors,
 					fmt.Sprintf("mark exported id=%d: %v", be.id, err))
 			}
+			RecordOutboundMessage(store.DB(), nd.Name, orig, destAddr, be.pmsg.FromName, true, false)
 		}
 	}
 
@@ -465,8 +465,7 @@ func buildEchoBody(areaTag string, orig Addr, bbsName, body, tagline, msgID, rep
 		fmt.Fprintf(&sb, "\r%s\r", tagline)
 	}
 
-	fmt.Fprintf(&sb, "--- VirtBBS %s\r", version.Version)
-	fmt.Fprintf(&sb, " * Origin: %s (%s)\r", bbsName, orig.String())
+	sb.WriteString(OutboundSignatureLines(bbsName, orig))
 
 	seenBy := MergeAddrTokens(inSeenBy, orig)
 	fmt.Fprintf(&sb, "SEEN-BY: %s\r", strings.Join(seenBy, " "))

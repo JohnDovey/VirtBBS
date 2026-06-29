@@ -456,6 +456,7 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 		} else {
 			echoImported++
 		}
+		RecordTossMessage(store.DB(), nd.Name, nd.NodeAddr(), pm, isNetmail)
 	}
 	return
 }

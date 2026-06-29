@@ -661,3 +661,19 @@ body.virtbbs-body {
     padding-right: 0.75rem;
   }
 }
+
+.bbslist-scroll {
+  max-height: 18rem;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0.375rem;
+  padding: 0.25rem;
+}
+
+.bbslist-pager {
+  margin-top: 0.5rem;
+}
+
+.bbslist-network-group h4 {
+  color: var(--bs-secondary-color);
+}

@@ -298,3 +298,40 @@ CREATE TABLE IF NOT EXISTS fido_binkp_link_stats (
     echomail_recv  INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (network, period, period_key, link_type, peer_key)
 );
+
+-- BBS List: nodes and users seen via FidoNet toss/scan/netmail.
+CREATE TABLE IF NOT EXISTS fido_bbs_nodes (
+    network         TEXT NOT NULL,
+    node_addr       TEXT NOT NULL,
+    zone            INTEGER NOT NULL,
+    net             INTEGER NOT NULL,
+    node_num        INTEGER NOT NULL,
+    echomail_count  INTEGER NOT NULL DEFAULT 0,
+    netmail_count   INTEGER NOT NULL DEFAULT 0,
+    last_seen       TEXT NOT NULL,
+    PRIMARY KEY (network, node_addr)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fido_bbs_nodes_echo ON fido_bbs_nodes(network, echomail_count DESC);
+CREATE INDEX IF NOT EXISTS idx_fido_bbs_nodes_netmail ON fido_bbs_nodes(network, netmail_count DESC);
+
+CREATE TABLE IF NOT EXISTS fido_bbs_users (
+    network         TEXT NOT NULL,
+    node_addr       TEXT NOT NULL,
+    user_name       TEXT NOT NULL,
+    user_addr       TEXT NOT NULL,
+    echomail_count  INTEGER NOT NULL DEFAULT 0,
+    netmail_count   INTEGER NOT NULL DEFAULT 0,
+    last_seen       TEXT NOT NULL,
+    PRIMARY KEY (network, user_addr)
+);
+
+CREATE INDEX IF NOT EXISTS idx_fido_bbs_users_node ON fido_bbs_users(network, node_addr);
+
+CREATE TABLE IF NOT EXISTS fido_bbs_daily (
+    day             TEXT NOT NULL,
+    network         TEXT NOT NULL,
+    echomail_count  INTEGER NOT NULL DEFAULT 0,
+    netmail_count   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, network)
+);
