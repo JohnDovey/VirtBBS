@@ -3,6 +3,7 @@ package fido
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -33,9 +34,12 @@ type BinkpStatsRow struct {
 	EchomailRecv            int    `json:"echomail_recv"`
 	NetmailSent             int    `json:"netmail_sent"`
 	EchomailSent            int    `json:"echomail_sent"`
-	TossImported            int    `json:"toss_imported"`
-	TossSkipped             int    `json:"toss_skipped"`
-	TossHeld                int    `json:"toss_held"`
+	TossImported              int    `json:"toss_imported"`
+	TossSkipped               int    `json:"toss_skipped"`
+	TossSkippedDuplicate      int    `json:"toss_skipped_duplicate"`
+	TossSkippedHoldFailed     int    `json:"toss_skipped_hold_failed"`
+	TossSkippedInsertFailed   int    `json:"toss_skipped_insert_failed"`
+	TossHeld                  int    `json:"toss_held"`
 	TossPackets             int    `json:"toss_packets"`
 	SessionErrors           int    `json:"session_errors"`
 }
@@ -74,8 +78,10 @@ type statsDelta struct {
 	pollSrvDownSent, pollSrvDownRecv       int
 	netmailRecv, echomailRecv              int
 	netmailSent, echomailSent              int
-	tossImported, tossSkipped, tossHeld    int
-	tossPackets, sessionErrors             int
+	tossImported, tossSkipped, tossHeld              int
+	tossSkippedDuplicate, tossSkippedHoldFailed      int
+	tossSkippedInsertFailed                            int
+	tossPackets, sessionErrors                         int
 }
 
 type linkDelta struct {
@@ -90,6 +96,34 @@ func InitBinkpStats(db *sql.DB) {
 	statsDBMu.Lock()
 	statsDB = db
 	statsDBMu.Unlock()
+	if db != nil {
+		_ = migrateBinkpStats(db)
+	}
+}
+
+func migrateBinkpStats(db *sql.DB) error {
+	alters := []string{
+		`ALTER TABLE fido_binkp_stats ADD COLUMN toss_skipped_duplicate INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fido_binkp_stats ADD COLUMN toss_skipped_hold_failed INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fido_binkp_stats ADD COLUMN toss_skipped_insert_failed INTEGER NOT NULL DEFAULT 0`,
+	}
+	for _, stmt := range alters {
+		if _, err := db.Exec(stmt); err != nil {
+			msg := err.Error()
+			if !strings.Contains(msg, "duplicate column") && !strings.Contains(msg, "already exists") {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// SkippedBreakdown returns a human-readable skip reason summary for stats rows.
+func (r BinkpStatsRow) SkippedBreakdown() string {
+	if r.TossSkipped == 0 {
+		return ""
+	}
+	return formatSkippedBreakdown(r.TossSkippedDuplicate, r.TossSkippedHoldFailed, r.TossSkippedInsertFailed)
 }
 
 func periodKeys(at time.Time) (day, month, year string) {
@@ -116,8 +150,9 @@ func applyStats(network string, at time.Time, d statsDelta) {
 			 poll_server_uplink_ok, poll_server_uplink_fail, poll_server_uplink_sent, poll_server_uplink_recv,
 			 poll_server_downlink_ok, poll_server_downlink_fail, poll_server_downlink_sent, poll_server_downlink_recv,
 			 netmail_recv, echomail_recv, netmail_sent, echomail_sent,
-			 toss_imported, toss_skipped, toss_held, toss_packets, session_errors)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+			 toss_imported, toss_skipped, toss_skipped_duplicate, toss_skipped_hold_failed, toss_skipped_insert_failed,
+			 toss_held, toss_packets, session_errors)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 			ON CONFLICT(network, period, period_key) DO UPDATE SET
 			 poll_client_ok = poll_client_ok + excluded.poll_client_ok,
 			 poll_client_fail = poll_client_fail + excluded.poll_client_fail,
@@ -137,6 +172,9 @@ func applyStats(network string, at time.Time, d statsDelta) {
 			 echomail_sent = echomail_sent + excluded.echomail_sent,
 			 toss_imported = toss_imported + excluded.toss_imported,
 			 toss_skipped = toss_skipped + excluded.toss_skipped,
+			 toss_skipped_duplicate = toss_skipped_duplicate + excluded.toss_skipped_duplicate,
+			 toss_skipped_hold_failed = toss_skipped_hold_failed + excluded.toss_skipped_hold_failed,
+			 toss_skipped_insert_failed = toss_skipped_insert_failed + excluded.toss_skipped_insert_failed,
 			 toss_held = toss_held + excluded.toss_held,
 			 toss_packets = toss_packets + excluded.toss_packets,
 			 session_errors = session_errors + excluded.session_errors`,
@@ -145,7 +183,8 @@ func applyStats(network string, at time.Time, d statsDelta) {
 			d.pollSrvUplinkOK, d.pollSrvUplinkFail, d.pollSrvUplinkSent, d.pollSrvUplinkRecv,
 			d.pollSrvDownOK, d.pollSrvDownFail, d.pollSrvDownSent, d.pollSrvDownRecv,
 			d.netmailRecv, d.echomailRecv, d.netmailSent, d.echomailSent,
-			d.tossImported, d.tossSkipped, d.tossHeld, d.tossPackets, d.sessionErrors)
+			d.tossImported, d.tossSkipped, d.tossSkippedDuplicate, d.tossSkippedHoldFailed, d.tossSkippedInsertFailed,
+			d.tossHeld, d.tossPackets, d.sessionErrors)
 	}
 }
 
@@ -247,12 +286,15 @@ func RecordToss(network string, tr *TossResult) {
 		return
 	}
 	applyStats(network, time.Now(), statsDelta{
-		netmailRecv:  tr.NetmailImported,
-		echomailRecv: tr.EchomailImported,
-		tossImported: tr.Imported,
-		tossSkipped:  tr.Skipped,
-		tossHeld:     tr.Orphaned,
-		tossPackets:  tr.Packets,
+		netmailRecv:             tr.NetmailImported,
+		echomailRecv:            tr.EchomailImported,
+		tossImported:            tr.Imported,
+		tossSkipped:             tr.Skipped,
+		tossSkippedDuplicate:    tr.SkippedDuplicate,
+		tossSkippedHoldFailed:   tr.SkippedHoldFailed,
+		tossSkippedInsertFailed: tr.SkippedInsertFailed,
+		tossHeld:                tr.Orphaned,
+		tossPackets:             tr.Packets,
 	})
 }
 
@@ -299,7 +341,8 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 		poll_server_uplink_ok, poll_server_uplink_fail, poll_server_uplink_sent, poll_server_uplink_recv,
 		poll_server_downlink_ok, poll_server_downlink_fail, poll_server_downlink_sent, poll_server_downlink_recv,
 		netmail_recv, echomail_recv, netmail_sent, echomail_sent,
-		toss_imported, toss_skipped, toss_held, toss_packets, session_errors
+		toss_imported, toss_skipped, toss_skipped_duplicate, toss_skipped_hold_failed, toss_skipped_insert_failed,
+		toss_held, toss_packets, session_errors
 		FROM fido_binkp_stats WHERE period=? AND period_key=?`
 	args := []any{period, periodKey}
 	if network != "" {
@@ -320,7 +363,9 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 			&r.PollServerUplinkOK, &r.PollServerUplinkFail, &r.PollServerUplinkSent, &r.PollServerUplinkRecv,
 			&r.PollServerDownlinkOK, &r.PollServerDownlinkFail, &r.PollServerDownlinkSent, &r.PollServerDownlinkRecv,
 			&r.NetmailRecv, &r.EchomailRecv, &r.NetmailSent, &r.EchomailSent,
-			&r.TossImported, &r.TossSkipped, &r.TossHeld, &r.TossPackets, &r.SessionErrors); err != nil {
+			&r.TossImported, &r.TossSkipped,
+			&r.TossSkippedDuplicate, &r.TossSkippedHoldFailed, &r.TossSkippedInsertFailed,
+			&r.TossHeld, &r.TossPackets, &r.SessionErrors); err != nil {
 			return nil, err
 		}
 		res.Networks = append(res.Networks, r)

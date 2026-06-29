@@ -87,6 +87,14 @@
           <span class="stat-label">{{t $.Locale "admin_binkp.stat.toss"}}</span>
           <span class="stat-value"><span class="stat-num">{{.Stats.TossImported}}</span> {{t $.Locale "admin_binkp.imported"}} / <span class="stat-num">{{.Stats.TossSkipped}}</span> {{t $.Locale "admin_binkp.skipped"}} / <span class="stat-num">{{.Stats.TossHeld}}</span> {{t $.Locale "admin_binkp.held"}}</span>
         </div>
+        {{if gt .Stats.TossSkipped 0}}
+        <div class="stat-row stat-row-sub">
+          <span class="stat-label">{{t $.Locale "admin_binkp.stat.skip_breakdown"}}</span>
+          <span class="stat-value text-muted small">
+            {{if gt .Stats.TossSkippedDuplicate 0}}<span class="stat-num">{{.Stats.TossSkippedDuplicate}}</span> {{t $.Locale "admin_binkp.skip.duplicate"}}{{end}}{{if gt .Stats.TossSkippedHoldFailed 0}}{{if gt .Stats.TossSkippedDuplicate 0}}, {{end}}<span class="stat-num">{{.Stats.TossSkippedHoldFailed}}</span> {{t $.Locale "admin_binkp.skip.hold_failed"}}{{end}}{{if gt .Stats.TossSkippedInsertFailed 0}}{{if or (gt .Stats.TossSkippedDuplicate 0) (gt .Stats.TossSkippedHoldFailed 0)}}, {{end}}<span class="stat-num">{{.Stats.TossSkippedInsertFailed}}</span> {{t $.Locale "admin_binkp.skip.insert_failed"}}{{end}}
+          </span>
+        </div>
+        {{end}}
         <div class="stat-row">
           <span class="stat-label">{{t $.Locale "admin_binkp.stat.packets"}}</span>
           <span class="stat-value"><span class="stat-num">{{.Stats.TossPackets}}</span></span>

@@ -87,6 +87,11 @@ type Config struct {
 	// of 6 hours. Any positive value is clamped to a 5-minute minimum.
 	PollIntervalMins int `toml:"poll_interval_mins" json:"poll_interval_mins"`
 
+	// BinkpDebug enables wire-level BinkP client tracing to logs/binkp-debug.log
+	// for every poll (scheduler, menu, admin). Use admin "Debug poll" for a
+	// one-shot trace file without leaving this on overnight.
+	BinkpDebug bool `toml:"binkp_debug" json:"binkp_debug"`
+
 	// FileAreas maps FileFix file-area tags to local file directory IDs
 	// (internal/files.Dir.ID) — the FileFix equivalent of Areas. See
 	// internal/fido/filefix.go.

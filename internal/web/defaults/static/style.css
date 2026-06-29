@@ -388,6 +388,20 @@ body.virtbbs-body {
   border-radius: var(--bs-border-radius);
 }
 
+.debug-poll-output {
+  min-height: 12rem;
+  max-height: 24rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.debug-poll-status-idle { background: #495057; }
+.debug-poll-status-starting { background: #0d6efd; }
+.debug-poll-status-polling { background: #fd7e14; }
+.debug-poll-status-complete { background: #198754; }
+.debug-poll-status-failed { background: #dc3545; }
+
 .hp-field {
   position: absolute;
   left: -9999px;

@@ -91,7 +91,9 @@ type PollResult struct {
 // Poll dials the uplink, exchanges M_NUL/M_ADR/M_PWD, sends all files
 // in outboundDir, receives any inbound files into inboundDir, then hangs up.
 // db is used to resolve FidoNet-address uplinks via the imported nodelist.
-func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB) *PollResult {
+// When dbg is non-nil, a full protocol trace is written to that session file.
+// When global BinkpDebug is enabled, trace lines also go to binkp-debug.log.
+func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB, dbg *BinkpDebugSession) *PollResult {
 	res := &PollResult{}
 
 	if nd.Uplink == "" {
@@ -117,7 +119,12 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB)
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(5 * time.Minute))
 
-	bp := &binkpConn{conn: conn, nd: nd}
+	bp := &binkpConn{conn: conn, nd: nd, debug: dbg}
+	bp.tracef("dial OK %s (timeout 5m)", target)
+	bp.tracef("outbound queue: %d file(s)", len(outboundFiles))
+	for _, fpath := range outboundFiles {
+		bp.tracef("  %s", fpath)
+	}
 
 	// ── Handshake ────────────────────────────────────────────────────────────
 	if err := bp.sendCmd(bpM_NUL, "SYS VirtBBS"); err != nil {
@@ -170,6 +177,11 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB)
 
 	// Final EOB / BYE exchange.
 	_ = bp.sendCmd(bpM_EOB, "")
+	if res.Error != nil {
+		bp.tracef("session end: error %v", res.Error)
+	} else {
+		bp.tracef("session end: sent %d, received %d", len(res.Sent), len(res.Received))
+	}
 	return res
 }
 
@@ -189,6 +201,12 @@ type PollAndTossResult struct {
 // the "fido.poll" management API, and the automatic scheduler, so all three
 // behave identically.
 func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string) *PollAndTossResult {
+	return PollAndTossDebug(nd, store, confStore, sysopName, fileArea, filesRoot, nil)
+}
+
+// PollAndTossDebug is like PollAndToss but writes a full protocol trace when
+// dbg is set (admin "Debug poll") and/or when global BinkpDebug is enabled.
+func PollAndTossDebug(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string, dbg *BinkpDebugSession) *PollAndTossResult {
 	if store != nil {
 		if qr := ScanNetmailQueue(nd, store.DB()); qr != nil {
 			for _, e := range qr.Errors {
@@ -203,7 +221,7 @@ func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.S
 	uplink := nd.UplinkAddr()
 	outFiles := binkpOutboundFilesFor(nd, nil, uplink)
 
-	pollResult := Poll(nd, outFiles, nd.InboundDir, store.DB())
+	pollResult := Poll(nd, outFiles, nd.InboundDir, store.DB(), dbg)
 	result := &PollAndTossResult{Poll: pollResult}
 	uplinkKey := nd.Uplink
 	if pollResult.Error != nil {
@@ -649,12 +667,37 @@ func latestNodelistFile(dir, prefix string) string {
 // ─── Internal BinkP connection ─────────────────────────────────────────────────
 
 type binkpConn struct {
-	conn net.Conn
-	nd   *NetworkDef
+	conn  net.Conn
+	nd    *NetworkDef
+	debug *BinkpDebugSession
+}
+
+func (b *binkpConn) tracing() bool {
+	return b != nil && (b.debug != nil || BinkpDebugEnabled())
+}
+
+func (b *binkpConn) tracef(format string, args ...interface{}) {
+	if b == nil || !b.tracing() {
+		return
+	}
+	line := fmt.Sprintf(format, args...)
+	network := ""
+	if b.nd != nil {
+		network = b.nd.Name
+	}
+	if b.debug != nil {
+		b.debug.writef("%s", line)
+	}
+	if BinkpDebugEnabled() {
+		writeBinkpDebugGlobal(network, line)
+	}
 }
 
 // sendCmd sends a command frame: header (bit15=1, len=1+len(arg)) + cmd byte + arg bytes.
 func (b *binkpConn) sendCmd(cmd byte, arg string) error {
+	if b.tracing() {
+		b.tracef("TX %s %q", binkpCmdName(cmd), binkpSanitizeCmdArg(cmd, arg))
+	}
 	data := append([]byte{cmd}, []byte(arg)...)
 	hdr := uint16(0x8000) | uint16(len(data))
 	if err := binary.Write(b.conn, binary.BigEndian, hdr); err != nil {
@@ -666,6 +709,9 @@ func (b *binkpConn) sendCmd(cmd byte, arg string) error {
 
 // sendData sends a data frame.
 func (b *binkpConn) sendData(data []byte) error {
+	if b.tracing() {
+		b.tracef("TX data %d bytes", len(data))
+	}
 	hdr := uint16(len(data))
 	if err := binary.Write(b.conn, binary.BigEndian, hdr); err != nil {
 		return err
@@ -689,6 +735,13 @@ func (b *binkpConn) recvFrame() (isCmd bool, cmd byte, payload []byte, err error
 	if isCmd && len(payload) > 0 {
 		cmd = payload[0]
 		payload = payload[1:]
+	}
+	if b.tracing() {
+		if isCmd {
+			b.tracef("RX %s %q", binkpCmdName(cmd), binkpSanitizeCmdArg(cmd, string(payload)))
+		} else {
+			b.tracef("RX data %d bytes", len(payload))
+		}
 	}
 	return
 }
@@ -743,6 +796,7 @@ func (b *binkpConn) sendFile(path string) error {
 
 	// M_FILE <name> <size> <mtime> <offset>
 	fileArg := fmt.Sprintf("%s %d %d 0", filepath.Base(path), size, mtime)
+	b.tracef("sending file %s (%d bytes)", filepath.Base(path), size)
 	if err := b.sendCmd(bpM_FILE, fileArg); err != nil {
 		return fmt.Errorf("M_FILE %s: %w", filepath.Base(path), err)
 	}
@@ -809,7 +863,7 @@ func (b *binkpConn) receiveUntilEOB(destDir string) ([]string, error) {
 	var received []string
 	var currentFile *os.File
 	var currentName string
-	var currentSize, received_bytes int64
+	var currentSize, currentMtime, received_bytes int64
 
 	for {
 		isCmd, cmd, payload, err := b.recvFrame()
@@ -848,6 +902,7 @@ func (b *binkpConn) receiveUntilEOB(destDir string) ([]string, error) {
 				}
 				currentName = parts[0]
 				fmt.Sscanf(parts[1], "%d", &currentSize)
+				fmt.Sscanf(parts[2], "%d", &currentMtime)
 				received_bytes = 0
 
 				destPath := filepath.Join(destDir, currentName)
@@ -877,11 +932,12 @@ func (b *binkpConn) receiveUntilEOB(destDir string) ([]string, error) {
 					currentFile.Close()
 					currentFile = nil
 					received = append(received, currentName)
-					// Send M_GOT acknowledgement.
-					gotArg := fmt.Sprintf("%s %d 0", currentName, currentSize)
+					// M_GOT args must match M_FILE (name, size, mtime) per FTS-1026.
+					gotArg := fmt.Sprintf("%s %d %d", currentName, currentSize, currentMtime)
 					_ = b.sendCmd(bpM_GOT, gotArg)
 					currentName = ""
 					currentSize = 0
+					currentMtime = 0
 					received_bytes = 0
 				}
 			}

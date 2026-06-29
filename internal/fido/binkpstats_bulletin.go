@@ -81,6 +81,9 @@ func renderStatsBulletin(bbsName, title string, q *BinkpStatsQueryResult) string
 		statLine(&b, "Netmail recv/sent", fmt.Sprintf("%d / %d", n.NetmailRecv, n.NetmailSent))
 		statLine(&b, "Echomail recv/sent", fmt.Sprintf("%d / %d", n.EchomailRecv, n.EchomailSent))
 		statLine(&b, "Toss imported/skipped/held", fmt.Sprintf("%d / %d / %d", n.TossImported, n.TossSkipped, n.TossHeld))
+		if bd := n.SkippedBreakdown(); bd != "" {
+			statLine(&b, "  skip breakdown", bd)
+		}
 		statLine(&b, "Packets tossed", fmt.Sprintf("%d", n.TossPackets))
 		if n.SessionErrors > 0 {
 			statLine(&b, "Session errors", fmt.Sprintf("%d", n.SessionErrors))

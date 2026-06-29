@@ -16,6 +16,12 @@
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="scan"><button class="btn btn-primary" type="submit">{{t .Locale "admin_fido_ops.scan_outbound"}}</button></form>
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="file_scan"><button class="btn btn-primary" type="submit">{{t .Locale "admin_fido_ops.file_scan"}}</button></form>
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="poll"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.poll_uplink"}}</button></form>
+    <button type="button" class="btn btn-outline-warning" data-bs-toggle="modal" data-bs-target="#debug-poll-modal">{{t .Locale "admin_fido_ops.debug_poll"}}</button>
+    {{if .BinkpDebugOn}}
+    <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="binkp_debug_off"><button class="btn btn-warning" type="submit">{{t .Locale "admin_fido_ops.binkp_debug_off"}}</button></form>
+    {{else}}
+    <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="binkp_debug_on"><button class="btn btn-outline-secondary" type="submit">{{t .Locale "admin_fido_ops.binkp_debug_on"}}</button></form>
+    {{end}}
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="fetch"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.fetch_nodelist"}}</button></form>
     <form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="export_local"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.export_local"}}</button></form>
     {{if .Network}}<form method="post" class="m-0"><input type="hidden" name="network" value="{{.Network}}"><input type="hidden" name="action" value="rebuild_maps"><button class="btn btn-secondary" type="submit">{{t .Locale "admin_fido_ops.rebuild_maps"}}</button></form>{{end}}
@@ -94,9 +100,39 @@
     </div>
   </form>
   {{if .BinkpStatsText}}<p class="meta">{{.BinkpStatsText}}</p>{{end}}
+  {{if .BinkpDebugOn}}<p class="meta">{{t .Locale "admin_fido_ops.binkp_debug_active"}}</p>{{end}}
+  {{if and .BinkpDebugOn .BinkpDebugPath}}<h3>{{tf .Locale "admin_fido_ops.binkp_debug_log" .BinkpDebugPath}}</h3><pre class="log-pre">{{range .BinkpDebugLines}}{{.}}
+{{end}}</pre>{{end}}
   {{if .BinkpLogPath}}<h3>{{tf .Locale "admin_fido_ops.binkp_log" .BinkpLogPath}}</h3><pre class="log-pre">{{range .BinkpLogLines}}{{.}}
 {{end}}</pre>{{end}}
   </div>
 </div>
+
+<div class="modal fade" id="debug-poll-modal" tabindex="-1" aria-labelledby="debug-poll-title" aria-hidden="true"
+     data-status-idle="{{t .Locale "admin_fido_ops.debug_poll_status_idle"}}"
+     data-status-starting="{{t .Locale "admin_fido_ops.debug_poll_status_starting"}}"
+     data-status-polling="{{t .Locale "admin_fido_ops.debug_poll_status_polling"}}"
+     data-status-complete="{{t .Locale "admin_fido_ops.debug_poll_status_complete"}}"
+     data-status-failed="{{t .Locale "admin_fido_ops.debug_poll_status_failed"}}">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title h5" id="debug-poll-title">{{t .Locale "admin_fido_ops.debug_poll_modal_title"}}</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{t .Locale "common.close"}}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2"><strong>{{t .Locale "admin_fido_ops.debug_poll_network_label"}}</strong> <span id="debug-poll-network">{{.Network}}</span></p>
+        <p class="mb-2">{{t .Locale "admin_fido_ops.debug_poll_status_label"}} <span id="debug-poll-status" class="badge rounded-pill debug-poll-status debug-poll-status-idle">{{t .Locale "admin_fido_ops.debug_poll_status_idle"}}</span></p>
+        <p class="meta mb-2" id="debug-poll-log-path-wrap">{{t .Locale "admin_fido_ops.debug_poll_log_hint"}} <code id="debug-poll-log-path"></code></p>
+        <pre id="debug-poll-output" class="log-pre debug-poll-output mb-0" aria-live="polite"></pre>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-warning" id="debug-poll-start">{{t .Locale "admin_fido_ops.debug_poll_start"}}</button>
+        <button type="button" class="btn btn-secondary" id="debug-poll-close" data-bs-dismiss="modal">{{t .Locale "common.close"}}</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="/static/fido_debug_poll.js"></script>
 {{template "footer" .}}
 {{end}}

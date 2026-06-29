@@ -98,6 +98,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	config.RegisterFidoMappingHooks()
 	fido.SetGraphvizDotPath(cfg.Paths.GraphvizDot)
 
 	// Ensure data directories exist
@@ -302,6 +303,10 @@ func main() {
 	if err := fido.InitBinkpLog(filepath.Join(cfg.Paths.Logs, "binkp.log")); err != nil {
 		log.Fatalf("binkp log: %v", err)
 	}
+	if err := fido.InitBinkpDebugLog(cfg.Paths.Logs); err != nil {
+		log.Fatalf("binkp debug log: %v", err)
+	}
+	fido.SetBinkpDebugEnabled(cfg.Fido.BinkpDebug)
 	fido.InitBinkpStats(sqlDB)
 
 	fileStore, err := files.Open(sqlDB, cfg.Paths.Files)

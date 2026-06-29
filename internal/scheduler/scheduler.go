@@ -222,8 +222,8 @@ func runNetwork(networkName string, store *messages.Store, confStore *conference
 				networkName, len(result.Poll.Sent), len(result.Poll.Received)))
 
 			if result.Toss != nil {
-				fido.LogBinkp(fmt.Sprintf("fido scheduler: %s toss complete (%d imported, %d skipped, %d held)",
-					networkName, result.Toss.Imported, result.Toss.Skipped, result.Toss.Orphaned))
+				fido.LogBinkp(fmt.Sprintf("fido scheduler: %s toss complete (%s)",
+					networkName, result.Toss.TossSummary()))
 				for _, e := range result.Toss.Errors {
 					fido.LogBinkp(fmt.Sprintf("fido scheduler: %s toss error: %s", networkName, e))
 				}

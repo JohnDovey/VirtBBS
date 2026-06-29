@@ -117,8 +117,8 @@ func logTossResult(network, kind string, tr *TossResult) {
 	if tr == nil {
 		return
 	}
-	LogBinkp(fmt.Sprintf("binkp %s [%s]: auto-toss — %d imported, %d skipped, %d held",
-		kind, network, tr.Imported, tr.Skipped, tr.Orphaned))
+	LogBinkp(fmt.Sprintf("binkp %s [%s]: auto-toss — %s",
+		kind, network, tr.TossSummary()))
 	for _, e := range tr.Errors {
 		if strings.TrimSpace(e) != "" {
 			LogBinkp(fmt.Sprintf("binkp %s [%s]: toss error: %s", kind, network, e))

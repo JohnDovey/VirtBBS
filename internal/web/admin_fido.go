@@ -47,9 +47,12 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 		ImportPath     string
 		Flash          string
 		Error          string
-		BinkpLogLines  []string
-		BinkpLogPath   string
-		BinkpStatsText string
+		BinkpLogLines    []string
+		BinkpLogPath     string
+		BinkpStatsText   string
+		BinkpDebugOn     bool
+		BinkpDebugPath   string
+		BinkpDebugLines  []string
 	}{
 		pageData: s.page(r),
 		Networks: fidoNetworkNamesList(),
@@ -67,6 +70,12 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 	}
 	if lines, path, err := fido.ReadBinkpLogTail(40); err == nil {
 		data.BinkpLogLines, data.BinkpLogPath = lines, path
+	}
+	data.BinkpDebugOn = fido.BinkpDebugEnabled()
+	if data.BinkpDebugOn {
+		if lines, path, err := fido.ReadBinkpDebugLogTail(fido.BinkpDebugGlobalPath(), 40); err == nil {
+			data.BinkpDebugLines, data.BinkpDebugPath = lines, path
+		}
 	}
 	if st, err := fido.QueryBinkpStatsForPeriod(db, network, "day", time.Now()); err == nil && st != nil {
 		data.BinkpStatsText = fmt.Sprintf("%d network(s), %d link(s) today", len(st.Networks), len(st.Links))
@@ -136,6 +145,21 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 						len(res.Poll.Sent), len(res.Poll.Received), tossed)
 				}
 			}
+		case "binkp_debug_on", "binkp_debug_off":
+			on := action == "binkp_debug_on"
+			fido.SetBinkpDebugEnabled(on)
+			merged := *cfg
+			merged.Fido.BinkpDebug = on
+			if err := config.Save(&merged); err != nil {
+				data.Error = err.Error()
+			} else {
+				if on {
+					data.Flash = "BinkP debug tracing enabled — polls log to " + fido.BinkpDebugGlobalPath()
+				} else {
+					data.Flash = "BinkP debug tracing disabled."
+				}
+			}
+			data.BinkpDebugOn = on
 		case "fetch":
 			nd := cfg.Fido.NetworkByName(network)
 			if nd == nil {
@@ -266,6 +290,12 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 		}
 		if lines, path, err := fido.ReadBinkpLogTail(40); err == nil {
 			data.BinkpLogLines, data.BinkpLogPath = lines, path
+		}
+		data.BinkpDebugOn = fido.BinkpDebugEnabled()
+		if data.BinkpDebugOn && data.BinkpDebugPath == "" {
+			if lines, path, err := fido.ReadBinkpDebugLogTail(fido.BinkpDebugGlobalPath(), 40); err == nil {
+				data.BinkpDebugLines, data.BinkpDebugPath = lines, path
+			}
 		}
 	}
 	s.render(w, "admin_fido_ops.html", data)

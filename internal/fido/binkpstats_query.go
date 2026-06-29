@@ -143,6 +143,9 @@ func addNetworkRows(a, b BinkpStatsRow) BinkpStatsRow {
 	a.EchomailSent += b.EchomailSent
 	a.TossImported += b.TossImported
 	a.TossSkipped += b.TossSkipped
+	a.TossSkippedDuplicate += b.TossSkippedDuplicate
+	a.TossSkippedHoldFailed += b.TossSkippedHoldFailed
+	a.TossSkippedInsertFailed += b.TossSkippedInsertFailed
 	a.TossHeld += b.TossHeld
 	a.TossPackets += b.TossPackets
 	a.SessionErrors += b.SessionErrors
