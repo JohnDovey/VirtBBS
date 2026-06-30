@@ -123,25 +123,40 @@ func (s *Server) handle(c net.Conn) {
 	sc := bufio.NewScanner(c)
 	sc.Buffer(make([]byte, 0, 64*1024), maxLineSize)
 	enc := json.NewEncoder(c)
+	enc.SetEscapeHTML(false)
 
 	for sc.Scan() {
-		var req Request
-		if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
-			_ = enc.Encode(Response{Error: "invalid JSON"})
-			continue
-		}
-		u, err := s.Deps.Users.Authenticate(req.Auth.Username, req.Auth.Password)
-		if err != nil {
-			_ = enc.Encode(Response{Error: "unauthorized"})
-			continue
-		}
-		result, err := s.dispatch(req, u)
-		if err != nil {
-			_ = enc.Encode(Response{Error: err.Error()})
-		} else {
-			_ = enc.Encode(Response{Result: result})
-		}
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					_ = enc.Encode(Response{Error: fmt.Sprintf("internal error: %v", r)})
+				}
+			}()
+			var req Request
+			if err := json.Unmarshal(sc.Bytes(), &req); err != nil {
+				_ = enc.Encode(Response{Error: "invalid JSON"})
+				return
+			}
+			u, err := s.Deps.Users.Authenticate(req.Auth.Username, req.Auth.Password)
+			if err != nil {
+				_ = enc.Encode(Response{Error: "unauthorized"})
+				return
+			}
+			result, err := s.dispatch(req, u)
+			if err != nil {
+				_ = enc.Encode(Response{Error: err.Error()})
+			} else {
+				_ = enc.Encode(Response{Result: result})
+			}
+		}()
 	}
+}
+
+func unmarshalParams(params json.RawMessage, dest any) error {
+	if len(params) == 0 {
+		return nil
+	}
+	return json.Unmarshal(params, dest)
 }
 
 func (s *Server) dispatch(req Request, u *users.User) (any, error) {
@@ -295,7 +310,7 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 
 	case "qwk.download":
 		var p struct{ ConferenceIDs []int }
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return nil, err
 		}
 		if len(p.ConferenceIDs) == 0 {
@@ -337,7 +352,7 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 
 	case "qwk.upload":
 		var p struct{ Data string }
-		if err := json.Unmarshal(req.Params, &p); err != nil {
+		if err := unmarshalParams(req.Params, &p); err != nil {
 			return nil, err
 		}
 		raw, err := base64.StdEncoding.DecodeString(p.Data)

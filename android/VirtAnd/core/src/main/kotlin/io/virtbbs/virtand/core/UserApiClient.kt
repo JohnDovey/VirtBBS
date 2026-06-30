@@ -44,7 +44,13 @@ class UserApiClient(
             out.flush()
 
             val respLine = readResponseLine(socket.getInputStream())
-            val resp = json.parseToJsonElement(respLine).jsonObject
+            val resp = try {
+                json.parseToJsonElement(respLine).jsonObject
+            } catch (e: Exception) {
+                throw UserApiException(
+                    "$method: invalid JSON response (${respLine.length} bytes): ${e.message}"
+                )
+            }
             val error = resp["error"]
             if (error != null && error != JsonNull) {
                 val msg = error.jsonPrimitive.content

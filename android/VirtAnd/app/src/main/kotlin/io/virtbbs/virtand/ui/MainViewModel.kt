@@ -34,6 +34,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
 data class FidoNodeResult(
+    val network: String,
     val address: String,
     val name: String,
     val location: String,
@@ -77,6 +78,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _nodeSearchResults = MutableStateFlow<List<FidoNodeResult>>(emptyList())
     val nodeSearchResults: StateFlow<List<FidoNodeResult>> = _nodeSearchResults
+
+    private val _nodeSearching = MutableStateFlow(false)
+    val nodeSearching: StateFlow<Boolean> = _nodeSearching
+
+    private val _nodeSearchStatus = MutableStateFlow("")
+    val nodeSearchStatus: StateFlow<String> = _nodeSearchStatus
 
     private val _availableNetworks = MutableStateFlow<List<String>>(emptyList())
     val availableNetworks: StateFlow<List<String>> = _availableNetworks
@@ -222,25 +229,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun searchNodes(host: String, port: Int, username: String, password: String, network: String, query: String) {
+  fun searchNodes(
+        host: String,
+        port: Int,
+        username: String,
+        password: String,
+        network: String?,
+        query: String,
+    ) {
         viewModelScope.launch {
             _nodeSearchResults.value = emptyList()
-            if (query.isBlank() || host.isBlank() || username.isBlank() || password.isBlank()) return@launch
-            _nodeSearchResults.value = withContext(Dispatchers.IO) {
-                try {
+            if (query.isBlank() || host.isBlank() || username.isBlank() || password.isBlank()) {
+                _nodeSearchStatus.value = "Enter host, credentials, and a search term."
+                return@launch
+            }
+            val netParam = when {
+                network.isNullOrBlank() || network == "All" -> ""
+                else -> network
+            }
+            _nodeSearching.value = true
+            _nodeSearchStatus.value = "Searching…"
+            try {
+                val results = withContext(Dispatchers.IO) {
                     val api = UserApiClient(host.trim(), port, username.trim(), password)
                     val result = api.call(
                         "fido.nodes.search",
                         JsonObject(
                             mapOf(
-                                "network" to JsonPrimitive(network),
-                                "query" to JsonPrimitive(query),
+                                "network" to JsonPrimitive(netParam),
+                                "query" to JsonPrimitive(query.trim()),
                                 "page" to JsonPrimitive(1),
                                 "size" to JsonPrimitive(25),
                             )
                         ),
-                    ) ?: return@withContext emptyList()
-                    val nodes = result.jsonObject["nodes"]?.jsonArray ?: return@withContext emptyList()
+                    ) ?: throw UserApiException("Empty response.")
+                    val nodes = result.jsonObject["nodes"]?.jsonArray
+                        ?: throw UserApiException("Unexpected response format.")
                     nodes.map { n ->
                         val o = n.jsonObject
                         val zone = o["zone"]?.jsonPrimitive?.int ?: 0
@@ -249,15 +273,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         val point = o["point"]?.jsonPrimitive?.int ?: 0
                         val address = if (point != 0) "$zone:$net/$nodeNum.$point" else "$zone:$net/$nodeNum"
                         FidoNodeResult(
+                            network = o["network"]?.jsonPrimitive?.content?.ifBlank { "FidoNet" } ?: "FidoNet",
                             address = address,
                             name = o["name"]?.jsonPrimitive?.content ?: "",
                             location = o["location"]?.jsonPrimitive?.content ?: "",
                             sysop = o["sysop"]?.jsonPrimitive?.content ?: "",
                         )
                     }
-                } catch (_: Exception) {
-                    emptyList()
                 }
+                _nodeSearchResults.value = results
+                _nodeSearchStatus.value = if (results.isEmpty()) {
+                    "No nodes found."
+                } else {
+                    "Found ${results.size} node(s)."
+                }
+            } catch (e: UserApiException) {
+                _nodeSearchStatus.value = "Lookup failed: ${e.message}"
+            } catch (e: Exception) {
+                _nodeSearchStatus.value = "Lookup failed: ${e.message ?: e}"
+            } finally {
+                _nodeSearching.value = false
             }
         }
     }

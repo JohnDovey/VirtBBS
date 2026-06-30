@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/virtbbs/virtbbs/internal/conferences"
+	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/db"
 	"github.com/virtbbs/virtbbs/internal/fido"
 	"github.com/virtbbs/virtbbs/internal/files"
@@ -54,6 +55,10 @@ func TestUserAPISmoke(t *testing.T) {
 	dbPath := filepath.Join(dir, "test.db")
 	filesRoot := filepath.Join(dir, "files")
 	_ = os.MkdirAll(filesRoot, 0755)
+
+	if _, err := config.Load(filepath.Join(dir, "virtbbs.dat")); err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
 
 	sqlDB, err := db.Open(dbPath)
 	if err != nil {
@@ -177,5 +182,15 @@ func TestUserAPISmoke(t *testing.T) {
 	m, ok := resp.Result.(map[string]any)
 	if !ok || m["network"] != "FidoNet" || m["node_count"].(float64) != 42 {
 		t.Fatalf("unexpected nodelist version result: %+v", resp.Result)
+	}
+
+	// qwk.download with omitted params — must return a valid packet envelope.
+	resp = call("qwk.download", nil, auth("TestUser", "password123"))
+	if resp.Error != "" {
+		t.Fatalf("qwk.download error: %s", resp.Error)
+	}
+	m2, ok := resp.Result.(map[string]any)
+	if !ok || m2["data"] == nil || m2["data"] == "" {
+		t.Fatalf("qwk.download missing data: %+v", resp.Result)
 	}
 }

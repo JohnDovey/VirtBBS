@@ -83,8 +83,14 @@ class SyncEngine(private val context: Context) {
         }
     }
 
-    private fun refreshSessionInfo(api: UserApiClient): SessionInfo? {
-        val result = api.call("session.whoami") ?: return null
+    private inline fun <T> apiStep(step: String, block: () -> T): T = try {
+        block()
+    } catch (e: Exception) {
+        throw Exception("$step: ${e.message ?: e}", e)
+    }
+
+    private fun refreshSessionInfo(api: UserApiClient): SessionInfo? = apiStep("session.whoami") {
+        val result = api.call("session.whoami") ?: return@apiStep null
         val o = result.jsonObject
         return SessionInfo(
             userName = o["name"]?.jsonPrimitive?.content ?: "",
@@ -94,8 +100,8 @@ class SyncEngine(private val context: Context) {
         )
     }
 
-    private fun refreshConferences(api: UserApiClient) {
-        val result = api.call("conferences.list") ?: return
+    private fun refreshConferences(api: UserApiClient) = apiStep("conferences.list") {
+        val result = api.call("conferences.list") ?: return@apiStep
         val entities = result.jsonArray.map { c ->
             val o = c.jsonObject
             ConferenceEntity(
@@ -119,8 +125,8 @@ class SyncEngine(private val context: Context) {
     }
 
     /** Downloads a QWK packet (new-since-last-sync messages, all conferences) and caches it locally. */
-    private fun downloadAndImportQwk(api: UserApiClient): Int {
-        val result = api.call("qwk.download") ?: return 0
+    private fun downloadAndImportQwk(api: UserApiClient): Int = apiStep("qwk.download") {
+        val result = api.call("qwk.download") ?: return@apiStep 0
         val b64 = result.jsonObject["data"]?.jsonPrimitive?.content ?: return 0
         val zipBytes = Base64.getDecoder().decode(b64)
         val messages = parseQwkPacket(zipBytes)
@@ -138,11 +144,11 @@ class SyncEngine(private val context: Context) {
             )
         }
         runBlockingDb { db.messageDao().insertAll(entities) }
-        return entities.size
+        entities.size
     }
 
-    private fun refreshFileCatalog(api: UserApiClient) {
-        val dirsResult = api.call("files.dirs.list") ?: return
+    private fun refreshFileCatalog(api: UserApiClient) = apiStep("files.dirs.list") {
+        val dirsResult = api.call("files.dirs.list") ?: return@apiStep
         val dirs = dirsResult.jsonArray.map { d ->
             val o = d.jsonObject
             FileDirEntity(
@@ -156,7 +162,8 @@ class SyncEngine(private val context: Context) {
         runBlockingDb { db.fileDao().upsertDirs(dirs) }
 
         for (dir in dirs) {
-            val filesResult = api.call("files.list", JsonObject(mapOf("DirID" to JsonPrimitive(dir.id)))) ?: continue
+            val filesResult = api.call("files.list", JsonObject(mapOf("DirID" to JsonPrimitive(dir.id))))
+                ?: continue
             val files = filesResult.jsonArray.map { f ->
                 val o = f.jsonObject
                 FileEntryEntity(

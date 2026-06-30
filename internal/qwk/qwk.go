@@ -111,12 +111,14 @@ func leftPadNum(n, width int) string {
 	return s + strings.Repeat(" ", width-len(s))
 }
 
+// fixedWidth pads or truncates to exactly width bytes. QWK header fields are
+// byte-oriented (traditionally CP437/ASCII); rune-based width miscounts UTF-8.
 func fixedWidth(s string, width int) string {
-	r := []rune(s)
-	if len(r) >= width {
-		return string(r[:width])
+	b := []byte(s)
+	if len(b) >= width {
+		return string(b[:width])
 	}
-	return s + strings.Repeat(" ", width-len(r))
+	return string(b) + strings.Repeat(" ", width-len(b))
 }
 
 // encode renders the header as exactly 128 bytes.

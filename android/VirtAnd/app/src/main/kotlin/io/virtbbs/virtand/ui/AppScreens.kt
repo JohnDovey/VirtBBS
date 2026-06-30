@@ -412,6 +412,8 @@ fun SettingsScreen(viewModel: MainViewModel) {
     val availableNetworks by viewModel.availableNetworks.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val nodeResults by viewModel.nodeSearchResults.collectAsState()
+    val nodeSearching by viewModel.nodeSearching.collectAsState()
+    val nodeSearchStatus by viewModel.nodeSearchStatus.collectAsState()
 
     var hostField by remember(host) { mutableStateOf(host) }
     var portField by remember(port) { mutableStateOf(port.toString()) }
@@ -419,7 +421,8 @@ fun SettingsScreen(viewModel: MainViewModel) {
     var passwordField by remember(password) { mutableStateOf(password) }
     var subscribed by remember(networks) { mutableStateOf(networks.toSet()) }
     var nodeQuery by remember { mutableStateOf("") }
-    var nodeNetwork by remember(networks) { mutableStateOf(networks.firstOrNull() ?: "FidoNet") }
+    var nodeQueryDirty by remember { mutableStateOf(true) }
+    var nodeNetwork by remember { mutableStateOf<String?>(null) } // null = All networks
 
     LaunchedEffect(hostField, portField, usernameField, passwordField) {
         if (hostField.isNotBlank() && usernameField.isNotBlank() && passwordField.isNotBlank()) {
@@ -506,10 +509,15 @@ fun SettingsScreen(viewModel: MainViewModel) {
         }
 
         Text("FidoNet node lookup", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-        if (subscribed.isNotEmpty()) {
-            Text("Network: $nodeNetwork", style = MaterialTheme.typography.bodySmall)
+        val networkChoices = if (availableNetworks.isNotEmpty()) availableNetworks else subscribed.sorted()
+        if (networkChoices.isNotEmpty()) {
+            Text(
+                "Network: ${nodeNetwork ?: "All"}",
+                style = MaterialTheme.typography.bodySmall,
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                subscribed.sorted().forEach { net ->
+                OutlinedButton(onClick = { nodeNetwork = null }) { Text("All") }
+                networkChoices.forEach { net ->
                     OutlinedButton(onClick = { nodeNetwork = net }) { Text(net) }
                 }
             }
@@ -517,18 +525,36 @@ fun SettingsScreen(viewModel: MainViewModel) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextField(
                 value = nodeQuery,
-                onValueChange = { nodeQuery = it },
+                onValueChange = {
+                    nodeQuery = it
+                    nodeQueryDirty = true
+                },
                 label = { Text("Search nodes") },
                 modifier = Modifier.weight(1f),
+                singleLine = true,
             )
-            Button(onClick = {
-                viewModel.searchNodes(hostField, portField.toIntOrNull() ?: 9998, usernameField, passwordField, nodeNetwork, nodeQuery)
-            }) { Text("Go") }
+            Button(
+                enabled = nodeQuery.isNotBlank() && nodeQueryDirty && !nodeSearching,
+                onClick = {
+                    nodeQueryDirty = false
+                    viewModel.searchNodes(
+                        hostField,
+                        portField.toIntOrNull() ?: 9998,
+                        usernameField,
+                        passwordField,
+                        nodeNetwork,
+                        nodeQuery,
+                    )
+                },
+            ) { Text("Go") }
+        }
+        if (nodeSearchStatus.isNotBlank()) {
+            Text(nodeSearchStatus, style = MaterialTheme.typography.bodySmall)
         }
         nodeResults.forEach { n ->
             ListItem(
                 headlineContent = { Text("${n.address} — ${n.name}") },
-                supportingContent = { Text("${n.location} (sysop: ${n.sysop})") },
+                supportingContent = { Text("${n.network} · ${n.location} (sysop: ${n.sysop})") },
             )
         }
     }
