@@ -874,7 +874,7 @@
   "stats.uptime": "Isikhathi sokuphumula se-BBS",
   "stats.uptime_since": "Phezulu kusukela",
   "stats.uptime_since_value": "%s %s",
-  "stats.uptime_value": "%d izinsuku, %d amaminithi, %d imizuzwana",
+  "stats.uptime_value": "%d iminyaka, %d izinsuku, %d amahora, %d amaminithi, %d imizuzwana",
   "status.web": "iwebhu",
   "subscriptions.col.network": "Inethiwekhi",
   "subscriptions.col.new": "Okusha",

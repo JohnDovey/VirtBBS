@@ -874,7 +874,7 @@
   "stats.uptime": "Temps de disponibilité du BBS",
   "stats.uptime_since": "En place depuis",
   "stats.uptime_since_value": "%s %s",
-  "stats.uptime_value": "%d jours, %d minutes, %d secondes",
+  "stats.uptime_value": "%d ans, %d jours, %d heures, %d minutes, %d secondes",
   "status.web": "la toile",
   "subscriptions.col.network": "Réseau",
   "subscriptions.col.new": "Nouveau",

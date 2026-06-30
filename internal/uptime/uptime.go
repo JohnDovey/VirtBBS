@@ -38,29 +38,39 @@ func Elapsed() time.Duration {
 	return time.Since(t)
 }
 
-// Breakdown splits a duration into days, minutes (0–1439 within partial days), and seconds.
-func Breakdown(d time.Duration) (days, minutes, seconds int) {
+// Breakdown splits a duration into years (365-day), days, hours, minutes, and seconds.
+func Breakdown(d time.Duration) (years, days, hours, minutes, seconds int) {
 	if d < 0 {
 		d = 0
 	}
 	sec := int(d.Round(time.Second).Seconds())
+	years = sec / (365 * 86400)
+	sec %= 365 * 86400
 	days = sec / 86400
 	sec %= 86400
+	hours = sec / 3600
+	sec %= 3600
 	minutes = sec / 60
 	seconds = sec % 60
-	return days, minutes, seconds
+	return years, days, hours, minutes, seconds
+}
+
+// FormatDuration returns a human-readable years/days/hours/minutes/seconds string.
+func FormatDuration(d time.Duration) string {
+	y, days, hours, minutes, seconds := Breakdown(d)
+	return fmt.Sprintf("%d years, %d days, %d hours, %d minutes and %d seconds",
+		y, days, hours, minutes, seconds)
 }
 
 // Message returns the standard BBS uptime line for logs and terminals.
 func Message(bbsName string) string {
-	days, minutes, seconds := Breakdown(Elapsed())
+	elapsed := FormatDuration(Elapsed())
 	since := StartedAt()
 	if since.IsZero() {
-		return fmt.Sprintf("This BBS (%s) has been up for %d days, %d minutes and %d seconds", bbsName, days, minutes, seconds)
+		return fmt.Sprintf("This BBS (%s) has been up for %s", bbsName, elapsed)
 	}
-	return fmt.Sprintf("This BBS (%s) has been up for %d days, %d minutes and %d seconds since %s %s",
-		bbsName, days, minutes, seconds,
-		since.Format("2006-01-02"), since.Format("15:04:05"))
+	return fmt.Sprintf("This BBS (%s) has been up for %s since %s %s",
+		bbsName, elapsed, since.Format("2006-01-02"), since.Format("15:04:05"))
 }
 
 // MessageLines returns the process uptime line and the first-on-air history line.

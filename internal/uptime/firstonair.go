@@ -51,19 +51,9 @@ func FirstOnAir() time.Time {
 	return firstOnAir
 }
 
-// LongevityBreakdown splits elapsed time into years (365-day), days, hours, and minutes.
-func LongevityBreakdown(d time.Duration) (years, days, hours, minutes int) {
-	if d < 0 {
-		d = 0
-	}
-	total := int(d.Round(time.Minute).Minutes())
-	years = total / (365 * 24 * 60)
-	total %= 365 * 24 * 60
-	days = total / (24 * 60)
-	total %= 24 * 60
-	hours = total / 60
-	minutes = total % 60
-	return years, days, hours, minutes
+// LongevityBreakdown splits elapsed time into years, days, hours, minutes, and seconds.
+func LongevityBreakdown(d time.Duration) (years, days, hours, minutes, seconds int) {
+	return Breakdown(d)
 }
 
 // FirstOnAirMessage returns the historical on-air line for logs and terminals.
@@ -72,9 +62,9 @@ func FirstOnAirMessage(bbsName string) string {
 	if since.IsZero() {
 		return ""
 	}
-	years, days, hours, minutes := LongevityBreakdown(time.Since(since))
-	return fmt.Sprintf("%s first appeared on the air at %s %s. That's %d years, %d days, %d hours and %d minutes ago",
+	ago := FormatDuration(time.Since(since))
+	return fmt.Sprintf("%s first appeared on the air at %s %s. That's %s ago",
 		bbsName,
 		since.Format("2006-01-02"), since.Format("15:04:05"),
-		years, days, hours, minutes)
+		ago)
 }

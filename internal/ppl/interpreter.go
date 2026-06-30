@@ -98,7 +98,9 @@ type Environment struct {
 	BBSFileTotal   int
 	BBSFileToday   int
 	BBSFileMonth   int
+	BBSUptimeYears      int
 	BBSUptimeDays       int
+	BBSUptimeHours      int
 	BBSUptimeMinutes    int
 	BBSUptimeSeconds    int
 	BBSUptimeSinceDate  string
@@ -460,7 +462,9 @@ func (interp *Interpreter) execCall(n *CallStmt) (signal, error) {
 		interp.setVar("BBS_FILETOTAL", IntVal(int64(e.BBSFileTotal)))
 		interp.setVar("BBS_FILETODAY", IntVal(int64(e.BBSFileToday)))
 		interp.setVar("BBS_FILEMONTH", IntVal(int64(e.BBSFileMonth)))
+		interp.setVar("BBS_UPTIME_YEARS", IntVal(int64(e.BBSUptimeYears)))
 		interp.setVar("BBS_UPTIME_DAYS", IntVal(int64(e.BBSUptimeDays)))
+		interp.setVar("BBS_UPTIME_HOURS", IntVal(int64(e.BBSUptimeHours)))
 		interp.setVar("BBS_UPTIME_MINS", IntVal(int64(e.BBSUptimeMinutes)))
 		interp.setVar("BBS_UPTIME_SECS", IntVal(int64(e.BBSUptimeSeconds)))
 		interp.setVar("BBS_UPTIME_SINCE_DATE", StrVal(e.BBSUptimeSinceDate))

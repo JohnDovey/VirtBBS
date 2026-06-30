@@ -449,7 +449,7 @@
   "stats.unique_users": "Usuarios únicos",
   "stats.nodes_online": "Nodos en línea",
   "stats.uptime": "Tiempo activo del BBS",
-  "stats.uptime_value": "%d días, %d minutos, %d segundos",
+  "stats.uptime_value": "%d años, %d días, %d horas, %d minutos, %d segundos",
   "stats.uptime_since": "Activo desde",
   "stats.uptime_since_value": "%s %s",
   "stats.message_base": "Base de mensajes",

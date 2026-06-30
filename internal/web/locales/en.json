@@ -449,7 +449,7 @@
   "stats.unique_users": "Unique users",
   "stats.nodes_online": "Nodes online",
   "stats.uptime": "BBS uptime",
-  "stats.uptime_value": "%d days, %d minutes, %d seconds",
+  "stats.uptime_value": "%d years, %d days, %d hours, %d minutes, %d seconds",
   "stats.uptime_since": "Up since",
   "stats.uptime_since_value": "%s %s",
   "stats.message_base": "Message Base",

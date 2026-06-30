@@ -57,7 +57,7 @@
       </div>
       <div class="dashboard-stat-item">
         <span class="dashboard-stat-label">{{t .Locale "stats.uptime"}}</span>
-        <span class="dashboard-stat-value">{{tf .Locale "stats.uptime_value" .Stats.BBSUptimeDays .Stats.BBSUptimeMinutes .Stats.BBSUptimeSeconds}}</span>
+        <span class="dashboard-stat-value">{{tf .Locale "stats.uptime_value" .Stats.BBSUptimeYears .Stats.BBSUptimeDays .Stats.BBSUptimeHours .Stats.BBSUptimeMinutes .Stats.BBSUptimeSeconds}}</span>
       </div>
       {{if .Stats.BBSUptimeSinceDate}}
       <div class="dashboard-stat-item">

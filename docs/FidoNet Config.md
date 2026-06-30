@@ -23,7 +23,7 @@ All FidoNet settings live under the `[fido]` table in `VirtBBS.DAT`:
   nodelist_dir = "fido/nodelist"
   holding_dir  = ""                 # optional; default is <inbound_dir>/.holding
   binkp_port   = 24554
-  taglines_file = ""
+  taglines_file = "quotes.txt"
   areafix_password = ""
   filefix_password = ""
   tic_password = ""                 # password WE send to OUR uplink's TIC processor
@@ -43,7 +43,7 @@ All FidoNet settings live under the `[fido]` table in `VirtBBS.DAT`:
 | `nodelist_dir` | Directory containing `NODELIST.*` files for address lookups (sysop name, BBS name, phone, flags) shown in the in-BBS nodelist browser and used by `[I]Ping a node`. |
 | `holding_dir` | Optional override for where **orphaned** inbound mail is held for sysop review (§4.1). Blank = `<inbound_dir>/.holding`. |
 | `binkp_port` | TCP port used both when **polling** your uplink over BinkP, and **listened on** for inbound BinkP connections from your uplink/downlinks (§6.1). Defaults to `24554` if zero/unset. |
-| `taglines_file` | Optional path to a text file, one tagline per line. A random line is inserted above the tear line on every outgoing echomail message. Leave blank to disable. |
+| `taglines_file` | Optional path to a text file, one tagline per line. A random line is inserted above the tear line on every locally originated echomail message. The repo ships `quotes.txt` as a starter set; imported into the tagline DB on first use. Leave blank to disable. |
 | `areafix_password` | Password **we** send when requesting areas from **our own uplink's** AreaFix — see §8.4. |
 | `filefix_password` | Password **we** send when requesting file areas from **our own uplink's** FileFix — see §9. |
 | `tic_password` | Password **we** send when requesting file transfers from **our own uplink's** TIC processor (FTS-5005). Downlinks authenticate with the same `password` as AreaFix/FileFix. See §9.3. |

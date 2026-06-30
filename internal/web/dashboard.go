@@ -38,7 +38,9 @@ type DashboardStats struct {
 	BBSFileToday   int
 	BBSFileMonth   int
 	OnlineNodes    int
+	BBSUptimeYears      int
 	BBSUptimeDays       int
+	BBSUptimeHours      int
 	BBSUptimeMinutes    int
 	BBSUptimeSeconds    int
 	BBSUptimeSinceDate  string
@@ -107,7 +109,7 @@ func (s *Server) gatherDashboardStats(u *users.User) DashboardStats {
 			st.OnlineNodes = len(nodes)
 		}
 	}
-	st.BBSUptimeDays, st.BBSUptimeMinutes, st.BBSUptimeSeconds = uptime.Breakdown(uptime.Elapsed())
+	st.BBSUptimeYears, st.BBSUptimeDays, st.BBSUptimeHours, st.BBSUptimeMinutes, st.BBSUptimeSeconds = uptime.Breakdown(uptime.Elapsed())
 	if since := uptime.StartedAt(); !since.IsZero() {
 		st.BBSUptimeSinceDate = since.Format("2006-01-02")
 		st.BBSUptimeSinceTime = since.Format("15:04:05")

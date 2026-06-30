@@ -44,6 +44,8 @@
   areafix_password = ""
   filefix_password = ""
   tic_password = ""
+  # Bundled starter taglines (one per line); imported into the DB on first use.
+  taglines_file = "quotes.txt"
 
   # Map echomail area tags to VirtBBS conference IDs.
   # Example:

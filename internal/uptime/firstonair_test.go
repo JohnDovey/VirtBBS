@@ -9,9 +9,9 @@ import (
 )
 
 func TestLongevityBreakdown(t *testing.T) {
-	y, d, h, m := LongevityBreakdown(365*24*time.Hour + 2*24*time.Hour + 3*time.Hour + 15*time.Minute)
-	if y != 1 || d != 2 || h != 3 || m != 15 {
-		t.Fatalf("got %d years %d days %d hours %d minutes", y, d, h, m)
+	y, d, h, m, s := LongevityBreakdown(365*24*time.Hour + 2*24*time.Hour + 3*time.Hour + 15*time.Minute + 20*time.Second)
+	if y != 1 || d != 2 || h != 3 || m != 15 || s != 20 {
+		t.Fatalf("got %d years %d days %d hours %d minutes %d seconds", y, d, h, m, s)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestInitFirstOnAir_createsAndReloads(t *testing.T) {
 
 func TestFirstOnAirMessage_format(t *testing.T) {
 	dir := t.TempDir()
-	past := time.Now().Add(-2 * time.Hour)
+	past := time.Now().Add(-2*time.Hour - 30*time.Minute - 5*time.Second)
 	if err := os.WriteFile(filepath.Join(dir, firstOnAirFile), []byte(past.Format(time.RFC3339)), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -55,8 +55,8 @@ func TestFirstOnAirMessage_format(t *testing.T) {
 	if !strings.Contains(msg, "Dev BBS first appeared on the air at") {
 		t.Fatalf("missing intro: %q", msg)
 	}
-	if !strings.Contains(msg, "minutes ago") {
-		t.Fatalf("missing ago: %q", msg)
+	if !strings.Contains(msg, "hours") || !strings.Contains(msg, "seconds ago") {
+		t.Fatalf("missing full duration: %q", msg)
 	}
 }
 

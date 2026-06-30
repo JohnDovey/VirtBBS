@@ -449,7 +449,7 @@
   "stats.unique_users": "Unieke gebruikers",
   "stats.nodes_online": "Nodusse aanlyn",
   "stats.uptime": "BBS-tyd aktief",
-  "stats.uptime_value": "%d dae, %d minute, %d sekondes",
+  "stats.uptime_value": "%d jaar, %d dae, %d ure, %d minute, %d sekondes",
   "stats.uptime_since": "Aktief sedert",
   "stats.uptime_since_value": "%s %s",
   "stats.message_base": "Boodskapbasis",

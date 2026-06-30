@@ -2899,7 +2899,9 @@ type bbsStats struct {
 	BBSFileTotal        int
 	BBSFileToday        int
 	BBSFileMonth        int
+	BBSUptimeYears      int
 	BBSUptimeDays       int
+	BBSUptimeHours      int
 	BBSUptimeMinutes    int
 	BBSUptimeSeconds    int
 	BBSUptimeSinceDate  string
@@ -2945,7 +2947,7 @@ func (s *session) gatherStats() bbsStats {
 		st.BBSFileToday = cat.Today
 		st.BBSFileMonth = cat.LastMonth
 	}
-	st.BBSUptimeDays, st.BBSUptimeMinutes, st.BBSUptimeSeconds = uptime.Breakdown(uptime.Elapsed())
+	st.BBSUptimeYears, st.BBSUptimeDays, st.BBSUptimeHours, st.BBSUptimeMinutes, st.BBSUptimeSeconds = uptime.Breakdown(uptime.Elapsed())
 	if since := uptime.StartedAt(); !since.IsZero() {
 		st.BBSUptimeSinceDate = since.Format("2006-01-02")
 		st.BBSUptimeSinceTime = since.Format("15:04:05")
@@ -3044,7 +3046,7 @@ func (s *session) showStats() {
 	p.section("System Today")
 	p.line("Calls today", fmt.Sprintf("%d", st.BBSCallsToday))
 	p.line("Unique users", fmt.Sprintf("%d", st.BBSUniqueToday))
-	p.line("BBS uptime", fmt.Sprintf("%d days, %d minutes, %d seconds", st.BBSUptimeDays, st.BBSUptimeMinutes, st.BBSUptimeSeconds))
+	p.line("BBS uptime", uptime.FormatDuration(uptime.Elapsed()))
 	if st.BBSUptimeSinceDate != "" {
 		p.line("Up since", st.BBSUptimeSinceDate+" "+st.BBSUptimeSinceTime)
 	}
@@ -3108,7 +3110,9 @@ func (s *session) populatePplStats(env *ppl.Environment) {
 	env.BBSFileTotal = st.BBSFileTotal
 	env.BBSFileToday = st.BBSFileToday
 	env.BBSFileMonth = st.BBSFileMonth
+	env.BBSUptimeYears = st.BBSUptimeYears
 	env.BBSUptimeDays = st.BBSUptimeDays
+	env.BBSUptimeHours = st.BBSUptimeHours
 	env.BBSUptimeMinutes = st.BBSUptimeMinutes
 	env.BBSUptimeSeconds = st.BBSUptimeSeconds
 	env.BBSUptimeSinceDate = st.BBSUptimeSinceDate
