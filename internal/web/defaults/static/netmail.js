@@ -94,6 +94,17 @@
       });
   }
 
+  function resolveTaglineChoice() {
+    var sel = document.getElementById('nm-tagline');
+    if (!sel) return '';
+    var choice = sel.value;
+    if (choice === '__auto__') {
+      if (!taglines.length) return '';
+      return taglines[Math.floor(Math.random() * taglines.length)];
+    }
+    return choice;
+  }
+
   function loadTaglines() {
     fetch('/api/netmail/taglines', { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : []; })
@@ -199,6 +210,18 @@
     if (panel) panel.classList.add('d-none');
   }
 
+  function renderAttachments(m) {
+    var list = m.Attachments || [];
+    if (!list.length) return '';
+    var html = '<div class="mt-3"><h4 class="h6">' + esc(t('read.attachments', 'Attachments')) + '</h4><ul class="list-unstyled mb-0">';
+    list.forEach(function (a) {
+      html += '<li><a href="/api/netmail/attachment?num=' + encodeURIComponent(String(m.MsgNumber)) +
+        '&amp;id=' + encodeURIComponent(String(a.ID)) + '">' + esc(a.Filename) + '</a></li>';
+    });
+    html += '</ul></div>';
+    return html;
+  }
+
   function renderMessage(m) {
     selectedNum = m.MsgNumber;
     renderList();
@@ -234,6 +257,7 @@
       (m.ReplyCount ? ' · <span class="text-muted">' + esc(String(m.ReplyCount)) + ' ' + esc(t('common.reply', 'Reply').toLowerCase()) + (m.ReplyCount === 1 ? '' : 's') + '</span>' : '') +
       (m.LangLabel ? ' <span class="badge bg-secondary">' + esc(m.LangLabel) + '</span>' : '') +
       '</p>' + originBlock + bodyHtml(m) +
+      renderAttachments(m) +
       '<div id="netmail-thread-panel" class="d-none card mt-3 mb-0"></div></div>';
 
     document.getElementById('netmail-reply-btn').addEventListener('click', function () {
@@ -500,17 +524,29 @@
       syncComposeEditor();
       var status = document.getElementById('nm-compose-status');
       var bodyText = document.getElementById('nm-body').value;
-      var tagline = document.getElementById('nm-tagline').value;
+      var tagline = resolveTaglineChoice();
       if (tagline) {
         bodyText = bodyText.replace(/\s+$/, '') + '\r\n\r\n-- \r\n' + tagline + '\r\n';
       }
       var netSel = document.getElementById('nm-network');
       if (netSel) composeNetwork = netSel.value || composeNetwork;
-      fetch('/api/netmail/compose', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      var fileInput = document.getElementById('nm-attachment');
+      var useMultipart = fileInput && fileInput.files && fileInput.files.length > 0;
+      var fetchOpts = { method: 'POST', credentials: 'same-origin' };
+      if (useMultipart) {
+        var fd = new FormData();
+        fd.append('to_name', document.getElementById('nm-to-name').value);
+        fd.append('to_addr', document.getElementById('nm-to-addr').value);
+        fd.append('subject', document.getElementById('nm-subject').value);
+        fd.append('body', bodyText);
+        fd.append('network', composeNetwork);
+        fd.append('crash', document.getElementById('nm-crash').checked ? 'true' : 'false');
+        if (composeReplyMsgID) fd.append('reply_msgid', composeReplyMsgID);
+        fd.append('attachment', fileInput.files[0]);
+        fetchOpts.body = fd;
+      } else {
+        fetchOpts.headers = { 'Content-Type': 'application/json' };
+        fetchOpts.body = JSON.stringify({
           to_name: document.getElementById('nm-to-name').value,
           to_addr: document.getElementById('nm-to-addr').value,
           subject: document.getElementById('nm-subject').value,
@@ -518,8 +554,9 @@
           network: composeNetwork,
           crash: document.getElementById('nm-crash').checked,
           reply_msgid: composeReplyMsgID
-        })
-      }).then(function (r) {
+        });
+      }
+      fetch('/api/netmail/compose', fetchOpts).then(function (r) {
         if (!r.ok) {
           return r.text().then(function (txt) { throw new Error(txt || 'send failed'); });
         }

@@ -130,7 +130,7 @@ func (a *FileFixDB) SubscribedDownlinks(network, fileTag string) ([]string, erro
 
 // ProcessFileFixRequest handles an inbound netmail addressed to "FileFix".
 // It validates the sender against the network's configured Downlinks list
-// and the password supplied as the first non-blank body line, applies any
+// and the password from the subject and/or first non-blank body line, applies any
 // +TAG/-TAG/%LIST/%QUERY/%RESCAN/%HELP commands found in the remaining lines,
 // and writes an immediate netmail reply summarising the result. When
 // filesRoot is non-empty, rescan commands queue backlog TIC files for the
@@ -146,28 +146,7 @@ func ProcessFileFixRequest(nd *NetworkDef, db *sql.DB, filesRoot string, pm *Mes
 		return replyFileFix(nd, our, pm, "Unknown system — you are not configured as a downlink.\r\n")
 	}
 
-	lines := strings.Split(strings.ReplaceAll(pm.Body, "\r\n", "\r"), "\r")
-	var cmdLines []string
-	passwordOK := false
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if !passwordOK {
-			passwordOK = line == dl.Password
-			if !passwordOK {
-				if dl.Password == "" {
-					passwordOK = true
-					cmdLines = append(cmdLines, line)
-				} else {
-					return replyFileFix(nd, our, pm, "Invalid password.\r\n")
-				}
-			}
-			continue
-		}
-		cmdLines = append(cmdLines, line)
-	}
+	cmdLines, passwordOK := parseFixRequestAuth(pm.Subject, pm.Body, dl.Password)
 	if !passwordOK {
 		return replyFileFix(nd, our, pm, "Invalid password.\r\n")
 	}
@@ -324,7 +303,8 @@ func writeFileFixQuery(out *strings.Builder, filefixDB *FileFixDB, networkName, 
 }
 
 func writeFileFixHelp(out *strings.Builder) {
-	out.WriteString("Commands (one per line, after your password):\r\n")
+	out.WriteString("Password in the subject (classic) or as the first body line.\r\n")
+	out.WriteString("Commands (one per line):\r\n")
 	out.WriteString("  +TAG         subscribe to file area TAG\r\n")
 	out.WriteString("  +TAG,R=N     subscribe and rescan N oldest files\r\n")
 	out.WriteString("  +TAG,R       subscribe and rescan full file backlog\r\n")
@@ -375,9 +355,6 @@ func RequestFileFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	var body strings.Builder
-	if nd.FileFixPassword != "" {
-		fmt.Fprintf(&body, "%s\r\n", nd.FileFixPassword)
-	}
 	for _, tag := range adds {
 		fmt.Fprintf(&body, "+%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
 	}
@@ -385,12 +362,17 @@ func RequestFileFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 		fmt.Fprintf(&body, "-%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
 	}
 
+	subject := FileFixRobotName
+	if nd.FileFixPassword != "" {
+		subject = nd.FileFixPassword
+	}
+
 	msg := &NetmailMsg{
 		FromName: fromName,
 		FromAddr: our.String(),
 		ToName:   FileFixRobotName,
 		ToAddr:   uplink.String(),
-		Subject:  "FileFix",
+		Subject:  subject,
 		Body:     body.String(),
 	}
 

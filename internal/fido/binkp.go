@@ -29,6 +29,7 @@
 //   v0.3.0  2026-06-25  Add PollAndToss, combining a poll with an automatic toss of
 //                        whatever was received, for the scheduler and sysop/API poll
 //                        commands to share
+//   v0.4.1  2026-06-30  Handle binkd interleaved M_FILE during M_GOT wait (fixes receive stall)
 //   v0.4.0  2026-06-25  Add ServeBinkP — a BinkP server accepting inbound connections
 //                        from configured uplinks and downlinks, so other systems can
 //                        poll THIS BBS instead of only the reverse
@@ -119,7 +120,7 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB,
 	defer conn.Close()
 	conn.SetDeadline(time.Now().Add(5 * time.Minute))
 
-	bp := &binkpConn{conn: conn, nd: nd, debug: dbg}
+	bp := &binkpConn{conn: conn, nd: nd, debug: dbg, inboundDir: inboundDir}
 	bp.tracef("dial OK %s (timeout 5m)", target)
 	bp.tracef("outbound queue: %d file(s)", len(outboundFiles))
 	for _, fpath := range outboundFiles {
@@ -173,7 +174,7 @@ func Poll(nd *NetworkDef, outboundFiles []string, inboundDir string, db *sql.DB,
 	if err != nil {
 		res.Error = fmt.Errorf("receive (%s): %w", target, err); return res
 	}
-	res.Received = received
+	res.Received = append(bp.earlyReceived, received...)
 
 	// Final EOB / BYE exchange.
 	_ = bp.sendCmd(bpM_EOB, "")
@@ -200,15 +201,15 @@ type PollAndTossResult struct {
 // This is the single entry point shared by the sysop "[P]oll uplink" menu,
 // the "fido.poll" management API, and the automatic scheduler, so all three
 // behave identically.
-func PollAndToss(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string) *PollAndTossResult {
-	return PollAndTossDebug(nd, store, confStore, sysopName, fileArea, filesRoot, nil)
+func PollAndToss(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string) *PollAndTossResult {
+	return PollAndTossDebug(cfg, nd, store, confStore, sysopName, fileArea, filesRoot, attachmentsRoot, nil)
 }
 
 // PollAndTossDebug is like PollAndToss but writes a full protocol trace when
 // dbg is set (admin "Debug poll") and/or when global BinkpDebug is enabled.
-func PollAndTossDebug(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string, dbg *BinkpDebugSession) *PollAndTossResult {
+func PollAndTossDebug(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string, dbg *BinkpDebugSession) *PollAndTossResult {
 	if store != nil {
-		if qr := ScanNetmailQueue(nd, store.DB()); qr != nil {
+		if qr := ScanNetmailQueue(cfg, nd, store.DB(), attachmentsRoot); qr != nil {
 			for _, e := range qr.Errors {
 				LogBinkp(fmt.Sprintf("netmail queue [%s]: %s", nd.Name, e))
 			}
@@ -242,7 +243,7 @@ func PollAndTossDebug(nd *NetworkDef, store *messages.Store, confStore *conferen
 		}
 	}
 
-	tossResult, err := TossDir(nd, store, confStore, sysopName, fileArea, filesRoot)
+	tossResult, err := TossDir(cfg, nd, store, confStore, sysopName, fileArea, filesRoot, attachmentsRoot)
 	if err != nil {
 		tossResult = &TossResult{Errors: []string{err.Error()}}
 	}
@@ -275,7 +276,7 @@ func PollAndTossDebug(nd *NetworkDef, store *messages.Store, confStore *conferen
 // Returns a stop function that closes all listeners. Logs session activity
 // and errors with the standard logger; never returns an error itself once
 // listening has started (per-connection failures are logged, not fatal).
-func ServeBinkP(cfg *Config, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string) (stop func(), err error) {
+func ServeBinkP(cfg *Config, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string) (stop func(), err error) {
 	portCandidates := map[int][]NetworkDef{}
 	for _, nd := range cfg.AllNetworks() {
 		if !nd.Enabled {
@@ -299,7 +300,7 @@ func ServeBinkP(cfg *Config, store *messages.Store, confStore *conferences.Store
 		}
 		listeners = append(listeners, ln)
 		LogBinkp(fmt.Sprintf("BinkP listening on %s (%d network(s))", addr, len(candidates)))
-		go binkpAcceptLoop(ln, candidates, store, confStore, sysopName, fileArea, filesRoot)
+		go binkpAcceptLoop(ln, cfg, candidates, store, confStore, sysopName, fileArea, filesRoot, attachmentsRoot)
 	}
 
 	return func() {
@@ -309,20 +310,20 @@ func ServeBinkP(cfg *Config, store *messages.Store, confStore *conferences.Store
 	}, nil
 }
 
-func binkpAcceptLoop(ln net.Listener, candidates []NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string) {
+func binkpAcceptLoop(ln net.Listener, cfg *Config, candidates []NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
 			return // listener closed
 		}
-		go binkpHandleIncoming(conn, candidates, store, confStore, sysopName, fileArea, filesRoot)
+		go binkpHandleIncoming(conn, cfg, candidates, store, confStore, sysopName, fileArea, filesRoot, attachmentsRoot)
 	}
 }
 
 // binkpHandleIncoming answers one inbound BinkP connection: handshake,
 // identify and authenticate the caller, receive their files, send back
 // whatever is queued for them, then toss what was received.
-func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string) {
+func binkpHandleIncoming(conn net.Conn, cfg *Config, candidates []NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(5 * time.Minute))
 	bp := &binkpConn{conn: conn}
@@ -347,6 +348,8 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 		RecordSessionError("")
 		return
 	}
+	bp.nd = nd
+	bp.inboundDir = nd.InboundDir
 
 	wantPassword := nd.Password
 	if !isUplink && dl != nil {
@@ -432,7 +435,7 @@ func binkpHandleIncoming(conn net.Conn, candidates []NetworkDef, store *messages
 	RecordBinkpTransferredTICs(nd.Name, linkType, peerKey, nd.InboundDir, received, false)
 
 	if len(received) > 0 {
-		if tr, err := TossDir(nd, store, confStore, sysopName, fileArea, filesRoot); err != nil {
+		if tr, err := TossDir(cfg, nd, store, confStore, sysopName, fileArea, filesRoot, attachmentsRoot); err != nil {
 			LogBinkp(fmt.Sprintf("binkp server [%s]: auto-toss error: %v", nd.Name, err))
 		} else {
 			logTossResult(nd.Name, "server", tr)
@@ -683,9 +686,92 @@ func latestNodelistFile(dir, prefix string) string {
 // ─── Internal BinkP connection ─────────────────────────────────────────────────
 
 type binkpConn struct {
-	conn  net.Conn
-	nd    *NetworkDef
-	debug *BinkpDebugSession
+	conn          net.Conn
+	nd            *NetworkDef
+	debug         *BinkpDebugSession
+	inboundDir    string
+	earlyReceived []string
+	inbound       *inboundXfer
+}
+
+type inboundXfer struct {
+	file     *os.File
+	name     string
+	size     int64
+	mtime    int64
+	received int64
+}
+
+func (b *binkpConn) abortInboundXfer() {
+	if b == nil || b.inbound == nil {
+		return
+	}
+	if b.inbound.file != nil {
+		_ = b.inbound.file.Close()
+	}
+	b.inbound = nil
+}
+
+func (b *binkpConn) beginInboundFILE(arg, destDir string) error {
+	b.abortInboundXfer()
+	parts := strings.Fields(arg)
+	if len(parts) < 3 {
+		return fmt.Errorf("invalid M_FILE: %q", arg)
+	}
+	var size, mtime int64
+	fmt.Sscanf(parts[1], "%d", &size)
+	fmt.Sscanf(parts[2], "%d", &mtime)
+	destPath := filepath.Join(destDir, parts[0])
+	f, err := os.Create(destPath)
+	if err != nil {
+		return fmt.Errorf("create inbound %s: %w", destPath, err)
+	}
+	b.inbound = &inboundXfer{
+		file:  f,
+		name:  parts[0],
+		size:  size,
+		mtime: mtime,
+	}
+	return nil
+}
+
+// writeInboundDATA appends one data frame to the current inbound file.
+// When the file is complete it sends M_GOT and returns the basename.
+func (b *binkpConn) writeInboundDATA(data []byte) (string, error) {
+	if b == nil || b.inbound == nil || b.inbound.file == nil {
+		return "", nil
+	}
+	if len(data) == 0 {
+		return "", nil
+	}
+	if _, err := b.inbound.file.Write(data); err != nil {
+		b.abortInboundXfer()
+		return "", err
+	}
+	b.inbound.received += int64(len(data))
+	if b.inbound.received < b.inbound.size {
+		return "", nil
+	}
+	name := b.inbound.name
+	size := b.inbound.size
+	mtime := b.inbound.mtime
+	if err := b.inbound.file.Close(); err != nil {
+		b.abortInboundXfer()
+		return "", err
+	}
+	b.inbound = nil
+	gotArg := fmt.Sprintf("%s %d %d", name, size, mtime)
+	if err := b.sendCmd(bpM_GOT, gotArg); err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
+func (b *binkpConn) noteInboundFile(name string) {
+	if name == "" {
+		return
+	}
+	b.earlyReceived = append(b.earlyReceived, name)
 }
 
 func (b *binkpConn) tracing() bool {
@@ -847,14 +933,22 @@ func (b *binkpConn) sendFile(path string) error {
 }
 
 // waitForGOT reads frames until M_GOT for the named file arrives.
+// binkd and other hosts may send their own M_FILE batches while we wait;
+// those must be received and acknowledged or the session stalls.
 func (b *binkpConn) waitForGOT(name string, size int64) error {
+	destDir := b.inboundDir
 	for {
 		isCmd, cmd, payload, err := b.recvFrame()
 		if err != nil {
 			return err
 		}
 		if !isCmd {
-			continue // data frames during GOT wait are silently discarded
+			done, err := b.writeInboundDATA(payload)
+			if err != nil {
+				return err
+			}
+			b.noteInboundFile(done)
+			continue
 		}
 		switch cmd {
 		case bpM_GOT:
@@ -862,6 +956,13 @@ func (b *binkpConn) waitForGOT(name string, size int64) error {
 			parts := strings.SplitN(string(payload), " ", 2)
 			if parts[0] == name {
 				return nil
+			}
+		case bpM_FILE:
+			if destDir == "" {
+				continue
+			}
+			if err := b.beginInboundFILE(string(payload), destDir); err != nil {
+				return err
 			}
 		case bpM_SKIP:
 			return fmt.Errorf("remote skipped %s", name)
@@ -877,86 +978,50 @@ func (b *binkpConn) waitForGOT(name string, size int64) error {
 // Files are written to destDir.
 func (b *binkpConn) receiveUntilEOB(destDir string) ([]string, error) {
 	var received []string
-	var currentFile *os.File
-	var currentName string
-	var currentSize, currentMtime, received_bytes int64
+	b.abortInboundXfer()
 
 	for {
 		isCmd, cmd, payload, err := b.recvFrame()
 		if err != nil {
-			if currentFile != nil {
-				currentFile.Close()
-				return received, err
-			}
-			// Some BinkP hosts (e.g. Synchronet/sbbs, binkd) close the TCP
-			// session after the batch instead of sending a final M_EOB.
+			b.abortInboundXfer()
 			if err == io.EOF {
+				// Some BinkP hosts (e.g. Synchronet/sbbs, binkd) close the TCP
+				// session after the batch instead of sending a final M_EOB.
 				return received, nil
 			}
 			return received, err
 		}
 
-		if isCmd {
-			switch cmd {
-			case bpM_EOB:
-				if currentFile != nil {
-					currentFile.Close()
-					currentFile = nil
-				}
-				return received, nil
-
-			case bpM_FILE:
-				// Close previous file if open.
-				if currentFile != nil {
-					currentFile.Close()
-					currentFile = nil
-				}
-				// Parse: "<name> <size> <mtime> [offset]"
-				parts := strings.Fields(string(payload))
-				if len(parts) < 3 {
-					continue
-				}
-				currentName = parts[0]
-				fmt.Sscanf(parts[1], "%d", &currentSize)
-				fmt.Sscanf(parts[2], "%d", &currentMtime)
-				received_bytes = 0
-
-				destPath := filepath.Join(destDir, currentName)
-				currentFile, err = os.Create(destPath)
-				if err != nil {
-					return received, fmt.Errorf("create inbound %s: %w", destPath, err)
-				}
-
-			case bpM_ERR:
-				return received, fmt.Errorf("remote M_ERR: %s", string(payload))
-
-			case bpM_GOT:
-				// Sent by remote for our files — already handled in sendFile.
-
-			case bpM_NUL, bpM_ADR, bpM_OK:
-				// Informational during transfer — ignore.
+		if !isCmd {
+			done, err := b.writeInboundDATA(payload)
+			if err != nil {
+				return received, err
 			}
-		} else {
-			// Data frame — write to current inbound file.
-			if currentFile != nil {
-				if _, err := currentFile.Write(payload); err != nil {
-					currentFile.Close()
-					return received, err
-				}
-				received_bytes += int64(len(payload))
-				if received_bytes >= currentSize {
-					currentFile.Close()
-					currentFile = nil
-					received = append(received, currentName)
-					// M_GOT args must match M_FILE (name, size, mtime) per FTS-1026.
-					gotArg := fmt.Sprintf("%s %d %d", currentName, currentSize, currentMtime)
-					_ = b.sendCmd(bpM_GOT, gotArg)
-					currentName = ""
-					currentSize = 0
-					currentMtime = 0
-					received_bytes = 0
-				}
+			if done != "" {
+				received = append(received, done)
 			}
+			continue
+		}
+
+		switch cmd {
+		case bpM_EOB:
+			b.abortInboundXfer()
+			return received, nil
+
+		case bpM_FILE:
+			if err := b.beginInboundFILE(string(payload), destDir); err != nil {
+				return received, err
+			}
+
+		case bpM_ERR:
+			b.abortInboundXfer()
+			return received, fmt.Errorf("remote M_ERR: %s", string(payload))
+
+		case bpM_GOT:
+			// Sent by remote for our files — already handled in sendFile.
+
+		case bpM_NUL, bpM_ADR, bpM_OK:
+			// Informational during transfer — ignore.
 		}
 	}
 }

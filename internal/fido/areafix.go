@@ -49,9 +49,12 @@ package fido
 //                 address to subscribe/unsubscribe from areas we want to
 //                 receive. RequestAreaFix handles this.
 //
-// Command syntax (case-insensitive, one command per line, password first):
+// Command syntax (case-insensitive, one command per line):
 //
-//	<password>
+// Password may appear in the netmail subject (classic AreaFix/FileFix) or as
+// the first non-blank body line (VirtBBS requester and some other tossers).
+//
+//	<password>          (subject and/or first body line)
 //	+AREA_TAG       subscribe to AREA_TAG (+TAG,R=N sends N old messages)
 //	-AREA_TAG       unsubscribe from AREA_TAG
 //	%LIST           list all areas available to subscribe to
@@ -163,7 +166,7 @@ func (a *AreaFixDB) AllDownlinkAddrs(network string) ([]string, error) {
 
 // ProcessAreaFixRequest handles an inbound netmail addressed to "AreaFix".
 // It validates the sender against the network's configured Downlinks list
-// and the password supplied as the first non-blank body line, applies any
+// and the password from the subject and/or first non-blank body line, applies any
 // +TAG/-TAG/%LIST/%QUERY/%RESCAN/%HELP commands found in the remaining lines,
 // and writes an immediate netmail reply summarising the result. When msgStore
 // is non-nil, rescan commands queue backlog .pkt files for the downlink.
@@ -182,31 +185,7 @@ func ProcessAreaFixRequest(nd *NetworkDef, msgStore *messages.Store, confStore *
 		return replyAreaFix(nd, our, pm, "Unknown system — you are not configured as a downlink.\r\n")
 	}
 
-	lines := strings.Split(strings.ReplaceAll(pm.Body, "\r\n", "\r"), "\r")
-	var cmdLines []string
-	passwordOK := false
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		if !passwordOK {
-			passwordOK = line == dl.Password
-			if !passwordOK {
-				// First non-blank line wasn't the password — but allow a
-				// password-less downlink (Password == "") to skip straight
-				// to commands.
-				if dl.Password == "" {
-					passwordOK = true
-					cmdLines = append(cmdLines, line)
-				} else {
-					return replyAreaFix(nd, our, pm, "Invalid password.\r\n")
-				}
-			}
-			continue
-		}
-		cmdLines = append(cmdLines, line)
-	}
+	cmdLines, passwordOK := parseFixRequestAuth(pm.Subject, pm.Body, dl.Password)
 	if !passwordOK {
 		return replyAreaFix(nd, our, pm, "Invalid password.\r\n")
 	}
@@ -324,6 +303,81 @@ func ProcessAreaFixRequest(nd *NetworkDef, msgStore *messages.Store, confStore *
 	return replyAreaFix(nd, our, pm, out.String())
 }
 
+// parseFixRequestAuth validates an AreaFix/FileFix password from the netmail
+// subject and/or body. Classic AreaFix puts the password in the subject
+// (optionally followed by switches); VirtBBS and some tossers use the first
+// non-blank body line instead. Returns command lines with any consumed
+// password line removed.
+func parseFixRequestAuth(subject, body, wantPassword string) (cmdLines []string, ok bool) {
+	if wantPassword == "" {
+		return fixRequestCommandLines(body), true
+	}
+
+	subject = fixRequestSubjectForAuth(subject)
+	if subject == wantPassword || fixRequestSubjectPassword(subject, wantPassword) {
+		cmds := fixRequestCommandLines(body)
+		for len(cmds) > 0 && cmds[0] == wantPassword {
+			cmds = cmds[1:]
+		}
+		return cmds, true
+	}
+
+	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\r"), "\r")
+	var cmds []string
+	passwordOK := false
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !passwordOK {
+			if line == wantPassword {
+				passwordOK = true
+				continue
+			}
+			return nil, false
+		}
+		cmds = append(cmds, line)
+	}
+	if !passwordOK {
+		return nil, false
+	}
+	return cmds, true
+}
+
+func fixRequestSubjectForAuth(subject string) string {
+	subject = strings.TrimSpace(subject)
+	for _, robot := range []string{"AreaFix", "FileFix", "AREAFIX", "FILEFIX", "AreaMgr", "FileMgr"} {
+		if strings.EqualFold(subject, robot) {
+			return ""
+		}
+		prefix := robot + " "
+		if len(subject) > len(prefix) && strings.EqualFold(subject[:len(robot)], robot) && subject[len(robot)] == ' ' {
+			return strings.TrimSpace(subject[len(robot)+1:])
+		}
+	}
+	return subject
+}
+
+func fixRequestSubjectPassword(subject, wantPassword string) bool {
+	fields := strings.Fields(subject)
+	if len(fields) == 0 {
+		return false
+	}
+	return fields[0] == wantPassword
+}
+
+func fixRequestCommandLines(body string) []string {
+	var cmds []string
+	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\r"), "\r") {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			cmds = append(cmds, line)
+		}
+	}
+	return cmds
+}
+
 // areaFixAddCmd holds a parsed +TAG subscribe line.
 type areaFixAddCmd struct {
 	tag       string
@@ -422,7 +476,8 @@ func writeAreaFixQuery(out *strings.Builder, areafixDB *AreaFixDB, networkName, 
 }
 
 func writeAreaFixHelp(out *strings.Builder) {
-	out.WriteString("Commands (one per line, after your password):\r\n")
+	out.WriteString("Password in the subject (classic) or as the first body line.\r\n")
+	out.WriteString("Commands (one per line):\r\n")
 	out.WriteString("  +TAG         subscribe to area TAG\r\n")
 	out.WriteString("  +TAG,R=N     subscribe and send N old messages\r\n")
 	out.WriteString("  +TAG,R       subscribe and send full backlog\r\n")
@@ -473,9 +528,6 @@ func RequestAreaFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	var body strings.Builder
-	if nd.AreaFixPassword != "" {
-		fmt.Fprintf(&body, "%s\r\n", nd.AreaFixPassword)
-	}
 	for _, tag := range adds {
 		fmt.Fprintf(&body, "+%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
 	}
@@ -483,12 +535,17 @@ func RequestAreaFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 		fmt.Fprintf(&body, "-%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
 	}
 
+	subject := AreaFixRobotName
+	if nd.AreaFixPassword != "" {
+		subject = nd.AreaFixPassword
+	}
+
 	msg := &NetmailMsg{
 		FromName: fromName,
 		FromAddr: our.String(),
 		ToName:   AreaFixRobotName,
 		ToAddr:   uplink.String(),
-		Subject:  "AreaFix",
+		Subject:  subject,
 		Body:     body.String(),
 	}
 

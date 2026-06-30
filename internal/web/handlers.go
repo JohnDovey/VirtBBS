@@ -276,6 +276,7 @@ func (s *Server) handleMessageRead(w http.ResponseWriter, r *http.Request) {
 	if showSource {
 		displayBody = fido.ReconstructSource(fidoSourceOpts(msg, c.EchoTag))
 	}
+	attachments, _ := attachmentViews(s.Deps.Messages, s.attachmentsRoot(), msg.ID)
 	data := struct {
 		messageReadData
 		Conference       *conferences.Conference
@@ -284,6 +285,7 @@ func (s *Server) handleMessageRead(w http.ResponseWriter, r *http.Request) {
 		ShowSourceToggle bool
 		ShowSource       bool
 		DisplayBody      string
+		Attachments      []attachmentView
 	}{
 		messageReadData:  readPageData(s, r, msg),
 		Conference:       c,
@@ -292,6 +294,7 @@ func (s *Server) handleMessageRead(w http.ResponseWriter, r *http.Request) {
 		ShowSourceToggle: u.Sysop && c.Echo,
 		ShowSource:       showSource,
 		DisplayBody:      displayBody,
+		Attachments:      attachments,
 	}
 	s.render(w, "read.html", data)
 }
@@ -328,7 +331,16 @@ func (s *Server) handleMessagePost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if r.Method == http.MethodPost {
-		if err := r.ParseForm(); err != nil {
+		var attachFiles []messages.AttachmentInput
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+			limit := fido.EchoAttachmentLimit(c)
+			var err error
+			attachFiles, err = parseMultipartFormAttachments(r, limit)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+		} else if err := r.ParseForm(); err != nil {
 			http.Error(w, "bad form", http.StatusBadRequest)
 			return
 		}
@@ -425,6 +437,10 @@ func (s *Server) handleMessagePost(w http.ResponseWriter, r *http.Request) {
 	fido.ApplyLocalEchoMeta(m, c, postname.EchoOrigAddr(c), authorLangCode(u, r), origMsg, s.Deps.Messages.DB(), &config.Get().Fido)
 		if err := s.Deps.Messages.Post(m); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if err := savePostedAttachments(s, c, m.ID, attachFiles); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		http.Redirect(w, r, fmt.Sprintf("/messages/read?conf=%d&num=%d", confID, m.MsgNumber), http.StatusSeeOther)

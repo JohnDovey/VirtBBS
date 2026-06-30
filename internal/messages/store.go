@@ -130,7 +130,7 @@ func (s *Store) migrate() error {
 	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_fido_reply ON messages(fido_reply)`); err != nil {
 		return err
 	}
-	return nil
+	return migrateAttachments(s.db)
 }
 
 func containsAny(s string, subs ...string) bool {

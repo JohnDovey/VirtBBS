@@ -197,7 +197,7 @@ func main() {
 		}
 
 		if *fidoToss {
-			result := fido.TossAll(fidoCfg, msgStore, confStore, cfg.Sysop.Name, fileArea, cfg.Paths.Files)
+			result := fido.TossAll(fidoCfg, msgStore, confStore, cfg.Sysop.Name, fileArea, cfg.Paths.Files, cfg.AttachmentsDir())
 			fmt.Printf("Toss complete: %d packets, %d imported, %d skipped, %d held, %d TIC\n",
 				result.Packets, result.Imported, result.Skipped, result.Orphaned, result.TICProcessed)
 			for _, e := range result.Errors {
@@ -206,7 +206,7 @@ func main() {
 		}
 
 		if *fidoScan {
-			result, err := fido.ScanAll(fidoCfg, msgStore, confStore, cfg.BBS.Name)
+			result, err := fido.ScanAll(fidoCfg, msgStore, confStore, cfg.BBS.Name, cfg.AttachmentsDir())
 			if err != nil {
 				log.Fatalf("fido-scan: %v", err)
 			}
@@ -384,7 +384,7 @@ func main() {
 
 		// Start the BinkP server so other systems (our uplink, or our own
 		// downlinks) can poll THIS BBS instead of only the reverse.
-		if _, err := fido.ServeBinkP(&cfg.Fido, msgStore, confStore, cfg.Sysop.Name, fileStore, cfg.Paths.Files); err != nil {
+		if _, err := fido.ServeBinkP(&cfg.Fido, msgStore, confStore, cfg.Sysop.Name, fileStore, cfg.Paths.Files, cfg.AttachmentsDir()); err != nil {
 			fido.LogBinkp(fmt.Sprintf("BinkP server error: %v", err))
 		}
 

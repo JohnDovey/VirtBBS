@@ -62,6 +62,10 @@
           <label class="form-label" for="network-poll-interval">{{t .Locale "admin_fido_networks.poll_interval"}}</label>
           <input class="form-control" type="number" id="network-poll-interval" name="poll_interval_mins" value="{{.Def.PollIntervalMins}}">
         </div>
+        <div class="col-md-6">
+          <label class="form-label" for="network-max-attachment">{{t .Locale "admin_fido_networks.max_netmail_attachment_bytes"}}</label>
+          <input class="form-control" type="number" id="network-max-attachment" name="max_netmail_attachment_bytes" value="{{.Def.MaxNetmailAttachmentBytes}}" min="0" step="1" placeholder="5242880">
+        </div>
       </div>
 
       <h3 class="section-head">{{t .Locale "admin_fido_networks.section.directories"}}</h3>

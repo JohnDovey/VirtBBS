@@ -708,6 +708,7 @@
   "netmail.app.send_failed": "Ukuthumela kwehlulekile.",
   "netmail.app.stats": "Isamba: {total} · Okungafundiwe: {okungafundiwe}",
   "netmail.app.tagline": "Umugqa wethegi",
+  "netmail.app.tagline_auto": "Okuzenzakalelayo",
   "netmail.app.tagline_none": "(akekho)",
   "netmail.app.thread": "Uchungechunge",
   "netmail.app.title": "I-Netmail",

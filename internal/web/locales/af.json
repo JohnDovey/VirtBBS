@@ -382,6 +382,7 @@
   "netmail.app.deleted": "Boodskap geskrap.",
   "netmail.app.delete_failed": "Skrap het misluk.",
   "netmail.app.tagline": "Tagline",
+  "netmail.app.tagline_auto": "Auto",
   "netmail.app.tagline_none": "(geen)",
   "netmail.app.nodelist_lookup": "Nodelys-soek",
   "netmail.app.lookup": "Soek",

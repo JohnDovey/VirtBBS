@@ -24,6 +24,16 @@
   {{else}}
   <div class="msg-body msg-body-formatted">{{safeHTML .DisplayBody}}</div>
   {{end}}
+  {{if .Attachments}}
+  <div class="mt-3">
+    <h3 class="h6">{{t .Locale "read.attachments"}}</h3>
+    <ul class="list-unstyled mb-0">
+    {{range .Attachments}}
+      <li><a href="/messages/attachment?conf={{$.Conference.ID}}&amp;num={{$.Message.MsgNumber}}&amp;id={{.ID}}">{{.Filename}}</a> <span class="meta">({{formatSize $.Locale .SizeBytes}})</span></li>
+    {{end}}
+    </ul>
+  </div>
+  {{end}}
   {{if or .Message.FidoMsgID .Message.FidoReply}}
   <p>
     <button type="button" class="btn btn-outline-secondary btn-sm" id="msg-thread-btn">{{t .Locale "read.thread"}}</button>

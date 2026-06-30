@@ -5,7 +5,7 @@
   <div class="card-body">
   <p><a href="/messages?conf={{.Conference.ID}}">← {{.Conference.Name}}</a></p>
   {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
-  <form method="post" action="/messages/post?conf={{.Conference.ID}}{{if .ReplyNum}}&amp;reply={{.ReplyNum}}{{end}}">
+  <form method="post" action="/messages/post?conf={{.Conference.ID}}{{if .ReplyNum}}&amp;reply={{.ReplyNum}}{{end}}" enctype="multipart/form-data">
     <div class="mb-3">
       <label for="to" class="form-label">{{t .Locale "common.to"}}</label>
       <input class="form-control" type="text" id="to" name="to" value="{{.ToName}}">
@@ -15,6 +15,10 @@
       <input class="form-control" type="text" id="subject" name="subject" value="{{.Subject}}" required>
     </div>
     {{template "compose_editor" (dict "Locale" .Locale "EditorType" .EditorType "ComposeI18nJSON" .ComposeI18nJSON "TextareaID" "body" "TextareaName" "body" "Body" .Body "Required" true)}}
+    <div class="mb-3">
+      <label for="attachment" class="form-label">{{t .Locale "post.attachment"}}</label>
+      <input class="form-control" type="file" id="attachment" name="attachment">
+    </div>
     <button class="btn btn-primary" type="submit">{{t .Locale "post.submit"}}</button>
   </form>
   </div>

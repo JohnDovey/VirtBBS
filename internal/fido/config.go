@@ -131,6 +131,10 @@ type Config struct {
 	// Networks lists additional FidoNet-compatible networks (LovlyNet, etc.).
 	// Each entry is a fully independent network with its own address space.
 	Networks []NetworkDef `toml:"networks" json:"networks"`
+
+	// MaxNetmailAttachmentBytes is the max decoded attachment size for outbound
+	// and inbound netmail on the primary network (default 5 MiB).
+	MaxNetmailAttachmentBytes int `toml:"max_netmail_attachment_bytes" json:"max_netmail_attachment_bytes"`
 }
 
 // DefaultNodelistDiscoveryURL is used when NodelistURL is left blank: a
@@ -225,18 +229,23 @@ type NetworkDef struct {
 
 	// AKAs — see Config.AKAs.
 	AKAs []string `toml:"akas" json:"akas"`
+
+	// MaxNetmailAttachmentBytes overrides the primary network's netmail attachment
+	// limit for this network (default 5 MiB when unset/zero).
+	MaxNetmailAttachmentBytes int `toml:"max_netmail_attachment_bytes" json:"max_netmail_attachment_bytes"`
 }
 
 // DefaultConfig returns a Config with sensible disabled defaults.
 func DefaultConfig() Config {
 	return Config{
-		Enabled:     false,
-		Address:     "1:1/1",
-		InboundDir:  "fido/inbound",
-		OutboundDir: "fido/outbound",
-		NodelistDir: "fido/nodelist",
-		BinkpPort:   24554,
-		Areas:       map[string]int{},
+		Enabled:                     false,
+		Address:                     "1:1/1",
+		InboundDir:                  "fido/inbound",
+		OutboundDir:                 "fido/outbound",
+		NodelistDir:                 "fido/nodelist",
+		BinkpPort:                   24554,
+		Areas:                       map[string]int{},
+		MaxNetmailAttachmentBytes:   DefaultAttachmentLimitBytes,
 	}
 }
 

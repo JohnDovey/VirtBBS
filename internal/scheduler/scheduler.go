@@ -190,7 +190,7 @@ func runNetwork(networkName string, store *messages.Store, confStore *conference
 			if fileStore != nil {
 				fileArea = fileStore
 			}
-			result := fido.PollAndToss(nd, store, confStore, config.Get().Sysop.Name, fileArea, config.Get().Paths.Files)
+			result := fido.PollAndToss(&config.Get().Fido, nd, store, confStore, config.Get().Sysop.Name, fileArea, config.Get().Paths.Files, config.Get().AttachmentsDir())
 			if result.Poll.Error != nil {
 				fido.LogBinkp(fmt.Sprintf("fido scheduler: %s poll error: %v", networkName, result.Poll.Error))
 				continue

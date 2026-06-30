@@ -188,7 +188,7 @@ type ScanNetmailResult struct {
 // ScanNetmailQueue writes pending netmail for nd to outbound .PKT files so the
 // next BinkP poll can send them. Web and admin compose enqueue rows instead of
 // writing PKTs immediately (unlike the terminal compose path).
-func ScanNetmailQueue(nd *NetworkDef, db *sql.DB) *ScanNetmailResult {
+func ScanNetmailQueue(cfg *Config, nd *NetworkDef, db *sql.DB, attachmentsRoot string) *ScanNetmailResult {
 	result := &ScanNetmailResult{}
 	if nd == nil || db == nil {
 		return result
@@ -210,13 +210,15 @@ func ScanNetmailQueue(nd *NetworkDef, db *sql.DB) *ScanNetmailResult {
 			continue
 		}
 		EnsureNetmailMsgID(m)
-		nextHop, err := RouteAddr(db, m, nd)
+		export := *m
+		export.Body = netmailBodyForExport(cfg, nd, ndb, attachmentsRoot, ids[i], m, result)
+		nextHop, err := RouteAddr(db, &export, nd)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("id %d: %v", ids[i], err))
 			continue
 		}
-		outDir := OutboundDir(nd.OutboundDir, nextHop, uplink, m.Crash)
-		if _, err := WritePKT(origAddr, nextHop, nd.Password, outDir, []*NetmailMsg{m}, nd.Name); err != nil {
+		outDir := OutboundDir(nd.OutboundDir, nextHop, uplink, export.Crash)
+		if _, err := WritePKT(origAddr, nextHop, nd.Password, outDir, []*NetmailMsg{&export}, nd.Name); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("id %d: %v", ids[i], err))
 			continue
 		}
@@ -224,8 +226,11 @@ func ScanNetmailQueue(nd *NetworkDef, db *sql.DB) *ScanNetmailResult {
 			result.Errors = append(result.Errors, fmt.Sprintf("id %d mark sent: %v", ids[i], err))
 			continue
 		}
+		if attachmentsRoot != "" {
+			_ = ndb.RemoveNetmailAttachments(attachmentsRoot, ids[i])
+		}
 		if store, err := messages.Open(db); err == nil {
-			if err := RecordSentNetmail(store, nd, m); err != nil {
+			if err := RecordSentNetmail(store, nd, &export); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("id %d record sent: %v", ids[i], err))
 			}
 		}

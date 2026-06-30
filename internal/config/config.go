@@ -43,6 +43,7 @@ import (
 
 	"github.com/virtbbs/virtbbs/internal/door"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
 // Config holds all VirtBBS runtime configuration.
@@ -80,6 +81,9 @@ type PathsConfig struct {
 	Logs      string `toml:"logs"       json:"logs"`
 	CallerLog string `toml:"caller_log" json:"caller_log"`
 	WWW       string `toml:"www"        json:"www"` // web UI templates and static files
+	// Attachments is the directory for message/netmail file attachments.
+	// Default: <parent of db>/attachments
+	Attachments string `toml:"attachments" json:"attachments"`
 	// GraphvizDot is an optional explicit path to the Graphviz dot binary.
 	// When empty, virtbbs uses graphviz/bin/dot next to the executable, then PATH.
 	GraphvizDot string `toml:"graphviz_dot" json:"graphviz_dot"`
@@ -122,6 +126,14 @@ func Get() *Config {
 	mu.RLock()
 	defer mu.RUnlock()
 	return current
+}
+
+// AttachmentsDir returns the directory for message attachment storage.
+func (c *Config) AttachmentsDir() string {
+	if c == nil {
+		return messages.AttachmentsRoot("./data/virtbbs.db", "")
+	}
+	return messages.AttachmentsRoot(c.Paths.DB, c.Paths.Attachments)
 }
 
 // Save writes cfg to VirtBBS.DAT and updates the in-memory cache so that

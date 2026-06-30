@@ -158,6 +158,36 @@ func TestProcessFileFixRequest_rescan(t *testing.T) {
 	}
 }
 
+func TestProcessFileFixRequest_passwordInSubject(t *testing.T) {
+	db, nd, dlAddr, filesRoot := setupFileFixTest(t)
+
+	pm := &Message{
+		FromName: "Sysop",
+		OrigAddr: dlAddr,
+		ToName:   FileFixRobotName,
+		Subject:  "secret",
+		Body:     "%RESCAN GAMES\r\n",
+	}
+	if err := ProcessFileFixRequest(nd, db, filesRoot, pm); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := os.ReadDir(nd.OutboundDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, e := range entries {
+		if strings.Contains(e.Name(), "_rescan_") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected rescan TIC in outbound after subject-password %RESCAN GAMES")
+	}
+}
+
 func TestProcessFileFixRequest_subscribeWithRescanLimit(t *testing.T) {
 	db, nd, dlAddr, filesRoot := setupFileFixTest(t)
 	_ = OpenFileFixDB(db).Unsubscribe("TestNet", dlAddr.String(), "GAMES")

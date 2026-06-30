@@ -133,13 +133,13 @@ func (tr *TossResult) TossSummary() string {
 // aggregating the results. Disabled networks are skipped. Used wherever
 // "toss inbound mail" should mean *all* configured networks, not just the
 // primary one (sysop [T]oss menu, fido.toss API, -fido-toss CLI flag).
-func TossAll(cfg *Config, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string) *TossResult {
+func TossAll(cfg *Config, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string) *TossResult {
 	total := &TossResult{}
 	for _, nd := range cfg.AllNetworks() {
 		if !nd.Enabled {
 			continue
 		}
-		r, err := TossDir(&nd, store, confStore, sysopName, fileArea, filesRoot)
+		r, err := TossDir(cfg, &nd, store, confStore, sysopName, fileArea, filesRoot, attachmentsRoot)
 		if err != nil {
 			total.Errors = append(total.Errors, fmt.Sprintf("[%s] %v", nd.Name, err))
 			continue
@@ -164,7 +164,7 @@ func TossAll(cfg *Config, store *messages.Store, confStore *conferences.Store, s
 // echomail messages, and moves processed packets to <inbound>/.tossed/.
 // confStore may be nil (AreaFix's %LIST falls back to nd.Areas and area
 // validation is skipped for tag existence checks).
-func TossDir(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot string) (*TossResult, error) {
+func TossDir(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string) (*TossResult, error) {
 	if !nd.Enabled {
 		return nil, fmt.Errorf("network %s is disabled", nd.Name)
 	}
@@ -195,7 +195,7 @@ func TossDir(nd *NetworkDef, store *messages.Store, confStore *conferences.Store
 		}
 
 		pktPath := filepath.Join(nd.InboundDir, e.Name())
-		imp, skip, skipBD, orphans, ni, ei, ns, es, nh, eh, notes, errs := tossFile(nd, store, confStore, fileArea, filesRoot, pktPath)
+		imp, skip, skipBD, orphans, ni, ei, ns, es, nh, eh, notes, errs := tossFile(cfg, nd, store, confStore, fileArea, filesRoot, attachmentsRoot, pktPath)
 		result.Packets++
 		result.Imported += imp
 		result.Skipped += skip
@@ -237,12 +237,12 @@ func TossDir(nd *NetworkDef, store *messages.Store, confStore *conferences.Store
 }
 
 // TossFile processes a single .PKT file, importing its messages.
-func TossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName, filesRoot, pktPath string) (imported, skipped, orphaned int, notes []OrphanNote, errs []string) {
-	imp, sk, _, orph, _, _, _, _, _, _, nts, es := tossFile(nd, store, confStore, nil, filesRoot, pktPath)
+func TossFile(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName, filesRoot, attachmentsRoot, pktPath string) (imported, skipped, orphaned int, notes []OrphanNote, errs []string) {
+	imp, sk, _, orph, _, _, _, _, _, _, nts, es := tossFile(cfg, nd, store, confStore, nil, filesRoot, attachmentsRoot, pktPath)
 	return imp, sk, orph, nts, es
 }
 
-func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Store, fileArea FileArea, filesRoot, pktPath string) (
+func tossFile(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store, fileArea FileArea, filesRoot, attachmentsRoot, pktPath string) (
 	imported, skipped int, skipBD tossSkipBreakdown, orphaned, netImported, echoImported, netSkipped, echoSkipped, netHeld, echoHeld int,
 	notes []OrphanNote, errs []string,
 ) {
@@ -411,6 +411,16 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 		// Parse date from FTS dateTime string "dd Mon yy  hh:mm:ss"
 		posted := parseFidoDate(pm.DateTime)
 
+		bodyText := pb.Text
+		var attachFiles []messages.AttachmentInput
+		attachLimit := InboundAttachmentLimit(cfg, nd, confStore, confID, isNetmail)
+		if clean, files, aerr := ExtractInboundAttachments(pb.Text, attachLimit); aerr != nil {
+			errs = append(errs, fmt.Sprintf("attachments: %v", aerr))
+		} else if len(files) > 0 {
+			bodyText = clean
+			attachFiles = files
+		}
+
 		m := &messages.Message{
 			ConferenceID: confID,
 			FromName:     pm.FromName,
@@ -419,7 +429,7 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 			DatePosted:   posted,
 			Status:       "A",
 			Echo:         area != "",
-			Body:         pb.Text,
+			Body:         bodyText,
 			FidoMsgID:    pb.MSGID,
 			FidoReply:    pb.REPLY,
 			FidoKludges:  pb.Kludges,
@@ -455,6 +465,11 @@ func tossFile(nd *NetworkDef, store *messages.Store, confStore *conferences.Stor
 			netImported++
 		} else {
 			echoImported++
+		}
+		if len(attachFiles) > 0 && attachmentsRoot != "" {
+			if err := SaveInboundAttachments(store, attachmentsRoot, m.ID, attachFiles, attachLimit); err != nil {
+				errs = append(errs, fmt.Sprintf("save attachments: %v", err))
+			}
 		}
 		RecordTossMessage(store.DB(), nd.Name, nd.NodeAddr(), pm, isNetmail)
 	}

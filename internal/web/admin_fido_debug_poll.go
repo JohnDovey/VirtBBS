@@ -73,7 +73,7 @@ func (s *Server) handleAdminFidoDebugPoll(w http.ResponseWriter, r *http.Request
 	send("meta", map[string]string{"logPath": dbg.Path(), "network": network})
 	send("status", "polling")
 
-	res := fido.PollAndTossDebug(nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, dbg)
+	res := fido.PollAndTossDebug(&cfg.Fido, nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, cfg.AttachmentsDir(), dbg)
 
 	tossed := 0
 	if res.Toss != nil {

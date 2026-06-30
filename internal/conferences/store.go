@@ -53,6 +53,9 @@ type Conference struct {
 	EchoFromName string `json:"EchoFromName"` // real | alias | anonymous (echomail FromName policy)
 	UplinkAddr  string `json:"UplinkAddr"` // override uplink (blank = default)
 	Network     string `json:"Network"`    // network name (blank = primary)
+	// MaxAttachmentBytes is the max decoded attachment size for posts in this
+	// conference (default 5 MiB when zero).
+	MaxAttachmentBytes int `json:"MaxAttachmentBytes"`
 }
 
 // Store wraps the SQLite messages DB for conference operations.
@@ -79,6 +82,7 @@ func (s *Store) migrate() error {
 		`ALTER TABLE conferences ADD COLUMN uplink_addr TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE conferences ADD COLUMN network     TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE conferences ADD COLUMN echo_from_name TEXT NOT NULL DEFAULT 'real'`,
+		`ALTER TABLE conferences ADD COLUMN max_attachment_bytes INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range alters {
 		if _, err := s.db.Exec(stmt); err != nil {
@@ -113,14 +117,14 @@ func contains(s, sub string) bool {
 func (s *Store) Close() error { return nil }
 
 const confCols = `id, name, description, public, read_sec, write_sec, sysop_sec,
-	echo, echo_tag, echo_from_name, uplink_addr, network`
+	echo, echo_tag, echo_from_name, uplink_addr, network, max_attachment_bytes`
 
 func scanConf(row interface{ Scan(...any) error }) (*Conference, error) {
 	c := &Conference{}
 	var pub, echo int
 	err := row.Scan(&c.ID, &c.Name, &c.Description, &pub,
 		&c.ReadSec, &c.WriteSec, &c.SysopSec,
-		&echo, &c.EchoTag, &c.EchoFromName, &c.UplinkAddr, &c.Network)
+		&echo, &c.EchoTag, &c.EchoFromName, &c.UplinkAddr, &c.Network, &c.MaxAttachmentBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -200,11 +204,11 @@ func (s *Store) GetByTag(tag, network string) (*Conference, error) {
 // Create adds a new conference.
 func (s *Store) Create(c *Conference) error {
 	res, err := s.db.Exec(
-		`INSERT INTO conferences (name, description, public, read_sec, write_sec, sysop_sec, echo, echo_tag, echo_from_name, uplink_addr, network)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+		`INSERT INTO conferences (name, description, public, read_sec, write_sec, sysop_sec, echo, echo_tag, echo_from_name, uplink_addr, network, max_attachment_bytes)
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
 		c.Name, c.Description, boolInt(c.Public),
 		c.ReadSec, c.WriteSec, c.SysopSec,
-		boolInt(c.Echo), c.EchoTag, NormalizeEchoFromName(c.EchoFromName), c.UplinkAddr, c.Network,
+		boolInt(c.Echo), c.EchoTag, NormalizeEchoFromName(c.EchoFromName), c.UplinkAddr, c.Network, c.MaxAttachmentBytes,
 	)
 	if err != nil {
 		return fmt.Errorf("create conference %q: %w", c.Name, err)
@@ -218,10 +222,10 @@ func (s *Store) Create(c *Conference) error {
 func (s *Store) Update(c *Conference) error {
 	_, err := s.db.Exec(
 		`UPDATE conferences SET name=?, description=?, public=?, read_sec=?, write_sec=?, sysop_sec=?,
-		  echo=?, echo_tag=?, echo_from_name=?, uplink_addr=?, network=? WHERE id=?`,
+		  echo=?, echo_tag=?, echo_from_name=?, uplink_addr=?, network=?, max_attachment_bytes=? WHERE id=?`,
 		c.Name, c.Description, boolInt(c.Public),
 		c.ReadSec, c.WriteSec, c.SysopSec,
-		boolInt(c.Echo), c.EchoTag, NormalizeEchoFromName(c.EchoFromName), c.UplinkAddr, c.Network,
+		boolInt(c.Echo), c.EchoTag, NormalizeEchoFromName(c.EchoFromName), c.UplinkAddr, c.Network, c.MaxAttachmentBytes,
 		c.ID,
 	)
 	return err

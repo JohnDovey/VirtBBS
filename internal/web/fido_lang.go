@@ -45,11 +45,22 @@ type messageViewResponse struct {
 	ReplyToNum      int               `json:"ReplyToNum,omitempty"`
 	ReplyCount      int               `json:"ReplyCount,omitempty"`
 	ThreadAvailable bool              `json:"ThreadAvailable"`
+	Attachments     []attachmentView  `json:"Attachments,omitempty"`
 }
 
 func buildMessageViewJSON(store *messages.Store, locale string, m *messages.Message, displayBody string) messageViewResponse {
 	langCode := fido.ParseLangFromKludges(m.FidoKludges)
 	replyToNum, replyCount, threadAvailable := messageThreadMeta(store, m)
+	var attachments []attachmentView
+	if store != nil {
+		if list, err := store.ListAttachments(m.ID); err == nil {
+			for _, a := range list {
+				attachments = append(attachments, attachmentView{
+					ID: a.ID, Filename: a.Filename, SizeBytes: a.SizeBytes,
+				})
+			}
+		}
+	}
 	return messageViewResponse{
 		Message:         m,
 		DisplayBody:     displayBody,
@@ -58,5 +69,6 @@ func buildMessageViewJSON(store *messages.Store, locale string, m *messages.Mess
 		ReplyToNum:      replyToNum,
 		ReplyCount:      replyCount,
 		ThreadAvailable: threadAvailable,
+		Attachments:     attachments,
 	}
 }

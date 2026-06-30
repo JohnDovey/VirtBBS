@@ -63,6 +63,8 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/bulletins/view", s.handleBulletinView)
 	mux.HandleFunc("/messages", s.handleMessages)
 	mux.HandleFunc("/messages/read", s.handleMessageRead)
+	mux.HandleFunc("/messages/attachment", s.handleMessageAttachmentDownload)
+	mux.HandleFunc("/api/netmail/attachment", s.handleAPINetmailAttachmentDownload)
 	mux.HandleFunc("/messages/post", s.handleMessagePost)
 	mux.HandleFunc("/netmail", s.handleNetmail)
 	mux.HandleFunc("/netmail/read", s.handleNetmailRead)

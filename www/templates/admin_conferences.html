@@ -66,6 +66,7 @@
     </label>
     <label>{{t .Locale "common.uplink_addr"}} <input class="form-control" name="uplink_addr"></label>
     <label>{{t .Locale "common.network"}} <select class="form-select" name="network"><option value="">{{t .Locale "common.primary"}}</option>{{range .Networks}}<option value="{{.}}">{{.}}</option>{{end}}</select></label>
+    <label>{{t .Locale "admin_conferences.max_attachment_bytes"}} <input class="form-control" type="number" name="max_attachment_bytes" value="0" min="0" step="1" placeholder="5242880"></label>
     <button class="btn btn-primary" type="submit">{{t .Locale "admin_conferences.create_btn"}}</button>
   </form>
   </div>

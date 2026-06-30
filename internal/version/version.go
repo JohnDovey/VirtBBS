@@ -302,6 +302,16 @@
 //                        Fido ops page layout improvements.
 //   v1.5.0  2026-06-28  Cleanup and web UI for admin: remove management API, BinkP stats
 //                        page with charts, networks nav, LANG badges, admin fixes.
+//   v2.0.0  2026-06-30  First stable release: message attachments, BinkP interleave fix,
+//                        AreaFix/FileFix subject passwords, netmail tagline Auto default.
+//   v1.8.0  2026-06-30  Message attachments: uuencode toss/scan, web upload/download,
+//                        netmail queue attachments, per-conference and per-network limits.
+//   v1.7.10 2026-06-30  Netmail compose: tagline dropdown defaults to Auto (random quote).
+//   v1.7.9  2026-06-30  AreaFix/FileFix: password in netmail subject (classic) or first
+//                        body line; upstream requests send password in subject.
+//   v1.7.8  2026-06-30  BinkP: receive interleaved inbound M_FILE while waiting for M_GOT
+//                        (fixes session stall against binkd when both sides have mail).
+//   v1.7.7  2026-06-30  Bundled quotes.txt starter taglines; uptime shows hours in full breakdown.
 //   v1.7.6  2026-06-29  Random taglines on all locally originated echomail at post and export;
 //                        French and isiZulu web UI locales; BinkP AreaFix/FileFix/TIC stats.
 //   v1.4.0  2026-06-28  Documentation overhaul (README, guides, BinktermPHP ack); fix
@@ -316,4 +326,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "1.7.6"
+const Version = "2.0.0"

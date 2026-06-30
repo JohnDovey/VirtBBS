@@ -80,7 +80,7 @@ type RescanResult struct {
 // It accepts an optional conferences.Store; when nil, falls back to the
 // old cfg.Areas map (compatibility with pre-v0.0.6 setups). bbsName is used
 // in the Origin line of each exported message.
-func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store, bbsName string) (*ScanResult, error) {
+func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store, bbsName, attachmentsRoot string) (*ScanResult, error) {
 	if !cfg.Enabled {
 		return nil, fmt.Errorf("FidoNet is disabled in config")
 	}
@@ -95,7 +95,7 @@ func ScanAll(cfg *Config, store *messages.Store, confStore *conferences.Store, b
 		taglines := LoadTaglinesForUse(store.DB(), resolveNetworkTaglinesPath(cfg, &nd))
 		areafixDB := OpenAreaFixDB(store.DB())
 		before := result.Scanned
-		if err := scanNetwork(cfg, &nd, store, confStore, bbsName, taglines, areafixDB, result); err != nil {
+		if err := scanNetwork(cfg, &nd, store, confStore, bbsName, taglines, areafixDB, attachmentsRoot, result); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("[%s] %v", nd.Name, err))
 		}
 		RecordScan(nd.Name, result.Scanned-before)
@@ -113,7 +113,7 @@ type bucketEntry struct {
 
 // scanNetwork processes one network.
 func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store,
-	bbsName string, taglines []string, areafixDB *AreaFixDB, result *ScanResult) error {
+	bbsName string, taglines []string, areafixDB *AreaFixDB, attachmentsRoot string, result *ScanResult) error {
 	orig := nd.NodeAddr()
 	defaultUplink := nd.UplinkAddr()
 
@@ -166,7 +166,7 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 			}
 			for _, m := range msgs {
 				appendEchoMessage(buckets, destAddrs, key, m, conf.EchoTag, orig, uplinkAddr,
-					bbsName, taglines, nd, areafixDB, result)
+					bbsName, taglines, nd, areafixDB, store, attachmentsRoot, result)
 			}
 		}
 	} else {
@@ -182,7 +182,7 @@ func scanNetwork(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *
 			destAddrs[key] = defaultUplink
 			for _, m := range msgs {
 				appendEchoMessage(buckets, destAddrs, key, m, areaTag, orig, defaultUplink,
-					bbsName, taglines, nd, areafixDB, result)
+					bbsName, taglines, nd, areafixDB, store, attachmentsRoot, result)
 			}
 		}
 	}
@@ -355,7 +355,7 @@ func sanitizeAddrForFilename(addr Addr) string {
 // to every downlink currently subscribed to areaTag via AreaFix.
 func appendEchoMessage(buckets map[string][]bucketEntry, destAddrs map[string]Addr, key string, m *messages.Message,
 	areaTag string, orig, dest Addr, bbsName string, taglines []string, nd *NetworkDef,
-	areafixDB *AreaFixDB, result *ScanResult) {
+	areafixDB *AreaFixDB, store *messages.Store, attachmentsRoot string, result *ScanResult) {
 
 	var inSeenBy, inPath []string
 	if m.FidoSeenBy != "" {
@@ -366,7 +366,21 @@ func appendEchoMessage(buckets map[string][]bucketEntry, destAddrs map[string]Ad
 	}
 	tagline := taglineForEchoExport(m, taglines)
 
-	body := buildEchoBody(areaTag, orig, bbsName, m.Body, tagline, m.FidoMsgID, m.FidoReply, m.FidoKludges, inSeenBy, inPath)
+	msgBody := m.Body
+	if store != nil && attachmentsRoot != "" {
+		if files, err := store.AttachmentData(attachmentsRoot, m.ID); err == nil && len(files) > 0 {
+			withAtt := BodyWithAttachments(m.Body, files, FidoMaxMessageBodyBytes)
+			trial := buildEchoBody(areaTag, orig, bbsName, withAtt, tagline, m.FidoMsgID, m.FidoReply, m.FidoKludges, inSeenBy, inPath)
+			if len(trial) <= FidoMaxMessageBodyBytes {
+				msgBody = withAtt
+			} else {
+				result.Errors = append(result.Errors,
+					fmt.Sprintf("msg id=%d: attachment omitted (export would exceed %d bytes)", m.ID, FidoMaxMessageBodyBytes))
+			}
+		}
+	}
+
+	body := buildEchoBody(areaTag, orig, bbsName, msgBody, tagline, m.FidoMsgID, m.FidoReply, m.FidoKludges, inSeenBy, inPath)
 	entry := bucketEntry{
 		pmsg: &Message{
 			OrigAddr: orig,

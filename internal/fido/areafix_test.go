@@ -14,6 +14,88 @@ import (
 	"github.com/virtbbs/virtbbs/internal/messages"
 )
 
+func TestParseFixRequestAuth(t *testing.T) {
+	const pw = "secret"
+	tests := []struct {
+		name    string
+		subject string
+		body    string
+		want    []string
+		wantOK  bool
+	}{
+		{
+			name:    "body password",
+			subject: "AreaFix",
+			body:    "secret\r\n+GENERAL\r\n",
+			want:    []string{"+GENERAL"},
+			wantOK:  true,
+		},
+		{
+			name:    "subject password",
+			subject: "secret",
+			body:    "+GENERAL\r\n",
+			want:    []string{"+GENERAL"},
+			wantOK:  true,
+		},
+		{
+			name:    "subject password with switch",
+			subject: "secret -R",
+			body:    "+GENERAL\r\n",
+			want:    []string{"+GENERAL"},
+			wantOK:  true,
+		},
+		{
+			name:    "subject password skips redundant body line",
+			subject: "secret",
+			body:    "secret\r\n+GENERAL\r\n",
+			want:    []string{"+GENERAL"},
+			wantOK:  true,
+		},
+		{
+			name:    "subject AreaFix prefix",
+			subject: "AreaFix secret",
+			body:    "+GENERAL\r\n",
+			want:    []string{"+GENERAL"},
+			wantOK:  true,
+		},
+		{
+			name:    "bad password",
+			subject: "AreaFix",
+			body:    "wrong\r\n+GENERAL\r\n",
+			wantOK:  false,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := parseFixRequestAuth(tc.subject, tc.body, pw)
+			if ok != tc.wantOK {
+				t.Fatalf("ok=%v want %v", ok, tc.wantOK)
+			}
+			if !ok {
+				return
+			}
+			if len(got) != len(tc.want) {
+				t.Fatalf("cmds=%v want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("cmds[%d]=%q want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+
+	t.Run("empty password accepts body commands", func(t *testing.T) {
+		got, ok := parseFixRequestAuth("AreaFix", "+GENERAL\r\n", "")
+		if !ok {
+			t.Fatal("expected ok")
+		}
+		if len(got) != 1 || got[0] != "+GENERAL" {
+			t.Fatalf("cmds=%v", got)
+		}
+	})
+}
+
 func TestParseAreaFixAddLine(t *testing.T) {
 	tests := []struct {
 		line    string
@@ -179,6 +261,53 @@ func TestProcessAreaFixRequest_rescanOnSubscribe(t *testing.T) {
 		ToName:   AreaFixRobotName,
 		Subject:  "AreaFix",
 		Body:     "secret\r\n+GENERAL,R=1\r\n",
+	}
+
+	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm); err != nil {
+		t.Fatal(err)
+	}
+
+	entries, err := os.ReadDir(nd.OutboundDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rescanPKT bool
+	for _, e := range entries {
+		if strings.Contains(e.Name(), "_rescan_") && strings.HasSuffix(e.Name(), ".pkt") {
+			rescanPKT = true
+		}
+	}
+	if !rescanPKT {
+		t.Fatalf("expected rescan pkt in %v", entries)
+	}
+}
+
+func TestProcessAreaFixRequest_subjectPassword(t *testing.T) {
+	msgStore, confStore, nd, dlAddr := setupAreaFixTest(t)
+
+	pm := &Message{
+		OrigAddr: dlAddr,
+		FromName: "Sysop",
+		ToName:   AreaFixRobotName,
+		Subject:  "secret",
+		Body:     "%QUERY\r\n",
+	}
+
+	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProcessAreaFixRequest_passwordInSubject(t *testing.T) {
+	msgStore, confStore, nd, dlAddr := setupAreaFixTest(t)
+	postEchoMessages(t, msgStore, 1, "hello")
+
+	pm := &Message{
+		OrigAddr: dlAddr,
+		FromName: "Sysop",
+		ToName:   AreaFixRobotName,
+		Subject:  "secret",
+		Body:     "+GENERAL,R=1\r\n",
 	}
 
 	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm); err != nil {

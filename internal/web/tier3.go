@@ -198,25 +198,64 @@ func (s *Server) handleAPINetmailCompose(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var body struct {
-		ToAddr     string `json:"to_addr"`
-		ToName     string `json:"to_name"`
-		Subject    string `json:"subject"`
-		Body       string `json:"body"`
-		Network    string `json:"network"`
-		Crash      bool   `json:"crash"`
-		ReplyMsgID string `json:"reply_msgid"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		http.Error(w, "bad json", http.StatusBadRequest)
-		return
-	}
 	cfg := config.Get()
 	if !cfg.Fido.Enabled {
 		http.Error(w, "FidoNet not enabled", http.StatusBadRequest)
 		return
 	}
-	netName := strings.TrimSpace(body.Network)
+
+	var (
+		toAddr, toName, subject, bodyText, network, replyMsgID string
+		crash                                                  bool
+		attachFiles                                            []messages.AttachmentInput
+	)
+
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+		if err := r.ParseMultipartForm(messages.DefaultAttachmentLimitBytes + (1 << 20)); err != nil {
+			http.Error(w, "bad form", http.StatusBadRequest)
+			return
+		}
+		toAddr = r.FormValue("to_addr")
+		toName = r.FormValue("to_name")
+		subject = r.FormValue("subject")
+		bodyText = r.FormValue("body")
+		network = r.FormValue("network")
+		replyMsgID = r.FormValue("reply_msgid")
+		crash = r.FormValue("crash") == "1" || r.FormValue("crash") == "true"
+	} else {
+		var body struct {
+			ToAddr          string `json:"to_addr"`
+			ToName          string `json:"to_name"`
+			Subject         string `json:"subject"`
+			Body            string `json:"body"`
+			Network         string `json:"network"`
+			Crash           bool   `json:"crash"`
+			ReplyMsgID      string `json:"reply_msgid"`
+			AttachmentName  string `json:"attachment_name"`
+			AttachmentData  string `json:"attachment_data"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "bad json", http.StatusBadRequest)
+			return
+		}
+		toAddr = body.ToAddr
+		toName = body.ToName
+		subject = body.Subject
+		bodyText = body.Body
+		network = body.Network
+		crash = body.Crash
+		replyMsgID = body.ReplyMsgID
+		if body.AttachmentName != "" && body.AttachmentData != "" {
+			att, err := fido.ParseNetmailComposeAttachment(body.AttachmentName, body.AttachmentData, 0)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			attachFiles = []messages.AttachmentInput{att}
+		}
+	}
+
+	netName := strings.TrimSpace(network)
 	if netName == "" {
 		netName = cfg.Fido.EffectivePrimaryName()
 	}
@@ -225,16 +264,31 @@ func (s *Server) handleAPINetmailCompose(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "network not found", http.StatusBadRequest)
 		return
 	}
+	limit := fido.NetmailAttachmentLimit(&cfg.Fido, nd)
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/") {
+		files, err := parseMultipartAttachment(r, "attachment", limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		attachFiles = files
+	} else if len(attachFiles) > 0 {
+		if int64(len(attachFiles[0].Data)) > limit {
+			http.Error(w, fmt.Sprintf("attachment exceeds size limit (max %d bytes)", limit), http.StatusBadRequest)
+			return
+		}
+	}
+
 	m := fido.NetmailMsg{
 		Network:    nd.Name,
 		FromName:   u.Name,
 		FromAddr:   nd.Address,
-		ToName:     body.ToName,
-		ToAddr:     body.ToAddr,
-		Subject:    body.Subject,
-		Body:       body.Body,
-		Crash:      body.Crash,
-		ReplyMsgID: strings.TrimSpace(body.ReplyMsgID),
+		ToName:     toName,
+		ToAddr:     toAddr,
+		Subject:    subject,
+		Body:       bodyText,
+		Crash:      crash,
+		ReplyMsgID: strings.TrimSpace(replyMsgID),
 		AuthorLang: authorLangCode(u, r),
 	}
 	ndb := fido.OpenNetmailDB(s.Deps.Messages.DB())
@@ -242,6 +296,12 @@ func (s *Server) handleAPINetmailCompose(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	if len(attachFiles) > 0 {
+		if err := ndb.SaveNetmailAttachments(s.attachmentsRoot(), id, attachFiles, limit); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "queued": true})
@@ -330,7 +390,7 @@ func (s *Server) handleAdminBinkP(w http.ResponseWriter, r *http.Request) {
 		if nd == nil {
 			errMsg = tr(locale, "admin_binkp.error.network")
 		} else {
-			res := fido.PollAndToss(nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files)
+			res := fido.PollAndToss(&cfg.Fido, nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, cfg.AttachmentsDir())
 			if res.Poll.Error != nil {
 				errMsg = res.Poll.Error.Error()
 			} else {

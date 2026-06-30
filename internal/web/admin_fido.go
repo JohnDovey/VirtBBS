@@ -95,13 +95,13 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 			if !cfg.Fido.Enabled {
 				data.Error = "FidoNet not enabled"
 			} else {
-				res := fido.TossAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files)
+				res := fido.TossAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, cfg.AttachmentsDir())
 				data.Flash = fmt.Sprintf("Toss complete — imported %d message(s), %d TIC file(s)", res.Imported, res.TICProcessed)
 			}
 		case "scan":
 			if !cfg.Fido.Enabled {
 				data.Error = "FidoNet not enabled"
-			} else if res, err := fido.ScanAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences, cfg.BBS.Name); err != nil {
+			} else if res, err := fido.ScanAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences, cfg.BBS.Name, cfg.AttachmentsDir()); err != nil {
 				data.Error = err.Error()
 			} else {
 				data.Flash = fmt.Sprintf("Scan complete — exported %d message(s), %d PKT file(s)", res.Scanned, res.PKTFiles)
@@ -134,7 +134,7 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 			if nd == nil {
 				data.Error = "network not found"
 			} else {
-				res := fido.PollAndToss(nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files)
+				res := fido.PollAndToss(&cfg.Fido, nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, cfg.AttachmentsDir())
 				if res.Poll.Error != nil {
 					data.Error = res.Poll.Error.Error()
 				} else {
@@ -412,6 +412,7 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 				merged.Fido.NodelistURL = strings.TrimSpace(r.FormValue("nodelist_url"))
 				merged.Fido.NodelistUpdateIntervalHours = formInt(r, "nodelist_update_hours", 0)
 				merged.Fido.AKAs = akas
+				merged.Fido.MaxNetmailAttachmentBytes = formInt(r, "max_netmail_attachment_bytes", merged.Fido.MaxNetmailAttachmentBytes)
 				if newName != "" {
 					merged.Fido.Name = newName
 				}
@@ -441,6 +442,7 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 					nd.NodelistUpdateIntervalHours = formInt(r, "nodelist_update_hours", 0)
 					nd.NodelistEchoTag = strings.TrimSpace(r.FormValue("nodelist_echo_tag"))
 					nd.AKAs = akas
+					nd.MaxNetmailAttachmentBytes = formInt(r, "max_netmail_attachment_bytes", nd.MaxNetmailAttachmentBytes)
 					break
 				}
 			}

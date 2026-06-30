@@ -708,6 +708,7 @@
   "netmail.app.send_failed": "L'envoi a échoué.",
   "netmail.app.stats": "Total : {total} · Non lu : {non lu}",
   "netmail.app.tagline": "Slogan",
+  "netmail.app.tagline_auto": "Auto",
   "netmail.app.tagline_none": "(aucun)",
   "netmail.app.thread": "Fil",
   "netmail.app.title": "Netmail",

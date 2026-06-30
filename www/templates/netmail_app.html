@@ -69,11 +69,16 @@
                 <div class="col-md-4">
                   <label class="form-label" for="nm-tagline">{{t .Locale "netmail.app.tagline"}}</label>
                   <select class="form-select" id="nm-tagline">
+                    <option value="__auto__" selected>{{t .Locale "netmail.app.tagline_auto"}}</option>
                     <option value="">{{t .Locale "netmail.app.tagline_none"}}</option>
                   </select>
                 </div>
               </div>
               {{template "compose_editor" (dict "Locale" .Locale "EditorType" .EditorType "ComposeI18nJSON" .ComposeI18nJSON "TextareaID" "nm-body" "TextareaName" "" "Body" "" "Required" true)}}
+              <div class="mb-3">
+                <label class="form-label" for="nm-attachment">{{t .Locale "post.attachment"}}</label>
+                <input class="form-control" type="file" id="nm-attachment" name="attachment">
+              </div>
               <div class="mb-3 form-check">
                 <input class="form-check-input" type="checkbox" id="nm-crash">
                 <label class="form-check-label" for="nm-crash">{{t .Locale "netmail.app.crash"}}</label>

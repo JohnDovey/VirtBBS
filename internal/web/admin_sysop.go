@@ -71,17 +71,18 @@ func (s *Server) handleAdminConferences(w http.ResponseWriter, r *http.Request) 
 		switch r.FormValue("action") {
 		case "create", "update":
 			c := conferences.Conference{
-				Name:         strings.TrimSpace(r.FormValue("name")),
-				Description:  strings.TrimSpace(r.FormValue("description")),
-				Public:       formBool(r, "public"),
-				ReadSec:      formInt(r, "read_sec", 10),
-				WriteSec:     formInt(r, "write_sec", 10),
-				SysopSec:     formInt(r, "sysop_sec", 110),
-				Echo:         formBool(r, "echo"),
-				EchoTag:      strings.TrimSpace(r.FormValue("echo_tag")),
-				EchoFromName: conferences.NormalizeEchoFromName(r.FormValue("echo_from_name")),
-				UplinkAddr:   strings.TrimSpace(r.FormValue("uplink_addr")),
-				Network:      strings.TrimSpace(r.FormValue("network")),
+				Name:               strings.TrimSpace(r.FormValue("name")),
+				Description:        strings.TrimSpace(r.FormValue("description")),
+				Public:             formBool(r, "public"),
+				ReadSec:            formInt(r, "read_sec", 10),
+				WriteSec:           formInt(r, "write_sec", 10),
+				SysopSec:           formInt(r, "sysop_sec", 110),
+				Echo:               formBool(r, "echo"),
+				EchoTag:            strings.TrimSpace(r.FormValue("echo_tag")),
+				EchoFromName:       conferences.NormalizeEchoFromName(r.FormValue("echo_from_name")),
+				UplinkAddr:         strings.TrimSpace(r.FormValue("uplink_addr")),
+				Network:            strings.TrimSpace(r.FormValue("network")),
+				MaxAttachmentBytes: formInt(r, "max_attachment_bytes", 0),
 			}
 			if c.Echo && r.FormValue("echo_from_name") == "" {
 				c.EchoFromName = conferences.EchoFromReal

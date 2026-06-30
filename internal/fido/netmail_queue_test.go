@@ -137,7 +137,7 @@ func TestScanNetmailQueue_writesPKTAndMarksSent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := ScanNetmailQueue(nd, db)
+	result := ScanNetmailQueue(nil, nd, db, "")
 	if len(result.Errors) > 0 {
 		t.Fatalf("unexpected errors: %v", result.Errors)
 	}
@@ -162,7 +162,7 @@ func TestScanNetmailQueue_writesPKTAndMarksSent(t *testing.T) {
 	}
 
 	// Idempotent: nothing left to export.
-	again := ScanNetmailQueue(nd, db)
+	again := ScanNetmailQueue(nil, nd, db, "")
 	if again.Exported != 0 {
 		t.Fatalf("second scan exported %d, want 0", again.Exported)
 	}

@@ -382,6 +382,7 @@
   "netmail.app.deleted": "Mensaje eliminado.",
   "netmail.app.delete_failed": "Error al eliminar.",
   "netmail.app.tagline": "Tagline",
+  "netmail.app.tagline_auto": "Auto",
   "netmail.app.tagline_none": "(ninguna)",
   "netmail.app.nodelist_lookup": "Buscar en nodelist",
   "netmail.app.lookup": "Buscar",
