@@ -217,6 +217,18 @@ func PollAndTossDebug(cfg *Config, nd *NetworkDef, store *messages.Store, confSt
 				LogBinkp(fmt.Sprintf("netmail queue [%s]: exported %d message(s) to outbound", nd.Name, qr.Exported))
 			}
 		}
+		if confStore != nil {
+			bbsName := resolveOutboundBBSName("")
+			if sr := ScanNetworkEcho(cfg, nd, store, confStore, bbsName, attachmentsRoot); sr != nil {
+				for _, e := range sr.Errors {
+					LogBinkp(fmt.Sprintf("echo scan [%s]: %s", nd.Name, e))
+				}
+				if sr.Scanned > 0 {
+					LogBinkp(fmt.Sprintf("echo scan [%s]: exported %d message(s) to outbound (%d pkt file(s))",
+						nd.Name, sr.Scanned, sr.PKTFiles))
+				}
+			}
+		}
 	}
 
 	uplink := nd.UplinkAddr()

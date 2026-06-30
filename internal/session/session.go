@@ -422,7 +422,7 @@ func (s *session) readMessages(startNum int) {
 	var lastReadNum int
 	for _, m := range msgs {
 		s.displayMessageHeader(m)
-		s.writeln(m.Body)
+		s.writeln(s.formatMessageBody(m))
 
 		lastReadNum = m.MsgNumber
 		s.statMsgsRead++
@@ -482,8 +482,17 @@ func (s *session) showThread(m *messages.Message) {
 	s.writeln(ansi.Header(fmt.Sprintf("Thread (%d message(s))", len(thread))))
 	for _, tm := range thread {
 		s.displayMessageHeader(tm)
-		s.writeln(tm.Body)
+		s.writeln(s.formatMessageBody(tm))
 	}
+}
+
+func (s *session) formatMessageBody(m *messages.Message) string {
+	conf, err := s.deps.Conferences.Get(m.ConferenceID)
+	if err != nil || conf == nil || !conf.Echo || !m.Echo {
+		return m.Body
+	}
+	cfg := config.Get()
+	return fido.EchoDisplayText(m, cfg.BBS.Name, postname.EchoOrigAddr(conf))
 }
 
 func (s *session) enterMessage() {
@@ -538,12 +547,20 @@ func (s *session) enterReply(orig *messages.Message) {
 		subj = "RE: " + subj
 	}
 
-	// Build quoted body for the editor.
-	quoted := ""
-	for _, line := range strings.Split(strings.ReplaceAll(orig.Body, "\r\n", "\n"), "\n") {
-		quoted += "> " + line + "\r\n"
+	conf, err := s.deps.Conferences.Get(s.conference)
+	if err != nil || conf == nil {
+		s.writeln(ansi.Colorize(ansi.Red, "Conference not found."))
+		return
 	}
-	quoted += "\r\n"
+
+	quoted := fido.QuoteEchoReplyBody(orig)
+	if !conf.Echo {
+		quoted = ""
+		for _, line := range strings.Split(strings.ReplaceAll(orig.Body, "\r\n", "\n"), "\n") {
+			quoted += "> " + line + "\r\n"
+		}
+		quoted += "\r\n"
+	}
 
 	result := s.runEditor(subj, quoted)
 	if result.Aborted || result.Body == "" {
@@ -551,11 +568,6 @@ func (s *session) enterReply(orig *messages.Message) {
 		return
 	}
 
-	conf, err := s.deps.Conferences.Get(s.conference)
-	if err != nil || conf == nil {
-		s.writeln(ansi.Colorize(ansi.Red, "Conference not found."))
-		return
-	}
 	if err := postname.ValidateEchoPost(conf, s.user); err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, err.Error()))
 		return

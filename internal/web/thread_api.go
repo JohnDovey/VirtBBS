@@ -100,7 +100,7 @@ func (s *Server) handleAPIMessageThread(w http.ResponseWriter, r *http.Request) 
 	for _, tm := range thread {
 		out = append(out, threadMessageJSON{
 			Message:     tm,
-			DisplayBody: FormatMessageBodyHTML(tm.Body),
+			DisplayBody: formatConferenceMessageBody(c, tm),
 			LangLabel:   messageLangLabel(locale, tm),
 		})
 	}

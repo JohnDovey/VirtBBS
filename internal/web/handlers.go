@@ -272,7 +272,7 @@ func (s *Server) handleMessageRead(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = s.Deps.Users.SetLastRead(u.ID, confID, msgNum)
 	showSource := u.Sysop && c.Echo && r.URL.Query().Get("source") == "1"
-	displayBody := FormatMessageBodyHTML(msg.Body)
+	displayBody := formatConferenceMessageBody(c, msg)
 	if showSource {
 		displayBody = fido.ReconstructSource(fidoSourceOpts(msg, c.EchoTag))
 	}

@@ -74,6 +74,25 @@ type RescanResult struct {
 	Errors   []string
 }
 
+// ScanNetworkEcho exports pending echomail for one network into outbound
+// .PKT files. PollAndToss calls this before each uplink session (like
+// ScanNetmailQueue) so locally posted echo mail is packed automatically.
+func ScanNetworkEcho(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *conferences.Store, bbsName, attachmentsRoot string) *ScanResult {
+	result := &ScanResult{}
+	if nd == nil || store == nil || !nd.Enabled {
+		return result
+	}
+	taglines := LoadTaglinesForUse(store.DB(), resolveNetworkTaglinesPath(cfg, nd))
+	areafixDB := OpenAreaFixDB(store.DB())
+	if err := scanNetwork(cfg, nd, store, confStore, bbsName, taglines, areafixDB, attachmentsRoot, result); err != nil {
+		result.Errors = append(result.Errors, err.Error())
+	}
+	if result.Scanned > 0 {
+		RecordScan(nd.Name, result.Scanned)
+	}
+	return result
+}
+
 // ScanAll exports all echo-flagged messages from every configured echomail
 // conference into outbound .PKT files, one file per unique uplink address.
 //
