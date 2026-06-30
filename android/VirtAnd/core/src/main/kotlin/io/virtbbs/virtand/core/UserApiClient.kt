@@ -7,10 +7,12 @@
 package io.virtbbs.virtand.core
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.ByteArrayOutputStream
@@ -132,4 +134,10 @@ fun buildJsonRequest(
     )
     if (params != null) map["params"] = params
     return JsonObject(map)
+}
+
+/** Go encodes nil slices as JSON null; treat null and JsonNull as an empty array. */
+fun JsonElement?.asJsonArrayOrEmpty(): JsonArray = when (this) {
+    null, is JsonNull -> JsonArray(emptyList())
+    else -> this.jsonArray
 }

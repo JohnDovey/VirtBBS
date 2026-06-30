@@ -322,7 +322,7 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 		Networks      []string
 		Network       string
 		IsPrimary     bool
-		Def           fido.NetworkDef
+		Def           *fido.NetworkDef
 		AKAsText              string
 		NetworksI18nJSON      string
 		NodeFlags     []fido.NodeFlagDef
@@ -334,7 +334,7 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 		Networks:      fidoNetworkNamesList(),
 		Network:       network,
 		IsPrimary:     strings.EqualFold(network, cfg.Fido.EffectivePrimaryName()),
-		Def:           *nd,
+		Def:           nd,
 		AKAsText:         strings.Join(nd.AKAs, "\n"),
 		NetworksI18nJSON: adminFidoNetworksI18nJSON(localeFromRequest(r)),
 		SelectedFlags: nd.NodeFlags,
@@ -471,7 +471,7 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 		nd = cfg.Fido.NetworkByName(network)
 		if nd != nil {
 			data.Network = network
-			data.Def = *nd
+			data.Def = nd
 			data.AKAsText = strings.Join(nd.AKAs, "\n")
 			data.SelectedFlags = nd.NodeFlags
 		}

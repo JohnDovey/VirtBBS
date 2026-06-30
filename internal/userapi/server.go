@@ -159,6 +159,14 @@ func unmarshalParams(params json.RawMessage, dest any) error {
 	return json.Unmarshal(params, dest)
 }
 
+// nonNilSlice ensures empty Go slices encode as JSON [] instead of null.
+func nonNilSlice[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+	return s
+}
+
 func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 	switch req.Method {
 
@@ -185,7 +193,7 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 				out = append(out, c)
 			}
 		}
-		return out, nil
+		return nonNilSlice(out), nil
 
 	case "files.dirs.list":
 		all, err := s.Deps.Files.ListDirs()
@@ -198,7 +206,7 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 				out = append(out, d)
 			}
 		}
-		return out, nil
+		return nonNilSlice(out), nil
 
 	case "files.list":
 		var p struct{ DirID int64 }
@@ -212,7 +220,11 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 		if u.SecurityLevel < dir.ReadSec {
 			return nil, fmt.Errorf("access denied")
 		}
-		return s.Deps.Files.ListFiles(p.DirID)
+		files, err := s.Deps.Files.ListFiles(p.DirID)
+		if err != nil {
+			return nil, err
+		}
+		return nonNilSlice(files), nil
 
 	case "files.search":
 		var p struct{ Query string }
@@ -238,7 +250,7 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 				out = append(out, f)
 			}
 		}
-		return out, nil
+		return nonNilSlice(out), nil
 
 	case "files.download":
 		var p struct {
@@ -423,7 +435,7 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 		for _, nd := range cfg.Fido.AllNetworks() {
 			names = append(names, nd.Name)
 		}
-		return names, nil
+		return nonNilSlice(names), nil
 
 	default:
 		return nil, fmt.Errorf("unknown method: %s", req.Method)

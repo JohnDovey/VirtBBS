@@ -116,7 +116,6 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/admin/messages", s.handleAdminMessages)
 	mux.HandleFunc("/admin/files", s.handleAdminFiles)
 	mux.HandleFunc("/admin/callers", s.handleAdminCallers)
-	mux.HandleFunc("/admin/tokens", s.handleAdminTokens)
 	mux.HandleFunc("/admin/fido", s.handleAdminFido)
 	mux.HandleFunc("/admin/fido/ops", s.handleAdminFidoOps)
 	mux.HandleFunc("/admin/fido/debug_poll", s.handleAdminFidoDebugPoll)

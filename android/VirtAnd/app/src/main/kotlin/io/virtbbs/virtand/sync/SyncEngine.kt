@@ -19,6 +19,7 @@ package io.virtbbs.virtand.sync
 import android.content.Context
 import io.virtbbs.virtand.core.QwkReply
 import io.virtbbs.virtand.core.UserApiClient
+import io.virtbbs.virtand.core.asJsonArrayOrEmpty
 import io.virtbbs.virtand.core.buildRepPacket
 import io.virtbbs.virtand.core.parseQwkPacket
 import io.virtbbs.virtand.data.AppDatabase
@@ -34,7 +35,6 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
@@ -102,7 +102,7 @@ class SyncEngine(private val context: Context) {
 
     private fun refreshConferences(api: UserApiClient) = apiStep("conferences.list") {
         val result = api.call("conferences.list") ?: return@apiStep
-        val entities = result.jsonArray.map { c ->
+        val entities = result.asJsonArrayOrEmpty().map { c ->
             val o = c.jsonObject
             ConferenceEntity(
                 id = o["ID"]!!.jsonPrimitive.int,
@@ -149,7 +149,7 @@ class SyncEngine(private val context: Context) {
 
     private fun refreshFileCatalog(api: UserApiClient) = apiStep("files.dirs.list") {
         val dirsResult = api.call("files.dirs.list") ?: return@apiStep
-        val dirs = dirsResult.jsonArray.map { d ->
+        val dirs = dirsResult.asJsonArrayOrEmpty().map { d ->
             val o = d.jsonObject
             FileDirEntity(
                 id = o["ID"]!!.jsonPrimitive.long,
@@ -164,7 +164,7 @@ class SyncEngine(private val context: Context) {
         for (dir in dirs) {
             val filesResult = api.call("files.list", JsonObject(mapOf("DirID" to JsonPrimitive(dir.id))))
                 ?: continue
-            val files = filesResult.jsonArray.map { f ->
+            val files = filesResult.asJsonArrayOrEmpty().map { f ->
                 val o = f.jsonObject
                 FileEntryEntity(
                     id = o["ID"]!!.jsonPrimitive.long,

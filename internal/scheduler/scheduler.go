@@ -31,10 +31,10 @@
 //                        nodelist fetching (fido.FetchAndImport)
 //   v1.6.0  2026-06-28  Member networks: drain nodelist echo queue on
 //                        startup and after each successful poll+toss.
+//   v2.1.2  2026-06-30  Daily purge of binkp-debug*.log files older than 7 days.
 // ============================================================================
 
-// Package scheduler runs background tasks for the VirtBBS server. Currently
-// just the FidoNet poll scheduler — see Start.
+// Package scheduler runs background tasks for the VirtBBS server.
 package scheduler
 
 import (
@@ -92,6 +92,7 @@ func Start(store *messages.Store, confStore *conferences.Store, fileStore *files
 		}
 	}
 	go runNetworkTraffic(store, confStore, fileStore, stopCh)
+	go runDebugLogCleanup(stopCh)
 
 	runNodelistMonitorAtStartup(cfg, store, confStore, fileStore)
 
@@ -312,6 +313,45 @@ func runNetworkTraffic(store *messages.Store, confStore *conferences.Store, file
 		case <-timer.C:
 			run()
 			timer.Reset(7 * 24 * time.Hour)
+		}
+	}
+}
+
+// runDebugLogCleanup deletes binkp-debug*.log files in paths.logs older than
+// seven days, once per day at 04:00 local time.
+func runDebugLogCleanup(stop <-chan struct{}) {
+	log.Printf("debug log cleanup: daily purge of binkp-debug*.log older than %s", fido.DebugLogRetention)
+
+	run := func() {
+		cfg := config.Get()
+		if cfg == nil {
+			return
+		}
+		removed, err := fido.PurgeOldDebugLogs(cfg.Paths.Logs, fido.DebugLogRetention)
+		if err != nil {
+			log.Printf("debug log cleanup: %v", err)
+			return
+		}
+		if removed > 0 {
+			log.Printf("debug log cleanup: removed %d file(s) from %s", removed, cfg.Paths.Logs)
+		}
+	}
+
+	now := time.Now()
+	next := time.Date(now.Year(), now.Month(), now.Day(), 4, 0, 0, 0, now.Location())
+	if !now.Before(next) {
+		next = next.Add(24 * time.Hour)
+	}
+
+	timer := time.NewTimer(time.Until(next))
+	defer timer.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-timer.C:
+			run()
+			timer.Reset(24 * time.Hour)
 		}
 	}
 }

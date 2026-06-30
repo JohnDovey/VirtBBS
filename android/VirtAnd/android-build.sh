@@ -34,6 +34,11 @@ echo "   JAVA_HOME=$JAVA_HOME"
 echo "   ANDROID_HOME=${ANDROID_HOME:-/Volumes/JohnDovey/Android/Sdk}"
 echo ""
 
+# Stale Kotlin compile daemons (common after Kotlin upgrades or when the project
+# lives on an external volume) can throw NoClassDefFoundError on CallResult$Dying.
+# Gradle falls back to in-process compile, but stopping first avoids the noise.
+./gradlew --stop >/dev/null 2>&1 || true
+
 ./gradlew "$@"
 
 echo ""

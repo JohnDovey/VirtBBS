@@ -285,31 +285,6 @@ func (s *Server) handleAdminCallers(w http.ResponseWriter, r *http.Request) {
 	s.render(w, "admin_callers.html", data)
 }
 
-func (s *Server) handleAdminTokens(w http.ResponseWriter, r *http.Request) {
-	_, ok := s.requireSysop(w, r)
-	if !ok {
-		return
-	}
-	if r.Method == http.MethodPost {
-		_ = r.ParseForm()
-		if r.FormValue("action") == "revoke" {
-			id, _ := strconv.ParseInt(r.FormValue("id"), 10, 64)
-			_ = s.Deps.Users.RevokeAPITokenByID(id)
-		}
-		http.Redirect(w, r, "/admin/tokens", http.StatusSeeOther)
-		return
-	}
-	tokens, _ := s.Deps.Users.ListAllAPITokens()
-	data := struct {
-		pageData
-		Tokens []*users.APITokenAdmin
-	}{
-		pageData: s.page(r),
-		Tokens:   tokens,
-	}
-	s.render(w, "admin_tokens.html", data)
-}
-
 func (s *Server) handleAdminUserEdit(w http.ResponseWriter, r *http.Request) {
 	_, ok := s.requireSysop(w, r)
 	if !ok {

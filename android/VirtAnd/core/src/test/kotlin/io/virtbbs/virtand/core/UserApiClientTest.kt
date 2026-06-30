@@ -2,6 +2,9 @@ package io.virtbbs.virtand.core
 
 import java.io.ByteArrayInputStream
 import java.nio.charset.StandardCharsets
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -26,6 +29,13 @@ class UserApiClientTest {
         assertFailsWith<UserApiException> {
             UserApiClient.readResponseLine(input)
         }
+    }
+
+    @Test
+    fun asJsonArrayOrEmpty_treatsNullAsEmpty() {
+        assertEquals(0, JsonNull.asJsonArrayOrEmpty().size)
+        assertEquals(0, null.asJsonArrayOrEmpty().size)
+        assertEquals(2, JsonArray(listOf(JsonPrimitive(1), JsonPrimitive(2))).asJsonArrayOrEmpty().size)
     }
 
     @Test

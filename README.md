@@ -50,7 +50,7 @@ The **web UI** is the primary interface for everyday use and all sysop administr
 | Feature | Details |
 |---------|---------|
 | **Web interface** | Bootstrap 5 responsive UI — desktop, tablet, and mobile; English, Spanish, and Afrikaans |
-| **Sysop admin (web)** | `/admin/*` — users, nodes, config, conferences, FidoNet, BinkP, callers, API tokens |
+| **Sysop admin (web)** | `/admin/*` — users, nodes, config, conferences, FidoNet, BinkP, callers |
 | **Telnet server** | RFC 854 with full IAC negotiation (character mode, echo, NAWS, TTYPE). Default port 2323 |
 | **SSH server** | `golang.org/x/crypto/ssh`, PTY support. Default port 3232 |
 | **User database** | SQLite — supports importer from PCBoard binary USERS file |

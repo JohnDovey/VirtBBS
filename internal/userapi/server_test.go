@@ -193,4 +193,17 @@ func TestUserAPISmoke(t *testing.T) {
 	if !ok || m2["data"] == nil || m2["data"] == "" {
 		t.Fatalf("qwk.download missing data: %+v", resp.Result)
 	}
+
+	// files.list on an empty directory must encode as [] not null.
+	fileDir, err := fileStore.CreateDir("Empty", "", "empty", 10, 10)
+	if err != nil {
+		t.Fatalf("create dir: %v", err)
+	}
+	resp = call("files.list", map[string]int64{"DirID": fileDir.ID}, auth("TestUser", "password123"))
+	if resp.Error != "" {
+		t.Fatalf("files.list error: %s", resp.Error)
+	}
+	if resp.Result == nil {
+		t.Fatalf("files.list result is null, want empty array")
+	}
 }

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.virtbbs.virtand.core.UserApiClient
 import io.virtbbs.virtand.core.UserApiException
+import io.virtbbs.virtand.core.asJsonArrayOrEmpty
 import io.virtbbs.virtand.data.AppDatabase
 import io.virtbbs.virtand.data.SessionInfo
 import io.virtbbs.virtand.data.entities.CachedMessageEntity
@@ -210,7 +211,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     val api = UserApiClient(host.trim(), port, username.trim(), password)
                     val result = api.call("files.search", JsonObject(mapOf("Query" to JsonPrimitive(query))))
                         ?: return@withContext emptyList()
-                    result.jsonArray.map { f ->
+                    result.asJsonArrayOrEmpty().map { f ->
                         val o = f.jsonObject
                         FileEntryEntity(
                             id = o["ID"]!!.jsonPrimitive.long,
@@ -263,7 +264,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             )
                         ),
                     ) ?: throw UserApiException("Empty response.")
-                    val nodes = result.jsonObject["nodes"]?.jsonArray
+                    val nodes = result.jsonObject["nodes"]?.asJsonArrayOrEmpty()
                         ?: throw UserApiException("Unexpected response format.")
                     nodes.map { n ->
                         val o = n.jsonObject
@@ -310,7 +311,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val api = UserApiClient(host.trim(), port, username.trim(), password)
                     val result = api.call("fido.networks.list") ?: return@withContext emptyList()
-                    result.jsonArray.map { it.jsonPrimitive.content }
+                    result.asJsonArrayOrEmpty().map { it.jsonPrimitive.content }
                 } catch (_: Exception) {
                     emptyList()
                 }

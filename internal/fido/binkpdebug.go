@@ -168,6 +168,60 @@ func writeBinkpDebugGlobal(network, line string) {
 	fmt.Fprintf(binkpDebugGlobalFile, "%s %s: %s\n", time.Now().Format("2006/01/02 15:04:05"), prefix, line)
 }
 
+// DebugLogRetention is how long BinkP debug log files are kept before the
+// daily scheduler deletes them.
+const DebugLogRetention = 7 * 24 * time.Hour
+
+// PurgeOldDebugLogs removes binkp-debug*.log files in logsDir whose last
+// modification time is older than maxAge. The active global binkp-debug.log
+// is skipped while BinkP protocol tracing is enabled.
+func PurgeOldDebugLogs(logsDir string, maxAge time.Duration) (int, error) {
+	logsDir = strings.TrimSpace(logsDir)
+	if logsDir == "" {
+		return 0, nil
+	}
+	if maxAge <= 0 {
+		maxAge = DebugLogRetention
+	}
+	cutoff := time.Now().Add(-maxAge)
+
+	entries, err := os.ReadDir(logsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	var removed int
+	for _, e := range entries {
+		if e.IsDir() || !isBinkpDebugLogName(e.Name()) {
+			continue
+		}
+		if e.Name() == "binkp-debug.log" && BinkpDebugEnabled() {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if !info.ModTime().Before(cutoff) {
+			continue
+		}
+		path := filepath.Join(logsDir, e.Name())
+		if err := os.Remove(path); err != nil {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
+}
+
+func isBinkpDebugLogName(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasPrefix(lower, "binkp-debug") && strings.HasSuffix(lower, ".log")
+}
+
 // ReadBinkpDebugLogTail returns up to maxLines from the end of path.
 func ReadBinkpDebugLogTail(path string, maxLines int) ([]string, string, error) {
 	if maxLines <= 0 {

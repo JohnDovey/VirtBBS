@@ -42,7 +42,7 @@ go build ./cmd/virtbbs
 ./virtbbs -config VirtBBS.DAT
 ```
 
-Sysop administration is web-only (`internal/web`, `/admin/*`). The only JSON-over-TCP API is `internal/userapi` on port 9998 (default) for the VirtAnd Android client — per-device token auth, not sysop credentials.
+Sysop administration is web-only (`internal/web`, `/admin/*`). The only JSON-over-TCP API is `internal/userapi` on port 9998 (default) for the VirtAnd Android client — BBS username/password auth, not sysop credentials.
 
 ## Web interface
 
@@ -100,7 +100,7 @@ export GRADLE_USER_HOME="/Volumes/JohnDovey/.gradle"
 - `android/VirtAnd/core/` — pure Kotlin/JVM (`UserApiClient`, QWK parsing). No Android SDK required.
 - `android/VirtAnd/app/` — Android app (Compose UI, Room, WorkManager). Requires SDK.
 
-Server API: `internal/userapi` (per-device token auth). Users create tokens on the BBS via profile **[T]okens**.
+Server API: `internal/userapi` (BBS username/password auth on each request).
 
 ### Build commands
 

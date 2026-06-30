@@ -69,7 +69,7 @@ type SessionConfig struct {
 type NetworkConfig struct {
 	TelnetPort   int    `toml:"telnet_port"    json:"telnet_port"`
 	SSHPort      int    `toml:"ssh_port"       json:"ssh_port"`
-	UserAPIPort  int    `toml:"userapi_port"   json:"userapi_port"` // VirtAnd token-authenticated API
+	UserAPIPort  int    `toml:"userapi_port"   json:"userapi_port"` // VirtAnd user API
 	UserAPIBind  string `toml:"userapi_bind"   json:"userapi_bind"`
 	WebPort      int    `toml:"web_port"       json:"web_port"`      // browser-based BBS UI (internal/web)
 	WebBind      string `toml:"web_bind"       json:"web_bind"`

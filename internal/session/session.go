@@ -2583,7 +2583,7 @@ func (s *session) profileMenu() {
 		s.writeln(fmt.Sprintf("  %sExpert mode%s: %s", ansi.Color(ansi.BrightCyan), ansi.Reset(), yesNo(s.user.ExpertMode)))
 		s.writeln("")
 		s.writeln(ansi.Color(ansi.BrightWhite) +
-			"  [C]ity   [N]ame   [P]assword   [A]NSI   [M]sg editor   [L]ines/page   [X]fer   [E]xpert   [T]okens   [J]oin network   [Q]uit" +
+			"  [C]ity   [N]ame   [P]assword   [A]NSI   [M]sg editor   [L]ines/page   [X]fer   [E]xpert   [J]oin network   [Q]uit" +
 			ansi.Reset())
 		s.write(ansi.Prompt("Profile: "))
 		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
@@ -2651,8 +2651,6 @@ func (s *session) profileMenu() {
 			s.user.ExpertMode = !s.user.ExpertMode
 			_ = s.deps.Users.Update(s.user)
 			s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("Expert mode is now %s.", yesNo(s.user.ExpertMode))))
-		case "T":
-			s.manageAPITokens()
 		case "J":
 			s.applyToJoinNetwork()
 		case "Q", "":
@@ -2733,69 +2731,6 @@ func (s *session) applyToJoinNetwork() {
 	}
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
 		"Application #%d submitted. The sysop will review it and assign your node address.", id)))
-}
-
-// manageAPITokens lets a user generate or revoke their own API tokens, used
-// by the VirtAnd (Android) client app to authenticate against internal/userapi
-// without sending their BBS password.
-func (s *session) manageAPITokens() {
-	for {
-		s.writeln("")
-		s.writeln(ansi.Header("API Tokens (VirtAnd)"))
-		tokens, err := s.deps.Users.ListAPITokens(s.user.ID)
-		if err != nil {
-			s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
-			return
-		}
-		if len(tokens) == 0 {
-			s.writeln("  (no tokens issued yet)")
-		}
-		for i, t := range tokens {
-			status := ansi.Colorize(ansi.BrightGreen, "active")
-			if t.RevokedAt != "" {
-				status = ansi.Colorize(ansi.Red, "revoked")
-			}
-			label := t.DeviceLabel
-			if label == "" {
-				label = "(unlabeled)"
-			}
-			s.writeln(fmt.Sprintf("  %2d) %-20s created %s  [%s]", i+1, label, t.CreatedAt, status))
-		}
-		s.writeln("")
-		s.writeln(ansi.Color(ansi.BrightWhite) +
-			"  [G]enerate new   [R]evoke   [Q]uit" +
-			ansi.Reset())
-		s.write(ansi.Prompt("Tokens: "))
-		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
-		switch cmd {
-		case "G":
-			s.write(ansi.Prompt("Device label (e.g. \"My Phone\"): "))
-			label := strings.TrimSpace(s.readline())
-			raw, err := s.deps.Users.CreateAPIToken(s.user.ID, label)
-			if err != nil {
-				s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
-				continue
-			}
-			s.writeln("")
-			s.writeln(ansi.Colorize(ansi.BrightYellow, "Your new token (shown once — copy it now):"))
-			s.writeln("  " + raw)
-			s.writeln("")
-		case "R":
-			s.write(ansi.Prompt("Token # to revoke: "))
-			n, _ := strconv.Atoi(strings.TrimSpace(s.readline()))
-			if n < 1 || n > len(tokens) {
-				s.writeln(ansi.Colorize(ansi.Red, "Invalid selection."))
-				continue
-			}
-			if err := s.deps.Users.RevokeAPIToken(s.user.ID, tokens[n-1].ID); err != nil {
-				s.writeln(ansi.Colorize(ansi.Red, "Error: "+err.Error()))
-				continue
-			}
-			s.writeln(ansi.Colorize(ansi.BrightGreen, "Token revoked."))
-		case "Q", "":
-			return
-		}
-	}
 }
 
 // selectEditor shows the editor selection menu and saves the user's preference.
