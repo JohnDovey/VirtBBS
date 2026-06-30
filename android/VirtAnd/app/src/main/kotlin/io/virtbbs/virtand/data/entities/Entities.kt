@@ -17,6 +17,8 @@ data class ConferenceEntity(
     val description: String,
     val readSec: Int,
     val writeSec: Int,
+    /** Display network for grouping — "Local" for non-echomail areas. */
+    val network: String = "Local",
 )
 
 /** A message cached locally after a QWK download — read-only until synced again. */

@@ -31,7 +31,7 @@ blind the way the whole project would otherwise have to be.
 
 - **`core/UserApiClient.kt`** — JSON-over-TCP client for
   `internal/userapi`: one fresh socket per call, newline-delimited
-  JSON request/response, token auth.
+  JSON request/response, BBS username/password auth.
 - **`core/QwkPacket.kt`** — `parseQwkPacket()` decodes a downloaded QWK
   packet's `MESSAGES.DAT` (128-byte header records, soft-CR-wrapped body
   blocks) into a flat list of messages; `buildRepPacket()` encodes queued

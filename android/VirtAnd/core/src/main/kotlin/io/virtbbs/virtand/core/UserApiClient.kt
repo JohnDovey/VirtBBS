@@ -1,10 +1,9 @@
 // VirtAnd — UserApiClient.kt
 //
-// JSON-over-TCP client for VirtBBS's internal/userapi — the same
-// token-authenticated API used by VirtAnd. There's
-// no HTTP server on the BBS side, just a raw newline-delimited-JSON socket
-// protocol (see internal/userapi/server.go), so this opens a plain
-// java.net.Socket per call rather than using an HTTP client library.
+// JSON-over-TCP client for VirtBBS's internal/userapi. There's no HTTP
+// server on the BBS side — just a raw newline-delimited-JSON socket protocol
+// (see internal/userapi/server.go), so this opens a plain java.net.Socket per
+// call rather than using an HTTP client library.
 package io.virtbbs.virtand.core
 
 import kotlinx.serialization.json.Json
@@ -14,8 +13,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import java.io.ByteArrayOutputStream
 import java.net.Socket
 import java.nio.charset.StandardCharsets
 
@@ -29,25 +27,23 @@ class UserApiException(message: String) : Exception(message)
 class UserApiClient(
     var host: String = "127.0.0.1",
     var port: Int = 9998,
-    var token: String = "",
+    var username: String = "",
+    var password: String = "",
 ) {
     private val json = Json { ignoreUnknownKeys = true }
 
     /** Sends [method] with [params] (any JSON-serializable value, or null) and returns the "result" field. */
-    fun call(method: String, params: JsonElement? = null): JsonElement? {
-        val req = buildJsonRequest(method, params, token)
+    fun call(method: String, params: JsonElement? = null, readTimeoutMs: Int = timeoutFor(method)): JsonElement? {
+        val req = buildJsonRequest(method, params, username, password)
         val reqLine = json.encodeToString(JsonObject.serializer(), req) + "\n"
 
         Socket(host, port).use { socket ->
-            socket.soTimeout = 15_000
+            socket.soTimeout = readTimeoutMs
             val out = socket.getOutputStream()
             out.write(reqLine.toByteArray(StandardCharsets.UTF_8))
             out.flush()
 
-            val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
-            val respLine = reader.readLine()
-                ?: throw UserApiException("Empty response from server.")
-
+            val respLine = readResponseLine(socket.getInputStream())
             val resp = json.parseToJsonElement(respLine).jsonObject
             val error = resp["error"]
             if (error != null && error != JsonNull) {
@@ -58,7 +54,49 @@ class UserApiClient(
         }
     }
 
-    /** Quick connectivity check — true if a token-authenticated call succeeds. */
+    companion object {
+        /** Matches internal/userapi maxLineSize — single-line JSON must fit. */
+        private const val MAX_LINE_BYTES = 16 * 1024 * 1024
+        private const val DEFAULT_TIMEOUT_MS = 30_000
+        private const val BULK_TIMEOUT_MS = 300_000
+
+        private val bulkMethods = setOf(
+            "qwk.download",
+            "qwk.upload",
+            "files.download",
+            "files.upload",
+        )
+
+        fun timeoutFor(method: String): Int =
+            if (method in bulkMethods) BULK_TIMEOUT_MS else DEFAULT_TIMEOUT_MS
+
+        /**
+         * Reads one newline-terminated line without BufferedReader.readLine()'s
+         * practical size limits and with an explicit byte cap matching the server.
+         */
+        internal fun readResponseLine(input: java.io.InputStream): String {
+            val out = ByteArrayOutputStream(64 * 1024)
+            val chunk = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(chunk)
+                if (n == -1) break
+                for (i in 0 until n) {
+                    val b = chunk[i]
+                    if (b == '\n'.code.toByte()) {
+                        return out.toString(StandardCharsets.UTF_8.name())
+                    }
+                    if (out.size() >= MAX_LINE_BYTES) {
+                        throw UserApiException("Response exceeds maximum size ($MAX_LINE_BYTES bytes).")
+                    }
+                    out.write(b.toInt())
+                }
+            }
+            if (out.size() == 0) throw UserApiException("Empty response from server.")
+            return out.toString(StandardCharsets.UTF_8.name())
+        }
+    }
+
+    /** Quick connectivity check — true if an authenticated call succeeds. */
     fun testConnection(): Boolean = try {
         call("conferences.list")
         true
@@ -68,13 +106,23 @@ class UserApiClient(
 }
 
 /**
- * Builds the {"method", "params", "auth": {"token"}} envelope as a
+ * Builds the {"method", "params", "auth": {"username","password"}} envelope as a
  * JsonObject, matching internal/userapi's Request{Method,Params,Auth} shape.
  */
-fun buildJsonRequest(method: String, params: JsonElement?, token: String): JsonObject {
+fun buildJsonRequest(
+    method: String,
+    params: JsonElement?,
+    username: String,
+    password: String,
+): JsonObject {
     val map = linkedMapOf<String, JsonElement>(
         "method" to JsonPrimitive(method),
-        "auth" to JsonObject(mapOf("token" to JsonPrimitive(token))),
+        "auth" to JsonObject(
+            mapOf(
+                "username" to JsonPrimitive(username),
+                "password" to JsonPrimitive(password),
+            )
+        ),
     )
     if (params != null) map["params"] = params
     return JsonObject(map)

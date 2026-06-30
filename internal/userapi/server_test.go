@@ -26,7 +26,7 @@
 //
 // Change History:
 //   v0.6.0  2026-06-26  Phase 0 (VirtAnd/VirtTerm): smoke test against a temp
-//                        SQLite DB — token login, security-filtered conference
+//                        SQLite DB — password login, security-filtered conference
 //                        and file listing, nodelist-version check.
 // ============================================================================
 
@@ -94,11 +94,6 @@ func TestUserAPISmoke(t *testing.T) {
 		t.Fatalf("create user: %v", err)
 	}
 
-	rawToken, err := userStore.CreateAPIToken(u.ID, "test-device")
-	if err != nil {
-		t.Fatalf("CreateAPIToken: %v", err)
-	}
-
 	// Record a nodelist version so fido.nodelist.version has something to return.
 	if err := fido.RecordNodelistVersion(msgStore.DB(), "FidoNet", 42); err != nil {
 		t.Fatalf("RecordNodelistVersion: %v", err)
@@ -148,15 +143,19 @@ func TestUserAPISmoke(t *testing.T) {
 		return resp
 	}
 
-	// Bad token → unauthorized.
-	if resp := call("conferences.list", nil, AuthParams{Token: "bogus"}); resp.Error != "unauthorized" {
+	auth := func(user, pass string) AuthParams {
+		return AuthParams{Username: user, Password: pass}
+	}
+
+	// Bad password → unauthorized.
+	if resp := call("conferences.list", nil, auth("TestUser", "wrong")); resp.Error != "unauthorized" {
 		t.Fatalf("expected unauthorized, got %+v", resp)
 	}
 
-	// Good token, security-filtered conference list: the default "General"
+	// Good credentials, security-filtered conference list: the default "General"
 	// (ReadSec 10) plus our "Public" (ReadSec 10) should appear for a
 	// SecurityLevel=20 user, but "SysopOnly" (ReadSec 100) should not.
-	resp := call("conferences.list", nil, AuthParams{Token: rawToken})
+	resp := call("conferences.list", nil, auth("TestUser", "password123"))
 	if resp.Error != "" {
 		t.Fatalf("conferences.list error: %s", resp.Error)
 	}
@@ -166,29 +165,17 @@ func TestUserAPISmoke(t *testing.T) {
 	}
 
 	// files.dirs.list — should succeed (empty list) with no error.
-	if resp := call("files.dirs.list", nil, AuthParams{Token: rawToken}); resp.Error != "" {
+	if resp := call("files.dirs.list", nil, auth("TestUser", "password123")); resp.Error != "" {
 		t.Fatalf("files.dirs.list error: %s", resp.Error)
 	}
 
 	// fido.nodelist.version — should return the recorded version.
-	resp = call("fido.nodelist.version", map[string]string{"network": "FidoNet"}, AuthParams{Token: rawToken})
+	resp = call("fido.nodelist.version", map[string]string{"network": "FidoNet"}, auth("TestUser", "password123"))
 	if resp.Error != "" {
 		t.Fatalf("fido.nodelist.version error: %s", resp.Error)
 	}
 	m, ok := resp.Result.(map[string]any)
 	if !ok || m["network"] != "FidoNet" || m["node_count"].(float64) != 42 {
 		t.Fatalf("unexpected nodelist version result: %+v", resp.Result)
-	}
-
-	// Revoke the token, confirm it no longer authenticates.
-	tokens, err := userStore.ListAPITokens(u.ID)
-	if err != nil || len(tokens) != 1 {
-		t.Fatalf("ListAPITokens: %v / %+v", err, tokens)
-	}
-	if err := userStore.RevokeAPIToken(u.ID, tokens[0].ID); err != nil {
-		t.Fatalf("RevokeAPIToken: %v", err)
-	}
-	if resp := call("conferences.list", nil, AuthParams{Token: rawToken}); resp.Error != "unauthorized" {
-		t.Fatalf("expected unauthorized after revoke, got %+v", resp)
 	}
 }

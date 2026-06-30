@@ -22,6 +22,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.Switch
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -29,12 +30,14 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.virtbbs.virtand.data.entities.CachedMessageEntity
 import io.virtbbs.virtand.data.entities.QueuedDownloadEntity
@@ -55,15 +58,29 @@ fun MessagesScreen(viewModel: MainViewModel) {
             onBack = { selectedMessageId = null },
         )
         selectedConference == null -> {
+            val grouped = conferences
+                .groupBy { it.network }
+                .toList()
+                .sortedWith(compareBy({ (net, _) -> if (net == "Local") "" else net }))
             LazyColumn {
-                items(conferences) { conf ->
-                    ListItem(
-                        headlineContent = { Text(conf.name) },
-                        supportingContent = { Text(conf.description) },
-                        modifier = Modifier
-                            .padding(4.dp)
-                            .clickable { selectedConference = conf.id },
-                    )
+                grouped.forEach { (network, confs) ->
+                    item(key = "net-$network") {
+                        Text(
+                            network,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                    }
+                    items(confs, key = { it.id }) { conf ->
+                        ListItem(
+                            headlineContent = { Text(conf.name) },
+                            supportingContent = { Text(conf.description) },
+                            modifier = Modifier
+                                .padding(4.dp)
+                                .clickable { selectedConference = conf.id },
+                        )
+                    }
                 }
             }
         }
@@ -222,7 +239,8 @@ private fun ComposeDialog(
 fun FilesScreen(viewModel: MainViewModel) {
     val dirs by viewModel.fileDirs.collectAsState()
     val host by viewModel.settings.host.collectAsState(initial = "")
-    val token by viewModel.settings.token.collectAsState(initial = "")
+    val username by viewModel.settings.username.collectAsState(initial = "")
+    val password by viewModel.settings.password.collectAsState(initial = "")
     val port by viewModel.settings.userApiPort.collectAsState(initial = 9998)
     val searchResults by viewModel.fileSearchResults.collectAsState()
     var selectedDir by remember { mutableStateOf<Long?>(null) }
@@ -248,7 +266,7 @@ fun FilesScreen(viewModel: MainViewModel) {
                 label = { Text("Search files") },
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = { viewModel.searchFiles(host, port, token, searchQuery) }) {
+            Button(onClick = { viewModel.searchFiles(host, port, username, password, searchQuery) }) {
                 Text("Search")
             }
         }
@@ -387,18 +405,40 @@ private fun QueueCard(title: String, detail: String, onRemove: () -> Unit) {
 @Composable
 fun SettingsScreen(viewModel: MainViewModel) {
     val host by viewModel.settings.host.collectAsState(initial = "")
-    val token by viewModel.settings.token.collectAsState(initial = "")
+    val username by viewModel.settings.username.collectAsState(initial = "")
+    val password by viewModel.settings.password.collectAsState(initial = "")
     val port by viewModel.settings.userApiPort.collectAsState(initial = 9998)
     val networks by viewModel.settings.subscribedNetworks.collectAsState(initial = listOf("FidoNet"))
+    val availableNetworks by viewModel.availableNetworks.collectAsState()
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val nodeResults by viewModel.nodeSearchResults.collectAsState()
 
     var hostField by remember(host) { mutableStateOf(host) }
     var portField by remember(port) { mutableStateOf(port.toString()) }
-    var tokenField by remember(token) { mutableStateOf(token) }
-    var networksField by remember(networks) { mutableStateOf(networks.joinToString(",")) }
+    var usernameField by remember(username) { mutableStateOf(username) }
+    var passwordField by remember(password) { mutableStateOf(password) }
+    var subscribed by remember(networks) { mutableStateOf(networks.toSet()) }
     var nodeQuery by remember { mutableStateOf("") }
     var nodeNetwork by remember(networks) { mutableStateOf(networks.firstOrNull() ?: "FidoNet") }
+
+    LaunchedEffect(hostField, portField, usernameField, passwordField) {
+        if (hostField.isNotBlank() && usernameField.isNotBlank() && passwordField.isNotBlank()) {
+            viewModel.fetchAvailableNetworks(
+                hostField,
+                portField.toIntOrNull() ?: 9998,
+                usernameField,
+                passwordField,
+            )
+        }
+    }
+
+    LaunchedEffect(availableNetworks) {
+        if (availableNetworks.isNotEmpty()) {
+            subscribed = subscribed.intersect(availableNetworks.toSet()).ifEmpty {
+                availableNetworks.take(1).toSet()
+            }
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -407,26 +447,58 @@ fun SettingsScreen(viewModel: MainViewModel) {
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text("Generate a token on the BBS: Profile → [T]okens → [G]enerate.")
+        Text("Sign in with your normal BBS username and password.")
         TextField(value = hostField, onValueChange = { hostField = it }, label = { Text("Host") })
         TextField(value = portField, onValueChange = { portField = it }, label = { Text("User API Port") })
-        TextField(value = tokenField, onValueChange = { tokenField = it }, label = { Text("API Token") })
+        TextField(value = usernameField, onValueChange = { usernameField = it }, label = { Text("Username") })
         TextField(
-            value = networksField,
-            onValueChange = { networksField = it },
-            label = { Text("Subscribed FidoNet networks (comma-separated)") },
+            value = passwordField,
+            onValueChange = { passwordField = it },
+            label = { Text("Password") },
+            visualTransformation = PasswordVisualTransformation(),
         )
+        Text("FidoNet networks", fontWeight = FontWeight.Bold)
+        if (availableNetworks.isEmpty()) {
+            Text(
+                "Save credentials and test connection to load available networks.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        } else {
+            availableNetworks.forEach { net ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text(net, modifier = Modifier.weight(1f))
+                    Switch(
+                        checked = net in subscribed,
+                        onCheckedChange = { enabled ->
+                            subscribed = if (enabled) subscribed + net else subscribed - net
+                        },
+                    )
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
                 viewModel.saveSettings(
                     hostField,
                     portField.toIntOrNull() ?: 9998,
-                    tokenField,
-                    networksField.split(",").map { it.trim() }.filter { it.isNotEmpty() },
+                    usernameField,
+                    passwordField,
+                    subscribed.toList().sorted(),
                 )
             }) { Text("Save") }
             OutlinedButton(onClick = {
-                viewModel.testConnection(hostField, portField.toIntOrNull() ?: 9998, tokenField)
+                viewModel.testConnection(hostField, portField.toIntOrNull() ?: 9998, usernameField, passwordField)
+                viewModel.fetchAvailableNetworks(
+                    hostField,
+                    portField.toIntOrNull() ?: 9998,
+                    usernameField,
+                    passwordField,
+                )
             }) { Text("Test connection") }
         }
         if (connectionStatus.isNotBlank()) {
@@ -434,7 +506,14 @@ fun SettingsScreen(viewModel: MainViewModel) {
         }
 
         Text("FidoNet node lookup", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-        TextField(value = nodeNetwork, onValueChange = { nodeNetwork = it }, label = { Text("Network") })
+        if (subscribed.isNotEmpty()) {
+            Text("Network: $nodeNetwork", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                subscribed.sorted().forEach { net ->
+                    OutlinedButton(onClick = { nodeNetwork = net }) { Text(net) }
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextField(
                 value = nodeQuery,
@@ -443,7 +522,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 modifier = Modifier.weight(1f),
             )
             Button(onClick = {
-                viewModel.searchNodes(hostField, portField.toIntOrNull() ?: 9998, tokenField, nodeNetwork, nodeQuery)
+                viewModel.searchNodes(hostField, portField.toIntOrNull() ?: 9998, usernameField, passwordField, nodeNetwork, nodeQuery)
             }) { Text("Go") }
         }
         nodeResults.forEach { n ->

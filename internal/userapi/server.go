@@ -40,11 +40,11 @@
 //                        window title bar) without scraping the terminal stream.
 // ============================================================================
 
-// Package userapi provides a token-authenticated JSON-over-TCP API for
-// VirtAnd, the Android point client. Callers authenticate with a per-device
-// API token (internal/users.Store.AuthenticateToken), never the sysop password
-// or a user's BBS login password. Sysop administration uses the web UI
-// (internal/web, /admin/*), not this API.
+// Package userapi provides a password-authenticated JSON-over-TCP API for
+// VirtAnd, the Android point client. Callers authenticate with their normal
+// BBS username and password (internal/users.Store.Authenticate) on every
+// request. Sysop administration uses the web UI (internal/web, /admin/*),
+// not this API.
 package userapi
 
 import (
@@ -69,18 +69,17 @@ import (
 // fit on a single newline-delimited JSON line.
 const maxLineSize = 16 * 1024 * 1024
 
-// Request is a JSON-RPC-style request (method, params, auth token).
+// Request is a JSON-RPC-style request (method, params, auth).
 type Request struct {
 	Method string          `json:"method"`
 	Params json.RawMessage `json:"params,omitempty"`
 	Auth   AuthParams      `json:"auth"`
 }
 
-// AuthParams carries a per-device API token on every request (see
-// users.Store.CreateAPIToken / AuthenticateToken) — never the user's
-// BBS password.
+// AuthParams carries the caller's BBS login on every request.
 type AuthParams struct {
-	Token string `json:"token"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // Response wraps the result or an error string.
@@ -131,7 +130,7 @@ func (s *Server) handle(c net.Conn) {
 			_ = enc.Encode(Response{Error: "invalid JSON"})
 			continue
 		}
-		u, err := s.Deps.Users.AuthenticateToken(req.Auth.Token)
+		u, err := s.Deps.Users.Authenticate(req.Auth.Username, req.Auth.Password)
 		if err != nil {
 			_ = enc.Encode(Response{Error: "unauthorized"})
 			continue
@@ -151,7 +150,7 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 	// session.whoami lets a client (VirtAnd) show
 	// the logged-in user's name and the BBS's name — e.g. in a window
 	// title bar — without needing to scrape it out of the terminal byte
-	// stream. No params; identity comes entirely from the auth token.
+	// stream. No params; identity comes entirely from the authenticated user.
 	case "session.whoami":
 		return map[string]any{
 			"name":           u.Name,
@@ -402,6 +401,14 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 			return nil, err
 		}
 		return fido.GetNodelistVersion(s.Deps.Messages.DB(), p.Network)
+
+	case "fido.networks.list":
+		cfg := config.Get()
+		var names []string
+		for _, nd := range cfg.Fido.AllNetworks() {
+			names = append(names, nd.Name)
+		}
+		return names, nil
 
 	default:
 		return nil, fmt.Errorf("unknown method: %s", req.Method)

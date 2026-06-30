@@ -19,7 +19,7 @@ import io.virtbbs.virtand.data.entities.QueuedUploadEntity
 
 @Dao
 interface ConferenceDao {
-    @Query("SELECT * FROM conferences ORDER BY name")
+    @Query("SELECT * FROM conferences ORDER BY network, name")
     fun observeAll(): Flow<List<ConferenceEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

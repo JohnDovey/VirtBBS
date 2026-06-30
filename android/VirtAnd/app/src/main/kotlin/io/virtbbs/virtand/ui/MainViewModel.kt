@@ -78,6 +78,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _nodeSearchResults = MutableStateFlow<List<FidoNodeResult>>(emptyList())
     val nodeSearchResults: StateFlow<List<FidoNodeResult>> = _nodeSearchResults
 
+    private val _availableNetworks = MutableStateFlow<List<String>>(emptyList())
+    val availableNetworks: StateFlow<List<String>> = _availableNetworks
+
     fun messagesFor(conferenceId: Int) = db.messageDao().observeByConference(conferenceId)
     fun filesFor(dirId: Long) = db.fileDao().observeFiles(dirId)
 
@@ -102,15 +105,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun testConnection(host: String, port: Int, token: String) {
+    fun testConnection(host: String, port: Int, username: String, password: String) {
         viewModelScope.launch {
             _connectionStatus.value = "Testing…"
             _connectionStatus.value = withContext(Dispatchers.IO) {
-                if (host.isBlank() || token.isBlank()) {
-                    return@withContext "Enter host and token first."
+                if (host.isBlank() || username.isBlank() || password.isBlank()) {
+                    return@withContext "Enter host, username, and password first."
                 }
                 try {
-                    val api = UserApiClient(host.trim(), port, token.trim())
+                    val api = UserApiClient(host.trim(), port, username.trim(), password)
                     val result = api.call("session.whoami") ?: return@withContext "Empty response."
                     val o = result.jsonObject
                     val name = o["name"]?.jsonPrimitive?.content ?: "?"
@@ -191,13 +194,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { db.fileDao().removeQueuedDownload(item) }
     }
 
-    fun searchFiles(host: String, port: Int, token: String, query: String) {
+    fun searchFiles(host: String, port: Int, username: String, password: String, query: String) {
         viewModelScope.launch {
             _fileSearchResults.value = emptyList()
-            if (query.isBlank() || host.isBlank() || token.isBlank()) return@launch
+            if (query.isBlank() || host.isBlank() || username.isBlank() || password.isBlank()) return@launch
             _fileSearchResults.value = withContext(Dispatchers.IO) {
                 try {
-                    val api = UserApiClient(host.trim(), port, token.trim())
+                    val api = UserApiClient(host.trim(), port, username.trim(), password)
                     val result = api.call("files.search", JsonObject(mapOf("Query" to JsonPrimitive(query))))
                         ?: return@withContext emptyList()
                     result.jsonArray.map { f ->
@@ -219,13 +222,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun searchNodes(host: String, port: Int, token: String, network: String, query: String) {
+    fun searchNodes(host: String, port: Int, username: String, password: String, network: String, query: String) {
         viewModelScope.launch {
             _nodeSearchResults.value = emptyList()
-            if (query.isBlank() || host.isBlank() || token.isBlank()) return@launch
+            if (query.isBlank() || host.isBlank() || username.isBlank() || password.isBlank()) return@launch
             _nodeSearchResults.value = withContext(Dispatchers.IO) {
                 try {
-                    val api = UserApiClient(host.trim(), port, token.trim())
+                    val api = UserApiClient(host.trim(), port, username.trim(), password)
                     val result = api.call(
                         "fido.nodes.search",
                         JsonObject(
@@ -259,9 +262,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveSettings(host: String, port: Int, token: String, networks: List<String>) {
+    fun saveSettings(host: String, port: Int, username: String, password: String, networks: List<String>) {
         viewModelScope.launch {
-            settings.save(host, port, token, networks)
+            settings.save(host, port, username, password, networks)
+        }
+    }
+
+    fun fetchAvailableNetworks(host: String, port: Int, username: String, password: String) {
+        viewModelScope.launch {
+            if (host.isBlank() || username.isBlank() || password.isBlank()) return@launch
+            _availableNetworks.value = withContext(Dispatchers.IO) {
+                try {
+                    val api = UserApiClient(host.trim(), port, username.trim(), password)
+                    val result = api.call("fido.networks.list") ?: return@withContext emptyList()
+                    result.jsonArray.map { it.jsonPrimitive.content }
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
         }
     }
 

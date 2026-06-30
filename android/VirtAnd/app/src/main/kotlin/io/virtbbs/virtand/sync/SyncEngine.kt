@@ -57,10 +57,15 @@ class SyncEngine(private val context: Context) {
 
     suspend fun synchronize(): SyncResult = withContext(Dispatchers.IO) {
         val cfg = settings.snapshot()
-        if (cfg.host.isBlank() || cfg.token.isBlank()) {
-            return@withContext SyncResult(0, 0, 0, 0, emptyList(), error = "Not configured — set host/token first.")
+        if (cfg.host.isBlank() || cfg.username.isBlank() || cfg.password.isBlank()) {
+            return@withContext SyncResult(0, 0, 0, 0, emptyList(), error = "Not configured — set host, username, and password first.")
         }
-        val api = UserApiClient(host = cfg.host, port = cfg.userApiPort, token = cfg.token)
+        val api = UserApiClient(
+            host = cfg.host,
+            port = cfg.userApiPort,
+            username = cfg.username,
+            password = cfg.password,
+        )
 
         try {
             val sessionInfo = refreshSessionInfo(api)
@@ -99,9 +104,18 @@ class SyncEngine(private val context: Context) {
                 description = o["Description"]?.jsonPrimitive?.content ?: "",
                 readSec = o["ReadSec"]?.jsonPrimitive?.int ?: 0,
                 writeSec = o["WriteSec"]?.jsonPrimitive?.int ?: 0,
+                network = conferenceNetworkLabel(o),
             )
         }
         runBlockingDb { db.conferenceDao().upsertAll(entities) }
+    }
+
+    /** Maps server Conference JSON to a display network — "Local" for non-echomail. */
+    private fun conferenceNetworkLabel(o: JsonObject): String {
+        val echo = o["Echo"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
+        if (!echo) return "Local"
+        val raw = o["Network"]?.jsonPrimitive?.content?.trim().orEmpty()
+        return raw.ifEmpty { "FidoNet" }
     }
 
     /** Downloads a QWK packet (new-since-last-sync messages, all conferences) and caches it locally. */
@@ -249,7 +263,7 @@ class SyncEngine(private val context: Context) {
                 conferenceId = it.conferenceId,
                 refNum = it.refNum,
                 toName = it.toName,
-                fromName = "", // server attributes authorship from the authenticated token, not this field
+                fromName = "", // server attributes authorship from the authenticated user, not this field
                 subject = it.subject,
                 body = it.body,
             )
