@@ -43,7 +43,7 @@ interface MessageDao {
     @Query("SELECT COALESCE(MAX(msgNumber), 0) FROM cached_messages WHERE conferenceId = :conferenceId")
     suspend fun highMsgNumber(conferenceId: Int): Int
 
-    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(messages: List<CachedMessageEntity>)
 
     @Update

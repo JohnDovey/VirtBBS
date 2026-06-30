@@ -153,7 +153,7 @@ func AppendToBody(body string, files []DecodedFile) string {
 	}
 	var sb strings.Builder
 	sb.WriteString(strings.TrimRight(body, "\r\n"))
-	sb.WriteString("\r\r")
+	sb.WriteString("\r\n\r\n")
 	for _, f := range files {
 		sb.WriteString(Encode(f.Data, f.Filename))
 		sb.WriteString("\r")

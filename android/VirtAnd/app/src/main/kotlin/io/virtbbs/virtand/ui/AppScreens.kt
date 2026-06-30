@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,11 +37,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.virtbbs.virtand.data.entities.CachedMessageEntity
+import io.virtbbs.virtand.data.entities.ConferenceEntity
 import io.virtbbs.virtand.data.entities.QueuedDownloadEntity
 import io.virtbbs.virtand.data.entities.QueuedReplyEntity
 import io.virtbbs.virtand.data.entities.QueuedUploadEntity
@@ -63,6 +67,14 @@ fun MessagesScreen(viewModel: MainViewModel) {
                 .toList()
                 .sortedWith(compareBy({ (net, _) -> if (net == "Local") "" else net }))
             LazyColumn {
+                item(key = "stats-legend") {
+                    Text(
+                        "Total / Unread / Last read",
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 grouped.forEach { (network, confs) ->
                     item(key = "net-$network") {
                         Text(
@@ -73,12 +85,9 @@ fun MessagesScreen(viewModel: MainViewModel) {
                         )
                     }
                     items(confs, key = { it.id }) { conf ->
-                        ListItem(
-                            headlineContent = { Text(conf.name) },
-                            supportingContent = { Text(conf.description) },
-                            modifier = Modifier
-                                .padding(4.dp)
-                                .clickable { selectedConference = conf.id },
+                        ConferenceListItem(
+                            conf = conf,
+                            onOpen = { selectedConference = conf.id },
                         )
                     }
                 }
@@ -115,6 +124,55 @@ fun MessagesScreen(viewModel: MainViewModel) {
                         showCompose = false
                     },
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConferenceListItem(conf: ConferenceEntity, onOpen: () -> Unit) {
+    ListItem(
+        headlineContent = { Text(conf.name) },
+        supportingContent = {
+            if (conf.description.isNotBlank()) {
+                Text(conf.description)
+            }
+        },
+        trailingContent = {
+            Text(
+                text = "${conf.total}/${conf.unread}/${conf.lastRead}",
+                style = MaterialTheme.typography.labelMedium,
+                fontFamily = FontFamily.Monospace,
+                color = if (conf.unread > 0) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        },
+        modifier = Modifier
+            .padding(4.dp)
+            .clickable(onClick = onOpen),
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun NetworkChoiceButtons(
+    networks: List<String>,
+    onSelect: (String?) -> Unit,
+) {
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedButton(onClick = { onSelect(null) }) {
+            Text("All")
+        }
+        networks.filter { it.isNotBlank() }.forEach { net ->
+            OutlinedButton(onClick = { onSelect(net) }) {
+                Text(text = net, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -467,7 +525,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
                 style = MaterialTheme.typography.bodySmall,
             )
         } else {
-            availableNetworks.forEach { net ->
+            availableNetworks.filter { it.isNotBlank() }.forEach { net ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -509,18 +567,17 @@ fun SettingsScreen(viewModel: MainViewModel) {
         }
 
         Text("FidoNet node lookup", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp))
-        val networkChoices = if (availableNetworks.isNotEmpty()) availableNetworks else subscribed.sorted()
+        val networkChoices = (if (availableNetworks.isNotEmpty()) availableNetworks else subscribed.sorted())
+            .filter { it.isNotBlank() }
         if (networkChoices.isNotEmpty()) {
             Text(
                 "Network: ${nodeNetwork ?: "All"}",
                 style = MaterialTheme.typography.bodySmall,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { nodeNetwork = null }) { Text("All") }
-                networkChoices.forEach { net ->
-                    OutlinedButton(onClick = { nodeNetwork = net }) { Text(net) }
-                }
-            }
+            NetworkChoiceButtons(
+                networks = networkChoices,
+                onSelect = { nodeNetwork = it },
+            )
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             TextField(

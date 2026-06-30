@@ -311,7 +311,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 try {
                     val api = UserApiClient(host.trim(), port, username.trim(), password)
                     val result = api.call("fido.networks.list") ?: return@withContext emptyList()
-                    result.asJsonArrayOrEmpty().map { it.jsonPrimitive.content }
+                    result.asJsonArrayOrEmpty().map { it.jsonPrimitive.content }.filter { it.isNotBlank() }
                 } catch (_: Exception) {
                     emptyList()
                 }

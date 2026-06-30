@@ -31,7 +31,7 @@ import io.virtbbs.virtand.data.entities.QueuedUploadEntity
         QueuedDownloadEntity::class,
         NodelistVersionEntity::class,
     ],
-    version = 2,
+    version = 4,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -51,10 +51,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_cached_messages_conferenceId_msgNumber " +
+                        "ON cached_messages(conferenceId, msgNumber)",
+                )
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE conferences ADD COLUMN total INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE conferences ADD COLUMN unread INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE conferences ADD COLUMN lastRead INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, AppDatabase::class.java, "virtand.db")
-                    .addMigrations(MIGRATION_1_2)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .build()
                     .also { instance = it }
             }

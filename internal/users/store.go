@@ -109,6 +109,7 @@ func (s *Store) migrate() error {
 		`ALTER TABLE users ADD COLUMN editor_type TEXT NOT NULL DEFAULT 'simple'`,
 		`ALTER TABLE users ADD COLUMN real_name TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'en'`,
+		`ALTER TABLE user_conferences ADD COLUMN qwk_last_msg INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range alters {
 		if _, err := s.db.Exec(stmt); err != nil {
@@ -343,6 +344,27 @@ func (s *Store) SetLastRead(userID int64, conferenceID, lastMsgRead int) error {
 		VALUES (?,?,?)
 		ON CONFLICT(user_id, conference_id) DO UPDATE SET last_msg_read=excluded.last_msg_read`,
 		userID, conferenceID, lastMsgRead)
+	return err
+}
+
+// GetQwkLast returns the highest message number already delivered in a QWK packet.
+// Independent of last_msg_read (web/terminal read position).
+func (s *Store) GetQwkLast(userID int64, conferenceID int) int {
+	var n int
+	_ = s.db.QueryRow(
+		`SELECT qwk_last_msg FROM user_conferences WHERE user_id=? AND conference_id=?`,
+		userID, conferenceID,
+	).Scan(&n)
+	return n
+}
+
+// SetQwkLast records the highest message number included in a QWK download.
+func (s *Store) SetQwkLast(userID int64, conferenceID, lastMsgIncluded int) error {
+	_, err := s.db.Exec(`
+		INSERT INTO user_conferences (user_id, conference_id, qwk_last_msg)
+		VALUES (?,?,?)
+		ON CONFLICT(user_id, conference_id) DO UPDATE SET qwk_last_msg=excluded.qwk_last_msg`,
+		userID, conferenceID, lastMsgIncluded)
 	return err
 }
 

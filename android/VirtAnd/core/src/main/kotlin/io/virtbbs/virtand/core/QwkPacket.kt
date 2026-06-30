@@ -64,6 +64,12 @@ data class QwkReply(
  * .NDX files and considerably simpler).
  */
 fun parseQwkPacket(zipBytes: ByteArray): List<QwkMessage> {
+    val messages = parseQwkMessagesDat(zipBytes)
+    return mergeQwkAttachments(zipBytes, messages)
+}
+
+/** Reads MESSAGES.DAT only (no ATTACH sidecars). */
+internal fun parseQwkMessagesDat(zipBytes: ByteArray): List<QwkMessage> {
     val messagesDat = readZipEntry(zipBytes, "MESSAGES.DAT")
         ?: throw IllegalArgumentException("QWK packet has no MESSAGES.DAT")
 
@@ -152,6 +158,41 @@ private fun decodeHeader(data: ByteArray, offset: Int): MessageHeader {
 private fun decodeBody(data: ByteArray, start: Int, end: Int): String {
     val raw = String(data, start, (end - start).coerceAtLeast(0), RAW_BYTES_CHARSET)
     return raw.replace(SOFT_CR.toChar().toString(), "\r\n").trimEnd(' ')
+}
+
+/**
+ * Merges VirtBBS QWK extension attachments (ATTACH.IDX + ATTACH sidecar UUE files)
+ * into message bodies when uuencode exceeds the classic 2-digit NumBlocks limit.
+ */
+internal fun mergeQwkAttachments(zipBytes: ByteArray, messages: List<QwkMessage>): List<QwkMessage> {
+    val idxBytes = readZipEntry(zipBytes, "ATTACH.IDX") ?: return messages
+    val idxText = String(idxBytes, RAW_BYTES_CHARSET)
+    val extra = mutableMapOf<Pair<Int, Int>, String>()
+    for (rawLine in idxText.split('\n', '\r')) {
+        val line = rawLine.trim()
+        if (line.isEmpty()) continue
+        val parts = line.split(',').map { it.trim() }
+        if (parts.size < 4) continue
+        val confId = parts[0].toIntOrNull() ?: continue
+        val msgNum = parts[1].toIntOrNull() ?: continue
+        val zipPath = parts[3]
+        val uueBytes = readZipEntry(zipBytes, zipPath) ?: continue
+        val uueText = String(uueBytes, RAW_BYTES_CHARSET).trim()
+        if (uueText.isEmpty()) continue
+        val key = confId to msgNum
+        extra[key] = if (key in extra) extra.getValue(key) + "\r\n\r\n" + uueText else uueText
+    }
+    if (extra.isEmpty()) return messages
+    return messages.map { msg ->
+        val attach = extra[msg.conferenceId to msg.msgNumber] ?: return@map msg
+        msg.copy(
+            body = buildString {
+                append(msg.body.trimEnd())
+                append("\r\n\r\n")
+                append(attach)
+            },
+        )
+    }
 }
 
 // ── ZIP helpers ──────────────────────────────────────────────────────────────

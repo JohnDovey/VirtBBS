@@ -113,4 +113,40 @@ class QwkPacketTest {
             assertTrue(text.endsWith("My reply.\r\nSecond line."))
         }
     }
+
+    @Test
+    fun mergesAttachSidecarIntoMessageBody() {
+        val msg = QwkMessage(1, 42, "06-28-26", "10:00", "All", "Sysop", "With file", "Message text.")
+        val datPacket = encodeTestQwkPacket(listOf(msg))
+        val uue = "begin 644 test.txt\r\n#0V%T\r\n`\r\nend\r\n"
+        val idx = "1,42,test.txt,ATTACH/001/0000042_0.UUE\r\n"
+
+        val mergedPacket = ByteArrayOutputStream().use { out ->
+            ZipInputStream(datPacket.inputStream()).use { zis ->
+                ZipOutputStream(out).use { zos ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        zos.putNextEntry(ZipEntry(entry.name))
+                        zos.write(zis.readBytes())
+                        zos.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                    zos.putNextEntry(ZipEntry("ATTACH.IDX"))
+                    zos.write(idx.toByteArray(Charsets.ISO_8859_1))
+                    zos.closeEntry()
+                    zos.putNextEntry(ZipEntry("ATTACH/001/0000042_0.UUE"))
+                    zos.write(uue.toByteArray(Charsets.ISO_8859_1))
+                    zos.closeEntry()
+                }
+            }
+            out.toByteArray()
+        }
+
+        val parsed = parseQwkPacket(mergedPacket)
+        assertEquals(1, parsed.size)
+        assertEquals(
+            "Message text.\r\n\r\n$uue".trimEnd(),
+            parsed[0].body.trimEnd(),
+        )
+    }
 }

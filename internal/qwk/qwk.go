@@ -73,12 +73,18 @@ import (
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fido/uuencode"
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/postname"
 	"github.com/virtbbs/virtbbs/internal/users"
 )
 
 const blockSize = 128
+
+// maxQwkBodyBlocks is the maximum 128-byte body blocks per MESSAGES.DAT record.
+// QWK NumBlocks is a 2-digit field (header block + body blocks), so 98 body
+// blocks ≈ 12 KiB. Larger payloads use ATTACH/*.UUE sidecar files in the ZIP.
+const maxQwkBodyBlocks = 98
 
 // softCR is the QWK soft-line-break marker (0xE3) used in MESSAGES.DAT body
 // text in place of "\r\n" — readers convert it back to a line break on display.
@@ -103,6 +109,16 @@ type messageHeader struct {
 	_pad      byte   // 1 char:  reserved
 }
 
+// packetAttach is a message attachment stored outside MESSAGES.DAT (VirtBBS
+// QWK extension for payloads larger than the 2-digit NumBlocks field allows).
+type packetAttach struct {
+	ConfID   int
+	MsgNum   int
+	Filename string
+	ZipPath  string
+	UUE      string
+}
+
 func leftPadNum(n, width int) string {
 	s := strconv.Itoa(n)
 	if len(s) >= width {
@@ -119,6 +135,29 @@ func fixedWidth(s string, width int) string {
 		return string(b[:width])
 	}
 	return string(b) + strings.Repeat(" ", width-len(b))
+}
+
+// qwkMessageBody returns inline MESSAGES.DAT text and any attachment files that
+// must be shipped in ATTACH/*.UUE sidecars when the uuencoded body exceeds the
+// classic QWK 2-digit NumBlocks limit.
+func qwkMessageBody(m *messages.Message, conf *conferences.Conference, msgStore *messages.Store, attachRoot string) (inline string, sidecar []messages.AttachmentInput) {
+	inline = m.Body
+	if attachRoot == "" || msgStore == nil {
+		return inline, nil
+	}
+	files, err := msgStore.AttachmentData(attachRoot, m.ID)
+	if err != nil || len(files) == 0 {
+		return inline, nil
+	}
+	maxBytes := maxQwkBodyBlocks * blockSize
+	withAtt := fido.BodyWithAttachments(inline, files, maxBytes)
+	if withAtt != inline && len(encodeBody(withAtt))/blockSize <= maxQwkBodyBlocks {
+		return withAtt, nil
+	}
+	if len(files) > 0 {
+		return inline, files
+	}
+	return inline, nil
 }
 
 // encode renders the header as exactly 128 bytes.
@@ -169,7 +208,9 @@ func decodeHeader(b []byte) (*messageHeader, error) {
 // encodeBody soft-wraps body text into 128-byte blocks using the 0xE3
 // line-break marker in place of newlines, space-padding the final block.
 func encodeBody(body string) []byte {
-	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	normalized := strings.ReplaceAll(body, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	lines := strings.Split(normalized, "\n")
 	var buf bytes.Buffer
 	for _, line := range lines {
 		buf.WriteString(line)
@@ -207,10 +248,11 @@ type confInfo struct {
 }
 
 // BuildPacket builds a QWK packet (as a ZIP archive's raw bytes) containing
-// every message new since the user's last QWK sync in each of the given
-// conferences, sourced from messages.Store.ListFrom / users.Store.GetLastRead.
-// On success, the user's last-read marker for each conference is advanced
-// to the highest message number included, via users.Store.SetLastRead.
+// every message new since the user's last QWK download in each of the given
+// conferences, sourced from messages.Store.ListFrom / users.Store.GetQwkLast.
+// On success, the user's QWK marker for each conference is advanced
+// to the highest message number included, via users.Store.SetQwkLast.
+// (last_msg_read — web/terminal read position — is not used.)
 func BuildPacket(meta PacketMeta, userStore *users.Store, msgStore *messages.Store, confStore *conferences.Store, userID int64, conferenceIDs []int) ([]byte, error) {
 	caller, err := userStore.GetByID(userID)
 	if err != nil {
@@ -223,6 +265,11 @@ func BuildPacket(meta PacketMeta, userStore *users.Store, msgStore *messages.Sto
 
 	var confs []*confInfo
 	totalMessages := 0
+	var packetAttaches []packetAttach
+	attachRoot := ""
+	if cfg := config.Get(); cfg != nil {
+		attachRoot = cfg.AttachmentsDir()
+	}
 
 	for _, cid := range conferenceIDs {
 		conf, err := confStore.Get(cid)
@@ -231,16 +278,32 @@ func BuildPacket(meta PacketMeta, userStore *users.Store, msgStore *messages.Sto
 		}
 		ci := &confInfo{ID: cid, Name: conf.Name}
 
-		lastRead := userStore.GetLastRead(userID, cid)
-		msgs, err := msgStore.ListFrom(cid, lastRead+1, 100000)
+		lastQwk := userStore.GetQwkLast(userID, cid)
+		msgs, err := msgStore.ListFrom(cid, lastQwk+1, 100000)
 		if err != nil {
 			return nil, fmt.Errorf("qwk: list messages in conference %d: %w", cid, err)
 		}
 
-		highWater := lastRead
+		highWater := lastQwk
 		for _, m := range msgs {
-			bodyBlocks := encodeBody(m.Body)
-			numBlocks := 1 + len(bodyBlocks)/blockSize
+			inline, sidecarFiles := qwkMessageBody(m, conf, msgStore, attachRoot)
+			bodyBlocks := encodeBody(inline)
+			bodyBlockCount := len(bodyBlocks) / blockSize
+			if bodyBlockCount > maxQwkBodyBlocks {
+				return nil, fmt.Errorf("qwk: message %d in conference %d exceeds QWK body limit", m.MsgNumber, cid)
+			}
+			numBlocks := 1 + bodyBlockCount
+
+			for i, f := range sidecarFiles {
+				zipPath := fmt.Sprintf("ATTACH/%03d/%07d_%d.UUE", cid, m.MsgNumber, i)
+				packetAttaches = append(packetAttaches, packetAttach{
+					ConfID:   cid,
+					MsgNum:   m.MsgNumber,
+					Filename: f.Filename,
+					ZipPath:  zipPath,
+					UUE:      uuencode.Encode(f.Data, f.Filename),
+				})
+			}
 
 			blockNum := uint32(messagesDat.Len()/blockSize) + 1 // 1-based
 			ci.ndx = append(ci.ndx, blockNum)
@@ -267,9 +330,9 @@ func BuildPacket(meta PacketMeta, userStore *users.Store, msgStore *messages.Sto
 			}
 		}
 
-		if highWater > lastRead {
-			if err := userStore.SetLastRead(userID, cid, highWater); err != nil {
-				return nil, fmt.Errorf("qwk: update last-read for conference %d: %w", cid, err)
+		if highWater > lastQwk {
+			if err := userStore.SetQwkLast(userID, cid, highWater); err != nil {
+				return nil, fmt.Errorf("qwk: update QWK marker for conference %d: %w", cid, err)
 			}
 		}
 		confs = append(confs, ci)
@@ -302,6 +365,19 @@ func BuildPacket(meta PacketMeta, userStore *users.Store, msgStore *messages.Sto
 		}
 		name := fmt.Sprintf("%03d.NDX", ci.ID)
 		if err := writeZipFile(zw, name, ndxBytes); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(packetAttaches) > 0 {
+		var idx bytes.Buffer
+		for _, a := range packetAttaches {
+			if err := writeZipFile(zw, a.ZipPath, []byte(a.UUE)); err != nil {
+				return nil, err
+			}
+			fmt.Fprintf(&idx, "%d,%d,%s,%s\r\n", a.ConfID, a.MsgNum, a.Filename, a.ZipPath)
+		}
+		if err := writeZipFile(zw, "ATTACH.IDX", idx.Bytes()); err != nil {
 			return nil, err
 		}
 	}

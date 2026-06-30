@@ -88,6 +88,15 @@ type Response struct {
 	Error  string `json:"error,omitempty"`
 }
 
+// conferenceListItem is a conference visible to the caller plus read stats
+// (same Total/Unread/LastRead badge as the web messages picker).
+type conferenceListItem struct {
+	conferences.Conference
+	Total    int `json:"Total"`
+	Unread   int `json:"Unread"`
+	LastRead int `json:"LastRead"`
+}
+
 // Deps bundles store dependencies.
 type Deps struct {
 	Users       *users.Store
@@ -187,11 +196,26 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		var out []*conferences.Conference
+		unread, _ := s.Deps.Users.NewMessageCounts(u.ID)
+		highMap, _ := s.Deps.Messages.HighMsgNumberByConference()
+		lastMap := s.Deps.Users.LastReadMap(u.ID)
+		var out []conferenceListItem
 		for _, c := range all {
-			if u.SecurityLevel >= c.ReadSec {
-				out = append(out, c)
+			if u.SecurityLevel < c.ReadSec {
+				continue
 			}
+			total := highMap[c.ID]
+			lastRead := lastMap[c.ID]
+			if lastRead > total {
+				_ = s.Deps.Users.SetLastRead(u.ID, c.ID, total)
+				lastRead = total
+			}
+			out = append(out, conferenceListItem{
+				Conference: *c,
+				Total:      total,
+				Unread:     unread[c.ID],
+				LastRead:   lastRead,
+			})
 		}
 		return nonNilSlice(out), nil
 
@@ -433,7 +457,9 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 		cfg := config.Get()
 		var names []string
 		for _, nd := range cfg.Fido.AllNetworks() {
-			names = append(names, nd.Name)
+			if nd.Name != "" {
+				names = append(names, nd.Name)
+			}
 		}
 		return nonNilSlice(names), nil
 

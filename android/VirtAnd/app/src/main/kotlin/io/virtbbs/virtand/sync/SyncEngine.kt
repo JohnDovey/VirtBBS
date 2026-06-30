@@ -111,6 +111,9 @@ class SyncEngine(private val context: Context) {
                 readSec = o["ReadSec"]?.jsonPrimitive?.int ?: 0,
                 writeSec = o["WriteSec"]?.jsonPrimitive?.int ?: 0,
                 network = conferenceNetworkLabel(o),
+                total = o["Total"]?.jsonPrimitive?.int ?: 0,
+                unread = o["Unread"]?.jsonPrimitive?.int ?: 0,
+                lastRead = o["LastRead"]?.jsonPrimitive?.int ?: 0,
             )
         }
         runBlockingDb { db.conferenceDao().upsertAll(entities) }

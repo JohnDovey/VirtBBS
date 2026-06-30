@@ -172,8 +172,8 @@ func TestBuildPacketRoundTrip(t *testing.T) {
 	}
 
 	// Last-read marker should have advanced past both messages.
-	if got := userStore.GetLastRead(u.ID, 1); got != 2 {
-		t.Errorf("GetLastRead after sync = %d, want 2", got)
+	if got := userStore.GetQwkLast(u.ID, 1); got != 2 {
+		t.Errorf("GetQwkLast after sync = %d, want 2", got)
 	}
 }
 

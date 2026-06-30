@@ -168,8 +168,8 @@ func (s *session) uploadRepPacket() {
 func (s *session) countNewQwkMessages(conferenceIDs []int) int {
 	total := 0
 	for _, cid := range conferenceIDs {
-		lastRead := s.deps.Users.GetLastRead(s.user.ID, cid)
-		msgs, err := s.deps.Messages.ListFrom(cid, lastRead+1, 100000)
+		lastQwk := s.deps.Users.GetQwkLast(s.user.ID, cid)
+		msgs, err := s.deps.Messages.ListFrom(cid, lastQwk+1, 100000)
 		if err != nil {
 			continue
 		}

@@ -8,6 +8,7 @@
 package io.virtbbs.virtand.data.entities
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "conferences")
@@ -19,10 +20,17 @@ data class ConferenceEntity(
     val writeSec: Int,
     /** Display network for grouping — "Local" for non-echomail areas. */
     val network: String = "Local",
+    /** BBS message stats (Total/Unread/LastRead), refreshed on sync. */
+    val total: Int = 0,
+    val unread: Int = 0,
+    val lastRead: Int = 0,
 )
 
 /** A message cached locally after a QWK download — read-only until synced again. */
-@Entity(tableName = "cached_messages")
+@Entity(
+    tableName = "cached_messages",
+    indices = [Index(value = ["conferenceId", "msgNumber"], unique = true)],
+)
 data class CachedMessageEntity(
     @PrimaryKey(autoGenerate = true) val localId: Long = 0,
     val conferenceId: Int,

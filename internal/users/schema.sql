@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS user_conferences (
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     conference_id   INTEGER NOT NULL,
     registered      INTEGER NOT NULL DEFAULT 0,    -- 1 = registered member
-    last_msg_read   INTEGER NOT NULL DEFAULT 0,    -- last message number read
+    last_msg_read   INTEGER NOT NULL DEFAULT 0,    -- last message number read on the BBS
+    qwk_last_msg    INTEGER NOT NULL DEFAULT 0,    -- last message number included in a QWK download
     PRIMARY KEY (user_id, conference_id)
 );
 
