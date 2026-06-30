@@ -92,6 +92,10 @@
           <span class="stat-value"><span class="stat-num">{{.Stats.FileFixRecv}}</span> {{t $.Locale "admin_binkp.recv"}} / <span class="stat-num">{{.Stats.FileFixSent}}</span> {{t $.Locale "admin_binkp.sent"}}</span>
         </div>
         <div class="stat-row">
+          <span class="stat-label">{{t $.Locale "admin_binkp.stat.freq"}}</span>
+          <span class="stat-value"><span class="stat-num">{{.Stats.FreqRecv}}</span> {{t $.Locale "admin_binkp.recv"}} / <span class="stat-num">{{.Stats.FreqSent}}</span> {{t $.Locale "admin_binkp.sent"}}</span>
+        </div>
+        <div class="stat-row">
           <span class="stat-label">{{t $.Locale "admin_binkp.stat.tic"}}</span>
           <span class="stat-value"><span class="stat-num">{{.Stats.TICRecv}}</span> {{t $.Locale "admin_binkp.recv"}} / <span class="stat-num">{{.Stats.TICSent}}</span> {{t $.Locale "admin_binkp.sent"}}</span>
         </div>
@@ -148,7 +152,7 @@
           <td class="text-end stat-num">{{.NetmailSent}} / {{.NetmailRecv}}</td>
           <td class="text-end stat-num">{{.EchomailSent}} / {{.EchomailRecv}}</td>
           <td class="text-end stat-num small">
-            AF {{.AreaFixRecv}}/{{.AreaFixSent}} · FF {{.FileFixRecv}}/{{.FileFixSent}} · TIC {{.TICRecv}}/{{.TICSent}}
+            AF {{.AreaFixRecv}}/{{.AreaFixSent}} · FF {{.FileFixRecv}}/{{.FileFixSent}} · FQ {{.FreqRecv}}/{{.FreqSent}} · TIC {{.TICRecv}}/{{.TICSent}}
             <span class="text-muted">({{formatSize $.Locale .TICBytesRecv}}/{{formatSize $.Locale .TICBytesSent}})</span>
           </td>
         </tr>

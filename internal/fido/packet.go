@@ -89,8 +89,9 @@ type Message struct {
 
 // Attribute flag bits for Message.Attrib (FTS-0001 §3.6).
 const (
-	AttribPrivate = 0x0002
-	AttribCrash   = 0x0100
+	AttribPrivate     = 0x0002
+	AttribFileRequest = 0x0800
+	AttribCrash       = 0x0100
 )
 
 // AreaTag returns the echomail area tag from the message body, or "" for netmail.

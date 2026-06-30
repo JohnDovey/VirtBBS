@@ -116,10 +116,34 @@ func (s *Server) handleAPINetmailDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var body struct {
-		Num int `json:"num"`
+		Num    int  `json:"num"`
+		Thread bool `json:"thread"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Num <= 0 {
 		http.Error(w, "bad json", http.StatusBadRequest)
+		return
+	}
+	if body.Thread {
+		thread, err := s.Deps.Messages.FindNetmailThread(u.Name, u.Sysop, body.Num)
+		if err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		maxNum := 0
+		for _, m := range thread {
+			if m.MsgNumber > maxNum {
+				maxNum = m.MsgNumber
+			}
+			if _, err := s.Deps.Messages.Delete(m.ID); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		if maxNum > 0 {
+			_ = s.Deps.Users.ClampLastReadForConference(netmailConferenceID, maxNum-1)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"deleted": true, "count": len(thread)})
 		return
 	}
 	m, err := s.Deps.Messages.GetNetmail(u.Name, u.Sysop, body.Num)
@@ -291,6 +315,7 @@ func netmailI18nJSON(locale string) string {
 		"netmail.app.deleted",
 		"netmail.app.delete_failed",
 		"netmail.app.delete_confirm",
+		"netmail.app.delete_thread_confirm",
 		"netmail.app.filter_all",
 		"netmail.app.filter_unread",
 		"netmail.app.stats",

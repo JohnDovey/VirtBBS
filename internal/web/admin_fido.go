@@ -1,6 +1,7 @@
 package web
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fidofiles"
 )
 
 func (s *Server) handleAdminFido(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +97,7 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 			if !cfg.Fido.Enabled {
 				data.Error = "FidoNet not enabled"
 			} else {
-				res := fido.TossAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, cfg.AttachmentsDir())
+				res := fido.TossAll(&cfg.Fido, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, fidofiles.Adapt(s.Deps.Files), cfg.Paths.Files, cfg.AttachmentsDir())
 				data.Flash = fmt.Sprintf("Toss complete — imported %d message(s), %d TIC file(s)", res.Imported, res.TICProcessed)
 			}
 		case "scan":
@@ -121,7 +123,7 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 			nd := cfg.Fido.NetworkByName(network)
 			if nd == nil {
 				data.Error = "network not found"
-			} else if count, warns := fido.RebuildNetworkDiagrams(nd, db, s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name); count == 0 && len(warns) > 0 {
+			} else if count, warns := fido.RebuildNetworkDiagrams(nd, db, fidofiles.Adapt(s.Deps.Files), cfg.BBS.Name, cfg.Sysop.Name); count == 0 && len(warns) > 0 {
 				data.Error = strings.Join(warns, "; ")
 			} else {
 				data.Flash = fmt.Sprintf("Network maps rebuilt — %d diagram(s) in %s", count, fido.NetworkDiagZipName(nd.Name))
@@ -134,7 +136,7 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 			if nd == nil {
 				data.Error = "network not found"
 			} else {
-				res := fido.PollAndToss(&cfg.Fido, nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, cfg.AttachmentsDir())
+				res := fido.PollAndToss(&cfg.Fido, nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, fidofiles.Adapt(s.Deps.Files), cfg.Paths.Files, cfg.AttachmentsDir())
 				if res.Poll.Error != nil {
 					data.Error = res.Poll.Error.Error()
 				} else {
@@ -167,11 +169,11 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 				data.Error = "network not found"
 			} else if !nd.NodelistFetchEnabled() {
 				data.Error = "no nodelist_url configured"
-			} else if _, err := fido.FetchAndImport(nd, db, s.Deps.Files); err != nil {
+			} else if _, err := fido.FetchAndImport(nd, db, fidofiles.Adapt(s.Deps.Files)); err != nil {
 				data.Error = err.Error()
 			} else {
 				data.Flash = "Nodelist fetched and imported."
-				count, warns := fido.RebuildNetworkDiagrams(nd, db, s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name)
+				count, warns := fido.RebuildNetworkDiagrams(nd, db, fidofiles.Adapt(s.Deps.Files), cfg.BBS.Name, cfg.Sysop.Name)
 				if count > 0 {
 					data.Flash += fmt.Sprintf(" %d diagram(s) in %s.", count, fido.NetworkDiagZipName(nd.Name))
 				}
@@ -188,7 +190,7 @@ func (s *Server) handleAdminFidoOps(w http.ResponseWriter, r *http.Request) {
 			} else {
 				data.Flash = "Nodelist imported from " + path
 				if nd := cfg.Fido.NetworkByName(network); nd != nil {
-					count, warns := fido.RebuildNetworkDiagrams(nd, db, s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name)
+					count, warns := fido.RebuildNetworkDiagrams(nd, db, fidofiles.Adapt(s.Deps.Files), cfg.BBS.Name, cfg.Sysop.Name)
 					if count > 0 {
 						data.Flash += fmt.Sprintf(" — %d diagram(s) in %s", count, fido.NetworkDiagZipName(nd.Name))
 					}
@@ -408,6 +410,10 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 				merged.Fido.AreaFixPassword = r.FormValue("areafix_password")
 				merged.Fido.FileFixPassword = r.FormValue("filefix_password")
 				merged.Fido.TicPassword = r.FormValue("tic_password")
+				merged.Fido.FreqEnabled = formBoolPtr(r, "freq_enabled")
+				merged.Fido.FreqPassword = r.FormValue("freq_password")
+				merged.Fido.FreqMaxFiles = formInt(r, "freq_max_files", 0)
+				merged.Fido.FreqMaxBytes = int64(formInt(r, "freq_max_bytes", 0))
 				merged.Fido.PollIntervalMins = formInt(r, "poll_interval_mins", 0)
 				merged.Fido.NodelistURL = strings.TrimSpace(r.FormValue("nodelist_url"))
 				merged.Fido.NodelistUpdateIntervalHours = formInt(r, "nodelist_update_hours", 0)
@@ -437,6 +443,10 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 					nd.AreaFixPassword = r.FormValue("areafix_password")
 					nd.FileFixPassword = r.FormValue("filefix_password")
 					nd.TicPassword = r.FormValue("tic_password")
+					nd.FreqEnabled = formBoolPtr(r, "freq_enabled")
+					nd.FreqPassword = r.FormValue("freq_password")
+					nd.FreqMaxFiles = formInt(r, "freq_max_files", 0)
+					nd.FreqMaxBytes = int64(formInt(r, "freq_max_bytes", 0))
 					nd.PollIntervalMins = formInt(r, "poll_interval_mins", 0)
 					nd.NodelistURL = strings.TrimSpace(r.FormValue("nodelist_url"))
 					nd.NodelistUpdateIntervalHours = formInt(r, "nodelist_update_hours", 0)
@@ -686,13 +696,23 @@ func (s *Server) handleAdminFidoTools(w http.ResponseWriter, r *http.Request) {
 			case "trace":
 				pkt, err = fido.SendTrace(nd, fromName, toName, toAddr)
 			case "areafix":
-				adds := strings.Split(strings.TrimSpace(r.FormValue("adds")), "\n")
-				removes := strings.Split(strings.TrimSpace(r.FormValue("removes")), "\n")
+				adds := fido.SplitFixCommandLines(r.FormValue("adds"))
+				removes := fido.SplitFixCommandLines(r.FormValue("removes"))
 				pkt, err = fido.RequestAreaFix(nd, fromName, adds, removes)
 			case "filefix":
-				adds := strings.Split(strings.TrimSpace(r.FormValue("adds")), "\n")
-				removes := strings.Split(strings.TrimSpace(r.FormValue("removes")), "\n")
+				adds := fido.SplitFixCommandLines(r.FormValue("adds"))
+				removes := fido.SplitFixCommandLines(r.FormValue("removes"))
 				pkt, err = fido.RequestFileFix(nd, fromName, adds, removes)
+			case "freq":
+				lines := fido.SplitFixCommandLines(r.FormValue("freq_commands"))
+				if toAddr == "" {
+					toAddr = strings.TrimSpace(r.FormValue("freq_to_addr"))
+				}
+				if toAddr == "" {
+					err = fmt.Errorf("FREQ target address required")
+				} else {
+					pkt, err = fido.RequestFreq(nd, fromName, lines, toAddr)
+				}
 			}
 			if err != nil {
 				data.Error = err.Error()
@@ -703,6 +723,25 @@ func (s *Server) handleAdminFidoTools(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.render(w, "admin_fido_tools.html", data)
+}
+
+func (s *Server) handleAPIAdminFidoFreqStats(w http.ResponseWriter, r *http.Request) {
+	if _, ok := s.requireSysop(w, r); !ok {
+		return
+	}
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	network := selectedNetwork(r)
+	limit := formInt(r, "limit", 50)
+	res, err := fido.QueryFreqStats(s.Deps.Messages.DB(), network, limit)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(res)
 }
 
 // handleAdminFidoImportUpload accepts a nodelist file upload for import.
@@ -745,7 +784,7 @@ func (s *Server) handleAdminFidoImportUpload(w http.ResponseWriter, r *http.Requ
 	}
 	if nd, err := networkDefByName(network); err == nil && nd != nil {
 		cfg := config.Get()
-		if _, warns := fido.RebuildNetworkDiagrams(nd, s.Deps.Messages.DB(), s.Deps.Files, cfg.BBS.Name, cfg.Sysop.Name); len(warns) > 0 {
+		if _, warns := fido.RebuildNetworkDiagrams(nd, s.Deps.Messages.DB(), fidofiles.Adapt(s.Deps.Files), cfg.BBS.Name, cfg.Sysop.Name); len(warns) > 0 {
 			log.Printf("admin nodelist upload: diagram rebuild: %s", strings.Join(warns, "; "))
 		}
 	}

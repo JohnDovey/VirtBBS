@@ -379,6 +379,7 @@
   "netmail.app.reply": "Responder",
   "netmail.app.delete": "Eliminar",
   "netmail.app.delete_confirm": "¿Eliminar este mensaje?",
+  "netmail.app.delete_thread_confirm": "¿Eliminar todo el hilo?",
   "netmail.app.deleted": "Mensaje eliminado.",
   "netmail.app.delete_failed": "Error al eliminar.",
   "netmail.app.tagline": "Tagline",

@@ -53,6 +53,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/door"
 	"github.com/virtbbs/virtbbs/internal/editor"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fidofiles"
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
@@ -1072,13 +1073,13 @@ func (s *session) sysopFidoMenu() {
 		s.writeln(ansi.Color(ansi.BrightYellow) +
 			"  [T]oss inbound   [S]can outbound   [O] TIC file scan   [N]odelist   [L]oad nodelist now   [E]cho flags   [P]oll uplink" + ansi.Reset())
 		s.writeln(ansi.Color(ansi.BrightYellow) +
-			"  [I]Ping a node   [X]Trace a node   [A]reaFix   [F]ileFix   [J]oin reqs   [R]outing   [M] Rebuild maps   [Q]uit" + ansi.Reset())
+			"  [I]Ping a node   [X]Trace a node   [A]reaFix   [F]ileFix   [G] FREQ   [J]oin reqs   [R]outing   [M] Rebuild maps   [Q]uit" + ansi.Reset())
 		s.write(ansi.Prompt("FidoNet command: "))
 		cmd := strings.ToUpper(strings.TrimSpace(s.readline()))
 		switch cmd {
 		case "T":
 			s.writeln(ansi.Colorize(ansi.White, "Tossing inbound packets (all networks)…"))
-			result := fido.TossAll(&cfg.Fido, s.deps.Messages, s.deps.Conferences, cfg.Sysop.Name, s.deps.Files, cfg.Paths.Files, cfg.AttachmentsDir())
+			result := fido.TossAll(&cfg.Fido, s.deps.Messages, s.deps.Conferences, cfg.Sysop.Name, fidofiles.Adapt(s.deps.Files), cfg.Paths.Files, cfg.AttachmentsDir())
 			s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf(
 				"Toss complete: %d packet(s), %d imported, %d skipped, %d held, %d TIC file(s).",
 				result.Packets, result.Imported, result.Skipped, result.Orphaned, result.TICProcessed)))
@@ -1129,6 +1130,8 @@ func (s *session) sysopFidoMenu() {
 			s.fidoAreaFixMenu()
 		case "F":
 			s.fidoFileFixMenu()
+		case "G":
+			s.fidoFreq()
 		case "J":
 			s.fidoJoinRequestsMenu()
 		case "R":
@@ -1516,7 +1519,7 @@ func (s *session) fidoRebuildNetworkMaps() {
 	}
 	cfg := config.Get()
 	s.writeln(ansi.Colorize(ansi.White, fmt.Sprintf("Rebuilding network maps for %s…", target.Name)))
-	count, warns := fido.RebuildNetworkDiagrams(target, s.deps.Messages.DB(), s.deps.Files, cfg.BBS.Name, cfg.Sysop.Name)
+	count, warns := fido.RebuildNetworkDiagrams(target, s.deps.Messages.DB(), fidofiles.Adapt(s.deps.Files), cfg.BBS.Name, cfg.Sysop.Name)
 	if count == 0 && len(warns) > 0 {
 		s.writeln(ansi.Colorize(ansi.Red, strings.Join(warns, "; ")))
 		return
@@ -1839,6 +1842,40 @@ func (s *session) fidoTrace() {
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("TRACE sent to %s → %s", addr, pktPath)))
 }
 
+// fidoFreq prompts for a FidoNet address and command lines, then sends a FREQ
+// netmail request — see internal/fido/freq.go.
+func (s *session) fidoFreq() {
+	target := s.pickFidoNetwork("request files from")
+	if target == nil {
+		return
+	}
+	s.write(ansi.Prompt("FREQ target address (zone:net/node): "))
+	addr := strings.TrimSpace(s.readline())
+	if addr == "" {
+		return
+	}
+	s.writeln("Enter file names or commands (one per line; blank line to finish):")
+	var lines []string
+	for {
+		s.write("  > ")
+		line := strings.TrimSpace(s.readline())
+		if line == "" {
+			break
+		}
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		s.writeln(ansi.Colorize(ansi.Yellow, "No commands entered."))
+		return
+	}
+	pktPath, err := fido.RequestFreq(target, s.user.Name, lines, addr)
+	if err != nil {
+		s.writeln(ansi.Colorize(ansi.Red, "FREQ error: "+err.Error()))
+		return
+	}
+	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("FREQ sent to %s → %s", addr, pktPath)))
+}
+
 // ── FidoNet in-BBS functions ──────────────────────────────────────────────────
 
 // nodelistBrowser displays a paged nodelist browser with search.
@@ -2039,7 +2076,7 @@ func (s *session) fidoLoadNodelist() {
 		s.writeln(ansi.Colorize(ansi.Yellow, "No nodelist_url configured for "+target.Name+" — set one in network config or use Import File."))
 		return
 	}
-	result, err := fido.FetchAndImport(target, s.deps.Messages.DB(), s.deps.Files)
+	result, err := fido.FetchAndImport(target, s.deps.Messages.DB(), fidofiles.Adapt(s.deps.Files))
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Nodelist fetch error: "+err.Error()))
 		return
@@ -2060,7 +2097,7 @@ func (s *session) fidoPoll() {
 
 	s.writeln(ansi.Colorize(ansi.White, fmt.Sprintf("Polling %s uplink %s…", target.Name, target.Uplink)))
 
-	result := fido.PollAndToss(&config.Get().Fido, target, s.deps.Messages, s.deps.Conferences, config.Get().Sysop.Name, s.deps.Files, config.Get().Paths.Files, config.Get().AttachmentsDir())
+	result := fido.PollAndToss(&config.Get().Fido, target, s.deps.Messages, s.deps.Conferences, config.Get().Sysop.Name, fidofiles.Adapt(s.deps.Files), config.Get().Paths.Files, config.Get().AttachmentsDir())
 	if result.Poll.Error != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "Poll error: "+result.Poll.Error.Error()))
 		return

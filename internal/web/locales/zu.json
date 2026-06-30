@@ -693,6 +693,7 @@
   "netmail.app.crash": "Ukuphahlazeka (thumela ngqo)",
   "netmail.app.delete": "Susa",
   "netmail.app.delete_confirm": "Susa lo mlayezo?",
+  "netmail.app.delete_thread_confirm": "Susa wonke umkhondo?",
   "netmail.app.delete_failed": "Ukususa kuhlulekile.",
   "netmail.app.deleted": "Umlayezo ususiwe.",
   "netmail.app.filter_all": "Konke",

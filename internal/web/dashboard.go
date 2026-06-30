@@ -175,7 +175,8 @@ func bulletinTitle(name string) string {
 	upper := strings.ToUpper(name)
 	titles := map[string]string{
 		"LOGON": "Logon Message", "BINKPDAY": "BinkP Statistics (24h)",
-		"BINKPALL": "BinkP Statistics (All Time)", "BULLETIN": "Bulletin",
+		"BINKPALL": "BinkP Statistics (All Time)", "ROBOTSTAT": "Robot Stats",
+		"BULLETIN": "Bulletin",
 	}
 	if t, ok := titles[upper]; ok {
 		return t

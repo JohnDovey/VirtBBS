@@ -693,6 +693,7 @@
   "netmail.app.crash": "Crash (envoi direct)",
   "netmail.app.delete": "Supprimer",
   "netmail.app.delete_confirm": "Supprimer ce message ?",
+  "netmail.app.delete_thread_confirm": "Supprimer tout le fil de discussion ?",
   "netmail.app.delete_failed": "Échec de la suppression.",
   "netmail.app.deleted": "Message supprimé.",
   "netmail.app.filter_all": "Tous",

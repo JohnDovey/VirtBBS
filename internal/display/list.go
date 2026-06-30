@@ -16,6 +16,7 @@ var bulletinTitles = map[string]string{
 	"LOGON":    "Logon Message",
 	"BINKPDAY": "BinkP Statistics (24h)",
 	"BINKPALL": "BinkP Statistics (All Time)",
+	"ROBOTSTAT": "Robot Stats",
 	"BULLETIN": "Bulletin",
 }
 
@@ -30,7 +31,8 @@ var bulletinOrder = map[string]int{
 	"LOGON":    0,
 	"BINKPDAY": 1,
 	"BINKPALL": 2,
-	"BULLETIN": 3,
+	"ROBOTSTAT": 3,
+	"BULLETIN": 4,
 }
 
 // ListBulletins returns display files in displayDir suitable for caller bulletins.

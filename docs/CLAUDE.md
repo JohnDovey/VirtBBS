@@ -6,6 +6,33 @@ Guidance for Claude, Cursor, and other coding agents working in this repository.
 
 The repo may live on an external volume (e.g. `/Volumes/JohnDovey/Projects/BBS/VirtBBS`). Toolchains are installed on the **host system**, not on that volume.
 
+### JohnDovey drive environment
+
+Before compiling (especially **Android / Gradle**), read and apply paths from:
+
+```bash
+source /Volumes/JohnDovey/source-john-dovey.sh
+# or: source ~/source-john-dovey.sh
+```
+
+That script sets (when `/Volumes/JohnDovey` is mounted):
+
+| Variable | Path |
+|----------|------|
+| `ANDROID_HOME` | `/Volumes/JohnDovey/Android/Sdk` |
+| `GRADLE_USER_HOME` | `/Volumes/JohnDovey/.gradle` |
+| `JAVA_HOME` | `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home` |
+
+Use these values for VirtAnd builds instead of system `/tmp` or default `~/.gradle` on the boot volume.
+
+### Temporary files
+
+On the JohnDovey setup, use **`/Volumes/JohnDovey/tmp/`** for build artifacts, release staging, and scratch output — **not** `/tmp` on the system drive. Example:
+
+```bash
+export RELEASE_DIR="/Volumes/JohnDovey/tmp/virtbbs-release-${VERSION}"
+```
+
 ## Go server
 
 The BBS server is Go (no cgo). See `BUILDING.md` for full instructions.
@@ -48,6 +75,7 @@ Use the same tooling — do not invent a new Android stack:
 | Item | Path |
 |------|------|
 | Android SDK | `/Volumes/JohnDovey/Android/Sdk` |
+| Gradle user home | `/Volumes/JohnDovey/.gradle` (`GRADLE_USER_HOME` via `source-john-dovey.sh`) |
 | JDK 17 | `/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home` |
 | Reference app | `/Volumes/JohnDovey/Projects/ClonesApp` |
 | VirtAnd project | `android/VirtAnd/` |
@@ -61,7 +89,10 @@ sdk.dir=/Volumes/JohnDovey/Android/Sdk
 If Gradle can't find Java or Kotlin fails to compile:
 
 ```bash
+source /Volumes/JohnDovey/source-john-dovey.sh
+# or manually:
 export JAVA_HOME="/usr/local/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home"
+export GRADLE_USER_HOME="/Volumes/JohnDovey/.gradle"
 ```
 
 ### VirtAnd layout
@@ -98,5 +129,7 @@ When adding Android dependencies or UI, mirror ClonesApp patterns:
 ## Common mistakes to avoid
 
 - Assuming toolchains are on the same drive as the repo — Go, JDK, and Android SDK are on the system install paths above.
+- Using `/tmp` for release builds or Gradle scratch — use `/Volumes/JohnDovey/tmp/` on this machine.
+- Skipping `source /Volumes/JohnDovey/source-john-dovey.sh` before Android/Gradle work (sets `GRADLE_USER_HOME` and `ANDROID_HOME`).
 - Building `:app` without `local.properties` pointing at the SDK.
 - Using JDK 21+ or JDK 8 for VirtAnd/ClonesApp — use JDK 17.

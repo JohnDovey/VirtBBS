@@ -9,6 +9,7 @@ import (
 
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fidofiles"
 )
 
 func (s *Server) handleAdminFidoNodelist(w http.ResponseWriter, r *http.Request) {
@@ -56,7 +57,7 @@ func (s *Server) handleAdminFidoNodelist(w http.ResponseWriter, r *http.Request)
 				data.Error = tr(locale, "admin_binkp.error.network")
 			} else if !nd.NodelistFetchEnabled() {
 				data.Error = tr(locale, "admin_fido_ops.error.no_nodelist_url")
-			} else if _, err := fido.FetchAndImport(nd, db, s.Deps.Files); err != nil {
+			} else if _, err := fido.FetchAndImport(nd, db, fidofiles.Adapt(s.Deps.Files)); err != nil {
 				data.Error = err.Error()
 			} else {
 				data.Flash = tr(locale, "admin_fido_nodelist.flash_fetched")

@@ -105,6 +105,16 @@ CREATE TABLE IF NOT EXISTS fido_areafix_subs (
 CREATE INDEX IF NOT EXISTS idx_areafix_subs_downlink ON fido_areafix_subs(network, downlink_addr);
 CREATE INDEX IF NOT EXISTS idx_areafix_subs_area     ON fido_areafix_subs(network, area_tag);
 
+-- Per-downlink AreaFix state (pause, compressor preference).
+CREATE TABLE IF NOT EXISTS fido_areafix_downlink_state (
+    network       TEXT NOT NULL,
+    downlink_addr TEXT NOT NULL,
+    paused        INTEGER NOT NULL DEFAULT 0,
+    compressor    TEXT NOT NULL DEFAULT '',
+    updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (network, downlink_addr)
+);
+
 -- FileFix subscriptions: which file areas each downlink receives from us.
 CREATE TABLE IF NOT EXISTS fido_filefix_subs (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -27,6 +27,7 @@ var knownNodeFlags = []NodeFlagDef{
 	{Code: "BEER", Description: "Sysop drinks beer"},
 	{Code: "TRACE", Description: "Trace requests honoured"},
 	{Code: "PING", Description: "Ping requests honoured"},
+	{Code: "FRQ", Description: "File requests honoured"},
 }
 
 // KnownNodeFlags returns the full list of supported flags with descriptions.
@@ -85,7 +86,7 @@ func BuildNodelistFlags(flags []string, binkpHost string, binkpPort, telnetPort 
 	if set["ITN"] {
 		parts = append(parts, buildITNFlag(binkpHost, telnetPort))
 	}
-	for _, code := range []string{"CM", "MO", "BEER", "TRACE", "PING"} {
+	for _, code := range []string{"CM", "MO", "BEER", "TRACE", "PING", "FRQ"} {
 		if set[code] {
 			parts = append(parts, code)
 		}

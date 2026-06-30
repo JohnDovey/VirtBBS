@@ -153,6 +153,8 @@ func addNetworkRows(a, b BinkpStatsRow) BinkpStatsRow {
 	a.AreaFixRecv += b.AreaFixRecv
 	a.FileFixSent += b.FileFixSent
 	a.FileFixRecv += b.FileFixRecv
+	a.FreqSent += b.FreqSent
+	a.FreqRecv += b.FreqRecv
 	a.TICSent += b.TICSent
 	a.TICRecv += b.TICRecv
 	a.TICBytesSent += b.TICBytesSent
@@ -173,6 +175,8 @@ func addLinkRows(a, b BinkpLinkStatsRow) BinkpLinkStatsRow {
 	a.AreaFixRecv += b.AreaFixRecv
 	a.FileFixSent += b.FileFixSent
 	a.FileFixRecv += b.FileFixRecv
+	a.FreqSent += b.FreqSent
+	a.FreqRecv += b.FreqRecv
 	a.TICSent += b.TICSent
 	a.TICRecv += b.TICRecv
 	a.TICBytesSent += b.TICBytesSent

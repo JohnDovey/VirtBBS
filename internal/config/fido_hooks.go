@@ -11,6 +11,7 @@ import (
 func RegisterFidoMappingHooks() {
 	fido.SetAreaMappingSaver(SaveAreaMapping)
 	fido.SetFileAreaMappingSaver(SaveFileAreaMapping)
+	fido.SetDownlinkPasswordSaver(SaveDownlinkPassword)
 }
 
 // SaveAreaMapping updates [fido.areas] or [[fido.networks]].areas.
@@ -60,6 +61,48 @@ func updateNetworkAreas(cfg *Config, networkName, areaTag string, confID int, re
 		}
 	}
 	return fmt.Errorf("network %q not found in config", networkName)
+}
+
+// SaveDownlinkPassword updates the AreaFix password for a configured downlink.
+func SaveDownlinkPassword(networkName, downlinkAddr, newPassword string) error {
+	addr, err := fido.ParseAddr(downlinkAddr)
+	if err != nil {
+		return fmt.Errorf("invalid downlink address %q: %w", downlinkAddr, err)
+	}
+	cfg := Get()
+	merged := *cfg
+	if err := updateDownlinkPassword(&merged, networkName, addr, newPassword); err != nil {
+		return err
+	}
+	return Save(&merged)
+}
+
+func updateDownlinkPassword(cfg *Config, networkName string, addr fido.Addr, newPassword string) error {
+	updated := false
+	primary := cfg.Fido.EffectivePrimaryName()
+	if networkName == primary || networkName == cfg.Fido.Name {
+		for i := range cfg.Fido.Downlinks {
+			if cfg.Fido.Downlinks[i].MatchesAddr(addr) {
+				cfg.Fido.Downlinks[i].Password = newPassword
+				updated = true
+			}
+		}
+	}
+	for i := range cfg.Fido.Networks {
+		if cfg.Fido.Networks[i].Name != networkName {
+			continue
+		}
+		for j := range cfg.Fido.Networks[i].Downlinks {
+			if cfg.Fido.Networks[i].Downlinks[j].MatchesAddr(addr) {
+				cfg.Fido.Networks[i].Downlinks[j].Password = newPassword
+				updated = true
+			}
+		}
+	}
+	if !updated {
+		return fmt.Errorf("downlink %s not found in network %q", addr.String(), networkName)
+	}
+	return nil
 }
 
 func updateNetworkFileAreas(cfg *Config, networkName, fileTag string, dirID int, remove bool) error {

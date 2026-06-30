@@ -59,6 +59,11 @@ func IsTrace(subject string) bool {
 	return strings.EqualFold(strings.TrimSpace(subject), TraceSubject)
 }
 
+// IsTraceMessage reports a TRACE test by subject or FTSC ToName convention.
+func IsTraceMessage(pm *Message) bool {
+	return IsTrace(pm.Subject) || strings.EqualFold(strings.TrimSpace(pm.ToName), TraceSubject)
+}
+
 // IsTraceReply reports whether subject is a TRACE reply. Checked so the
 // auto-responder never replies to its own kind of reply, which would
 // otherwise create an infinite loop between two auto-responding systems —

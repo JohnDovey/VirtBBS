@@ -66,7 +66,6 @@ package fido
 import (
 	"database/sql"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -189,10 +188,13 @@ func ProcessAreaFixRequest(nd *NetworkDef, msgStore *messages.Store, confStore *
 	if !passwordOK {
 		return replyAreaFix(nd, our, pm, "Invalid password.\r\n")
 	}
+	cmdLines = append(fixRequestSubjectSwitchCommands(pm.Subject, dl.Password), cmdLines...)
 	RecordAreaFixRecv(networkName, "downlink", pm.OrigAddr.String())
 
 	areafixDB := OpenAreaFixDB(db)
+	areafixDB.ensureDownlinkSchema()
 	downlinkAddr := pm.OrigAddr.String()
+	dlState, _ := areafixDB.DownlinkStateFor(networkName, downlinkAddr)
 
 	var out strings.Builder
 	fmt.Fprintf(&out, "AreaFix response for %s (%s)\r\n\r\n", dl.Name, downlinkAddr)
@@ -236,22 +238,100 @@ func ProcessAreaFixRequest(nd *NetworkDef, msgStore *messages.Store, confStore *
 		return false
 	}
 
-	for _, line := range cmdLines {
+	for _, rawLine := range cmdLines {
+		line := normalizeAreaFixCommandLine(rawLine)
 		upper := strings.ToUpper(strings.TrimSpace(line))
 		switch {
 		case upper == "%LIST" || upper == "LIST":
-			writeAreaFixList(&out, confStore, networkName)
+			subs, _ := areafixDB.SubscriptionsFor(networkName, downlinkAddr)
+			writeAreaFixListWithLinks(&out, confStore, networkName, nd, subscribedTagSet(subs))
 		case upper == "%QUERY" || upper == "QUERY":
-			writeAreaFixQuery(&out, areafixDB, networkName, downlinkAddr)
+			writeAreaFixQuery(&out, areafixDB, networkName, downlinkAddr, dlState)
+		case upper == "%UNLINKED" || upper == "%AVAIL":
+			subs, _ := areafixDB.SubscriptionsFor(networkName, downlinkAddr)
+			writeAreaFixUnlinked(&out, confStore, networkName, nd, subs)
+		case upper == "%PAUSE" || upper == "PAUSE":
+			if err := areafixDB.SetDownlinkPaused(networkName, downlinkAddr, true); err != nil {
+				fmt.Fprintf(&out, "  %%PAUSE ERROR: %v\r\n", err)
+			} else {
+				dlState.Paused = true
+				out.WriteString("  %PAUSE — mail delivery held (subscriptions unchanged)\r\n")
+			}
+		case upper == "%RESUME" || upper == "RESUME":
+			if err := areafixDB.SetDownlinkPaused(networkName, downlinkAddr, false); err != nil {
+				fmt.Fprintf(&out, "  %%RESUME ERROR: %v\r\n", err)
+			} else {
+				dlState.Paused = false
+				out.WriteString("  %RESUME — mail delivery resumed\r\n")
+			}
 		case upper == "%HELP" || upper == "HELP" || upper == "?":
 			writeAreaFixHelp(&out)
+		case strings.HasPrefix(upper, "%PASSWD") || strings.HasPrefix(upper, "%PWD") || strings.HasPrefix(upper, "PASSWD") || strings.HasPrefix(upper, "PASSWORD"):
+			targetAddr, newPW, ok := parseAreaFixPasswdLine(line)
+			if !ok || newPW == "" {
+				out.WriteString("  %PASSWD — usage: %PASSWD newpassword  or  %PASSWD from Z:N/NODE newpassword\r\n")
+				break
+			}
+			changeAddr := downlinkAddr
+			if targetAddr != "" {
+				parsed, err := ParseAddr(targetAddr)
+				if err != nil {
+					fmt.Fprintf(&out, "  %%PASSWD — invalid address %q\r\n", targetAddr)
+					break
+				}
+				if !dl.MatchesAddr(parsed) {
+					out.WriteString("  %PASSWD — you may only change your own password\r\n")
+					break
+				}
+				changeAddr = parsed.String()
+			}
+			if err := saveDownlinkPassword(networkName, changeAddr, newPW); err != nil {
+				fmt.Fprintf(&out, "  %%PASSWD ERROR: %v\r\n", err)
+			} else {
+				dl.Password = newPW
+				out.WriteString("  %PASSWD — password updated\r\n")
+			}
+		case strings.HasPrefix(upper, "%COMPRESS"):
+			comp, listOnly, ok := parseAreaFixCompressLine(line)
+			if !ok {
+				break
+			}
+			if listOnly {
+				writeAreaFixCompressHelp(&out)
+				break
+			}
+			if !validAreaFixCompressor(comp) {
+				fmt.Fprintf(&out, "  %%COMPRESS — unknown compressor %q\r\n", comp)
+				writeAreaFixCompressHelp(&out)
+				break
+			}
+			if err := areafixDB.SetDownlinkCompressor(networkName, downlinkAddr, comp); err != nil {
+				fmt.Fprintf(&out, "  %%COMPRESS ERROR: %v\r\n", err)
+			} else {
+				dlState.Compressor = comp
+				fmt.Fprintf(&out, "  %%COMPRESS — preference set to %s\r\n", comp)
+			}
+		case upper == "%RESEND":
+			tags, err := areafixDB.SubscriptionsFor(networkName, downlinkAddr)
+			if err != nil || len(tags) == 0 {
+				out.WriteString("  %RESEND — no subscribed areas\r\n")
+			} else {
+				flushRescan(tags, 0, "%RESEND ")
+			}
 		case strings.HasPrefix(upper, "%RESCAN"):
 			tag, _ := parseAreaFixRescanLine(line)
 			if tag != "" {
-				if !subscribed(tag) {
+				subs, _ := areafixDB.SubscriptionsFor(networkName, downlinkAddr)
+				var toRescan []string
+				if strings.ContainsAny(tag, "*?") {
+					toRescan = expandAreaFixTagPatterns(tag, subs)
+				} else if subscribed(tag) {
+					toRescan = []string{strings.ToUpper(tag)}
+				}
+				if len(toRescan) == 0 {
 					fmt.Fprintf(&out, "  %-30s NOT SUBSCRIBED — not rescanned\r\n", tag)
 				} else {
-					flushRescan([]string{tag}, 0, "")
+					flushRescan(toRescan, 0, "")
 				}
 			} else {
 				rescanMode = true
@@ -263,42 +343,20 @@ func ProcessAreaFixRequest(nd *NetworkDef, msgStore *messages.Store, confStore *
 				}
 			}
 		case strings.HasPrefix(line, "+") || strings.HasPrefix(line, "="):
-			add, ok := parseAreaFixAddLine(line)
-			if !ok || add.tag == "" {
-				continue
-			}
-			tag := add.tag
-			if !areaFixTagExists(confStore, networkName, nd, tag) {
-				fmt.Fprintf(&out, "  +%-30s UNKNOWN AREA — not added\r\n", tag)
-				continue
-			}
-			if err := areafixDB.Subscribe(networkName, downlinkAddr, tag); err != nil {
-				fmt.Fprintf(&out, "  +%-30s ERROR: %v\r\n", tag, err)
-				continue
-			}
-			fmt.Fprintf(&out, "  +%-30s subscribed\r\n", tag)
-			if add.rescanMax >= 0 {
-				flushRescan([]string{tag}, add.rescanMax, "")
-			} else if rescanMode {
-				flushRescan([]string{tag}, 0, "")
-			}
+			applyAreaFixSubscribeLine(&out, line, rescanMode, networkName, downlinkAddr, nd, confStore, areafixDB, msgStore, bbsName, flushRescan)
 		case strings.HasPrefix(line, "-"):
-			tag := strings.ToUpper(strings.TrimSpace(line[1:]))
-			if tag == "" {
-				continue
-			}
-			if err := areafixDB.Unsubscribe(networkName, downlinkAddr, tag); err != nil {
-				fmt.Fprintf(&out, "  -%-30s ERROR: %v\r\n", tag, err)
-				continue
-			}
-			fmt.Fprintf(&out, "  -%-30s unsubscribed\r\n", tag)
+			applyAreaFixUnsubscribeLine(&out, line, networkName, downlinkAddr, nd, confStore, areafixDB)
 		default:
-			fmt.Fprintf(&out, "  Unrecognised command: %q\r\n", line)
+			if addTag, _, ok := tryBareAreaFixTagLine(line, confStore, networkName, nd); ok {
+				applyAreaFixSubscribeLine(&out, "+"+addTag, rescanMode, networkName, downlinkAddr, nd, confStore, areafixDB, msgStore, bbsName, flushRescan)
+			} else {
+				fmt.Fprintf(&out, "  Unrecognised command: %q\r\n", rawLine)
+			}
 		}
 	}
 
 	out.WriteString("\r\n")
-	writeAreaFixQuery(&out, areafixDB, networkName, downlinkAddr)
+	writeAreaFixQuery(&out, areafixDB, networkName, downlinkAddr, dlState)
 
 	return replyAreaFix(nd, our, pm, out.String())
 }
@@ -368,14 +426,69 @@ func fixRequestSubjectPassword(subject, wantPassword string) bool {
 }
 
 func fixRequestCommandLines(body string) []string {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.ReplaceAll(body, "\r", "\n")
 	var cmds []string
-	for _, line := range strings.Split(strings.ReplaceAll(body, "\r\n", "\r"), "\r") {
+	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			cmds = append(cmds, line)
 		}
 	}
 	return cmds
+}
+
+// SplitFixCommandLines splits a multi-line form field into non-blank command
+// lines, accepting CRLF, LF, or CR line endings.
+func SplitFixCommandLines(s string) []string {
+	return fixRequestCommandLines(s)
+}
+
+// BuildFixRequestBody formats AreaFix/FileFix outbound command lines. Area
+// tags in adds/removes get a +/- prefix unless the line already starts with
+// +, -, =, or % (e.g. %HELP, %LIST).
+func BuildFixRequestBody(adds, removes []string) string {
+	var body strings.Builder
+	for _, line := range adds {
+		if out := formatFixRequestAddLine(line); out != "" {
+			fmt.Fprintf(&body, "%s\r\n", out)
+		}
+	}
+	for _, line := range removes {
+		if out := formatFixRequestRemoveLine(line); out != "" {
+			fmt.Fprintf(&body, "%s\r\n", out)
+		}
+	}
+	return body.String()
+}
+
+func formatFixRequestAddLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	if fixRequestLineHasPrefix(line) {
+		return line
+	}
+	return "+" + strings.ToUpper(line)
+}
+
+func formatFixRequestRemoveLine(line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return ""
+	}
+	if fixRequestLineHasPrefix(line) {
+		return line
+	}
+	return "-" + strings.ToUpper(line)
+}
+
+func fixRequestLineHasPrefix(line string) bool {
+	return strings.HasPrefix(line, "+") ||
+		strings.HasPrefix(line, "-") ||
+		strings.HasPrefix(line, "=") ||
+		strings.HasPrefix(line, "%")
 }
 
 // areaFixAddCmd holds a parsed +TAG subscribe line.
@@ -441,52 +554,40 @@ func areaFixTagExists(confStore *conferences.Store, networkName string, nd *Netw
 }
 
 func writeAreaFixList(out *strings.Builder, confStore *conferences.Store, networkName string) {
-	out.WriteString("Areas available:\r\n")
-	if confStore == nil {
-		out.WriteString("  (none configured)\r\n")
-		return
-	}
-	confs, err := confStore.ListEcho(networkName)
-	if err != nil || len(confs) == 0 {
-		out.WriteString("  (none configured)\r\n")
-		return
-	}
-	tags := make([]string, 0, len(confs))
-	for _, c := range confs {
-		if c.EchoTag != "" {
-			tags = append(tags, c.EchoTag)
-		}
-	}
-	sort.Strings(tags)
-	for _, t := range tags {
-		fmt.Fprintf(out, "  %s\r\n", t)
-	}
+	writeAreaFixListWithLinks(out, confStore, networkName, nil, nil)
 }
 
-func writeAreaFixQuery(out *strings.Builder, areafixDB *AreaFixDB, networkName, downlinkAddr string) {
+func writeAreaFixQuery(out *strings.Builder, areafixDB *AreaFixDB, networkName, downlinkAddr string, st DownlinkState) {
 	tags, err := areafixDB.SubscriptionsFor(networkName, downlinkAddr)
 	out.WriteString("Currently subscribed:\r\n")
 	if err != nil || len(tags) == 0 {
 		out.WriteString("  (none)\r\n")
-		return
+	} else {
+		for _, t := range tags {
+			fmt.Fprintf(out, "  %s\r\n", t)
+		}
 	}
-	for _, t := range tags {
-		fmt.Fprintf(out, "  %s\r\n", t)
-	}
+	writeAreaFixStatus(out, st)
 }
 
 func writeAreaFixHelp(out *strings.Builder) {
 	out.WriteString("Password in the subject (classic) or as the first body line.\r\n")
-	out.WriteString("Commands (one per line):\r\n")
-	out.WriteString("  +TAG         subscribe to area TAG\r\n")
-	out.WriteString("  +TAG,R=N     subscribe and send N old messages\r\n")
-	out.WriteString("  +TAG,R       subscribe and send full backlog\r\n")
-	out.WriteString("  -TAG         unsubscribe from area TAG\r\n")
-	out.WriteString("  %LIST        list all areas available\r\n")
-	out.WriteString("  %QUERY       list your current subscriptions\r\n")
-	out.WriteString("  %RESCAN      rescan all subscribed areas (+ sets rescan mode)\r\n")
-	out.WriteString("  %RESCAN TAG  rescan one subscribed area\r\n")
-	out.WriteString("  %HELP        show this help\r\n\r\n")
+	out.WriteString("Subject switches: -l (list), -q (query), -R (rescan all).\r\n")
+	out.WriteString("Commands (one per line; %% escapes a leading %):\r\n")
+	out.WriteString("  +TAG / =TAG     subscribe or update link (+TAG,R=N sends N old messages)\r\n")
+	out.WriteString("  -TAG            unsubscribe (wildcards * and ? supported)\r\n")
+	out.WriteString("  TAG             subscribe without + prefix\r\n")
+	out.WriteString("  SUBSCRIBE TAG   same as +TAG; UNSUBSCRIBE / CONNECT / DISCONNECT synonyms\r\n")
+	out.WriteString("  %LIST / LISTALL list all areas (* marks subscribed)\r\n")
+	out.WriteString("  %QUERY          list your subscriptions\r\n")
+	out.WriteString("  %UNLINKED / %AVAIL / AVAIL  areas not yet subscribed\r\n")
+	out.WriteString("  %PAUSE / PASSIVE  hold mail; %RESUME / ACTIVE resume\r\n")
+	out.WriteString("  %PASSWD newpw   change your AreaFix password\r\n")
+	out.WriteString("  %COMPRESS name  set compressor preference (none, zlib)\r\n")
+	out.WriteString("  %RESCAN         rescan subscribed areas\r\n")
+	out.WriteString("  %RESCAN TAG     rescan one area\r\n")
+	out.WriteString("  %RESEND         resend backlog for all subscribed areas\r\n")
+	out.WriteString("  %HELP           show this help\r\n\r\n")
 }
 
 // replyAreaFix writes an immediate netmail reply from the AreaFix robot
@@ -528,12 +629,7 @@ func RequestAreaFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	var body strings.Builder
-	for _, tag := range adds {
-		fmt.Fprintf(&body, "+%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
-	}
-	for _, tag := range removes {
-		fmt.Fprintf(&body, "-%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
-	}
+	body.WriteString(BuildFixRequestBody(adds, removes))
 
 	subject := AreaFixRobotName
 	if nd.AreaFixPassword != "" {

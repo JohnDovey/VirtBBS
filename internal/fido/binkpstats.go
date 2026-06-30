@@ -46,6 +46,8 @@ type BinkpStatsRow struct {
 	AreaFixRecv             int    `json:"areafix_recv"`
 	FileFixSent             int    `json:"filefix_sent"`
 	FileFixRecv             int    `json:"filefix_recv"`
+	FreqSent                int    `json:"freq_sent"`
+	FreqRecv                int    `json:"freq_recv"`
 	TICSent                 int    `json:"tic_sent"`
 	TICRecv                 int    `json:"tic_recv"`
 	TICBytesSent            int64  `json:"tic_bytes_sent"`
@@ -71,6 +73,8 @@ type BinkpLinkStatsRow struct {
 	AreaFixRecv  int    `json:"areafix_recv"`
 	FileFixSent  int    `json:"filefix_sent"`
 	FileFixRecv  int    `json:"filefix_recv"`
+	FreqSent     int    `json:"freq_sent"`
+	FreqRecv     int    `json:"freq_recv"`
 	TICSent      int    `json:"tic_sent"`
 	TICRecv      int    `json:"tic_recv"`
 	TICBytesSent int64  `json:"tic_bytes_sent"`
@@ -115,6 +119,7 @@ func InitBinkpStats(db *sql.DB) {
 	if db != nil {
 		_ = migrateBinkpStats(db)
 		_ = migrateRobotStats(db)
+		_ = migrateFreqStats(db)
 	}
 }
 
@@ -361,6 +366,7 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 		toss_imported, toss_skipped, toss_skipped_duplicate, toss_skipped_hold_failed, toss_skipped_insert_failed,
 		toss_held, toss_packets, session_errors,
 		areafix_sent, areafix_recv, filefix_sent, filefix_recv,
+		freq_sent, freq_recv,
 		tic_sent, tic_recv, tic_bytes_sent, tic_bytes_recv
 		FROM fido_binkp_stats WHERE period=? AND period_key=?`
 	args := []any{period, periodKey}
@@ -386,6 +392,7 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 			&r.TossSkippedDuplicate, &r.TossSkippedHoldFailed, &r.TossSkippedInsertFailed,
 			&r.TossHeld, &r.TossPackets, &r.SessionErrors,
 			&r.AreaFixSent, &r.AreaFixRecv, &r.FileFixSent, &r.FileFixRecv,
+			&r.FreqSent, &r.FreqRecv,
 			&r.TICSent, &r.TICRecv, &r.TICBytesSent, &r.TICBytesRecv); err != nil {
 			return nil, err
 		}
@@ -399,6 +406,7 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 		poll_ok, poll_fail, files_sent, files_recv,
 		netmail_sent, echomail_sent, netmail_recv, echomail_recv,
 		areafix_sent, areafix_recv, filefix_sent, filefix_recv,
+		freq_sent, freq_recv,
 		tic_sent, tic_recv, tic_bytes_sent, tic_bytes_recv
 		FROM fido_binkp_link_stats WHERE period=? AND period_key=?`
 	linkArgs := []any{period, periodKey}
@@ -419,6 +427,7 @@ func QueryBinkpStats(db *sql.DB, network, period, periodKey string) (*BinkpStats
 			&r.PollOK, &r.PollFail, &r.FilesSent, &r.FilesRecv,
 			&r.NetmailSent, &r.EchomailSent, &r.NetmailRecv, &r.EchomailRecv,
 			&r.AreaFixSent, &r.AreaFixRecv, &r.FileFixSent, &r.FileFixRecv,
+			&r.FreqSent, &r.FreqRecv,
 			&r.TICSent, &r.TICRecv, &r.TICBytesSent, &r.TICBytesRecv); err != nil {
 			return nil, err
 		}

@@ -31,6 +31,7 @@ android/**/local.properties
 # Runtime-generated BinkP stats bulletins (refreshed at midnight)
 display/BINKPDAY.ANS
 display/BINKPALL.ANS
+display/ROBOTSTAT.ANS
 
 # Local FidoNet operational files (not part of source; repo root only)
 /ROUTES.BBS

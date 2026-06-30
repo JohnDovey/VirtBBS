@@ -31,6 +31,16 @@
       <button class="btn btn-primary" type="submit" name="action" value="filefix">{{t .Locale "admin_fido_tools.filefix_btn"}}</button>
     </div>
   </form>
+  <h3>{{t .Locale "admin_fido_tools.freq_section"}}</h3>
+  <form method="post" class="admin-form">
+    <input type="hidden" name="network" value="{{.Network}}">
+    <label>{{t .Locale "common.from_name"}} <input class="form-control" name="from_name" value="{{t .Locale "menu.sysop"}}"></label>
+    <label>{{t .Locale "admin_fido_tools.freq_to_addr"}} <input class="form-control" name="freq_to_addr" required placeholder="1:234/567"></label>
+    <label>{{t .Locale "admin_fido_tools.freq_commands"}} <textarea class="form-control" name="freq_commands" rows="4" placeholder="%LIST&#10;readme.txt&#10;*.zip"></textarea></label>
+    <div class="btn-row">
+      <button class="btn btn-primary" type="submit" name="action" value="freq">{{t .Locale "admin_fido_tools.freq_btn"}}</button>
+    </div>
+  </form>
   </div>
 </div>
 {{template "footer" .}}

@@ -302,6 +302,10 @@
 //                        Fido ops page layout improvements.
 //   v1.5.0  2026-06-28  Cleanup and web UI for admin: remove management API, BinkP stats
 //                        page with charts, networks nav, LANG badges, admin fixes.
+//   v2.1.0  2026-06-30  Outbound FREQ uses FILE_REQUEST netmail (BinktermPHP interop);
+//                        extended AreaFix responder commands.
+//   v2.0.1  2026-06-30  FREQ file-request responder and requester (netmail to Freq,
+//                        raw BinkP outbound delivery, per-file/node stats).
 //   v2.0.0  2026-06-30  First stable release: message attachments, BinkP interleave fix,
 //                        AreaFix/FileFix subject passwords, netmail tagline Auto default.
 //   v1.8.0  2026-06-30  Message attachments: uuencode toss/scan, web upload/download,
@@ -326,4 +330,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "2.0.0"
+const Version = "2.1.0"

@@ -96,6 +96,44 @@ func TestParseFixRequestAuth(t *testing.T) {
 	})
 }
 
+func TestFixRequestCommandLines_lineEndings(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want []string
+	}{
+		{name: "lf", in: "%help\n%list", want: []string{"%help", "%list"}},
+		{name: "crlf", in: "%help\r\n%list", want: []string{"%help", "%list"}},
+		{name: "cr", in: "%help\r%list", want: []string{"%help", "%list"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := fixRequestCommandLines(tc.in)
+			if len(got) != len(tc.want) {
+				t.Fatalf("lines=%v want %v", got, tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Fatalf("lines[%d]=%q want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
+}
+
+func TestBuildFixRequestBody(t *testing.T) {
+	body := BuildFixRequestBody([]string{"%help", "%list"}, nil)
+	want := "%help\r\n%list\r\n"
+	if body != want {
+		t.Fatalf("body=%q want %q", body, want)
+	}
+	body = BuildFixRequestBody([]string{"general", "+FSX_GEN"}, []string{"games"})
+	want = "+GENERAL\r\n+FSX_GEN\r\n-GAMES\r\n"
+	if body != want {
+		t.Fatalf("body=%q want %q", body, want)
+	}
+}
+
 func TestParseAreaFixAddLine(t *testing.T) {
 	tests := []struct {
 		line    string
@@ -295,6 +333,81 @@ func TestProcessAreaFixRequest_subjectPassword(t *testing.T) {
 
 	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAreaFixExtendedCommands(t *testing.T) {
+	msgStore, confStore, nd, dlAddr := setupAreaFixTest(t)
+	SetDownlinkPasswordSaver(func(network, addr, pw string) error {
+		if network != "TestNet" || addr != dlAddr.String() || pw != "newsecret" {
+			t.Fatalf("password saver: network=%s addr=%s pw=%s", network, addr, pw)
+		}
+		nd.Downlinks[0].Password = pw
+		return nil
+	})
+
+	areafixDB := OpenAreaFixDB(msgStore.DB())
+	_ = areafixDB.Subscribe("TestNet", dlAddr.String(), "GENERAL")
+
+	pm := func(body string) *Message {
+		return &Message{
+			OrigAddr: dlAddr,
+			FromName: "Sysop",
+			ToName:   AreaFixRobotName,
+			Subject:  "secret",
+			Body:     body,
+		}
+	}
+
+	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm("secret\r\n%UNLINKED\r\n")); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm("secret\r\n%PAUSE\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !areafixDB.IsDownlinkPaused("TestNet", dlAddr.String()) {
+		t.Fatal("expected paused")
+	}
+
+	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm("secret\r\n%RESUME\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if areafixDB.IsDownlinkPaused("TestNet", dlAddr.String()) {
+		t.Fatal("expected active after resume")
+	}
+
+	if err := ProcessAreaFixRequest(nd, msgStore, confStore, "TestNet", "TestBBS", pm("secret\r\n%PASSWD newsecret\r\n")); err != nil {
+		t.Fatal(err)
+	}
+	if nd.Downlinks[0].Password != "newsecret" {
+		t.Fatalf("password=%q", nd.Downlinks[0].Password)
+	}
+}
+
+func TestNormalizeAreaFixCommandLine(t *testing.T) {
+	if got := normalizeAreaFixCommandLine("%%LIST"); got != "%LIST" {
+		t.Fatalf("escape: %q", got)
+	}
+	if got := normalizeAreaFixCommandLine("listall"); got != "%LIST" {
+		t.Fatalf("listall: %q", got)
+	}
+	if got := normalizeAreaFixCommandLine("SUBSCRIBE GENERAL"); got != "+GENERAL" {
+		t.Fatalf("subscribe: %q", got)
+	}
+}
+
+func TestExpandAreaFixTagPatterns(t *testing.T) {
+	got := expandAreaFixTagPatterns("GEN*", []string{"GENERAL", "GAMES", "FSX_GEN"})
+	if len(got) != 1 || got[0] != "GENERAL" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestFixRequestSubjectSwitchCommands(t *testing.T) {
+	cmds := fixRequestSubjectSwitchCommands("secret -l -q", "secret")
+	if len(cmds) != 2 || cmds[0] != "%LIST" || cmds[1] != "%QUERY" {
+		t.Fatalf("cmds=%v", cmds)
 	}
 }
 

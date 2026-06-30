@@ -59,6 +59,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/db"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fidofiles"
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
@@ -193,7 +194,7 @@ func main() {
 		fileStore, _ := files.Open(sqlDB, cfg.Paths.Files)
 		var fileArea fido.FileArea
 		if fileStore != nil {
-			fileArea = fileStore
+			fileArea = fidofiles.Adapt(fileStore)
 		}
 
 		if *fidoToss {
@@ -384,7 +385,7 @@ func main() {
 
 		// Start the BinkP server so other systems (our uplink, or our own
 		// downlinks) can poll THIS BBS instead of only the reverse.
-		if _, err := fido.ServeBinkP(&cfg.Fido, msgStore, confStore, cfg.Sysop.Name, fileStore, cfg.Paths.Files, cfg.AttachmentsDir()); err != nil {
+		if _, err := fido.ServeBinkP(&cfg.Fido, msgStore, confStore, cfg.Sysop.Name, fidofiles.Adapt(fileStore), cfg.Paths.Files, cfg.AttachmentsDir()); err != nil {
 			fido.LogBinkp(fmt.Sprintf("BinkP server error: %v", err))
 		}
 

@@ -355,12 +355,7 @@ func RequestFileFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	var body strings.Builder
-	for _, tag := range adds {
-		fmt.Fprintf(&body, "+%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
-	}
-	for _, tag := range removes {
-		fmt.Fprintf(&body, "-%s\r\n", strings.ToUpper(strings.TrimSpace(tag)))
-	}
+	body.WriteString(BuildFixRequestBody(adds, removes))
 
 	subject := FileFixRobotName
 	if nd.FileFixPassword != "" {

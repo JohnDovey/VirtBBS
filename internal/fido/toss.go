@@ -275,7 +275,7 @@ func tossFile(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *con
 			// Auto-respond to PING test messages with a PONG reply. IsPing
 			// only matches "PING" exactly, so a PONG reaching us here never
 			// triggers another reply — no loop-guard needed beyond that.
-			if IsPing(pm.Subject) {
+			if IsPingMessage(pm) && !IsPong(pm.Subject) {
 				if err := AutoRespondPing(nd, pm); err != nil {
 					errs = append(errs, fmt.Sprintf("ping auto-reply: %v", err))
 				}
@@ -284,7 +284,7 @@ func tossFile(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *con
 			// Same convention for TRACE — IsTrace only matches "TRACE"
 			// exactly, so a TRACE REPLY reaching us here never triggers
 			// another reply.
-			if IsTrace(pm.Subject) {
+			if IsTraceMessage(pm) && !IsTraceReply(pm.Subject) {
 				if err := AutoRespondTrace(nd, pm); err != nil {
 					errs = append(errs, fmt.Sprintf("trace auto-reply: %v", err))
 				}
@@ -292,15 +292,24 @@ func tossFile(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *con
 
 			// AreaFix/FileFix requests are handled by their responders and
 			// still stored as ordinary netmail below, so the sysop can
-			// audit what downlinks have requested.
-			if IsAreaFixRequest(pm.ToName) {
+			// audit what downlinks have requested. Skip when the message
+			// is really a PING/TRACE utility test (htick sends TRACE with
+			// ToName AreaFix and Subject TRACE).
+			if IsAreaFixRequest(pm.ToName) && !IsNetmailUtilityTest(pm) {
 				if err := ProcessAreaFixRequest(nd, store, confStore, nd.Name, "", pm); err != nil {
 					errs = append(errs, fmt.Sprintf("areafix: %v", err))
 				}
 			}
-			if IsFileFixRequest(pm.ToName) {
+			if IsFileFixRequest(pm.ToName) && !IsNetmailUtilityTest(pm) {
 				if err := ProcessFileFixRequest(nd, store.DB(), filesRoot, pm); err != nil {
 					errs = append(errs, fmt.Sprintf("filefix: %v", err))
+				}
+			}
+			if nd.EffectiveFreqEnabled() && (IsFreqRequest(pm.ToName) || IsFreqSubject(pm.Subject)) && !IsNetmailUtilityTest(pm) {
+				ndb := OpenNodelistDB(store.DB())
+				catalog, _ := fileArea.(FreqCatalog)
+				if err := ProcessFreqRequest(nd, catalog, filesRoot, ndb, nd.Name, pm); err != nil {
+					errs = append(errs, fmt.Sprintf("freq: %v", err))
 				}
 			}
 			if IsAreaFixResponse(pm.FromName) {
@@ -335,7 +344,8 @@ func tossFile(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *con
 			// Netmail not addressed to this node — hold for sysop review
 			// instead of importing to conference 0.
 			if !IsAreaFixRequest(pm.ToName) && !IsFileFixRequest(pm.ToName) &&
-				!IsPing(pm.Subject) && !IsTrace(pm.Subject) &&
+				!IsFreqRequest(pm.ToName) && !IsFreqSubject(pm.Subject) &&
+				!IsNetmailUtilityTest(pm) &&
 				!(IsNodeAnnounceRequest(pm.Subject) && nd.IsHub()) &&
 				!nd.MatchesOurAddr(pm.DestAddr) {
 				if note, err := HoldOrphanMessage(nd, pm, "NOT_FOR_US"); err != nil {

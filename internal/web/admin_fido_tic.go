@@ -7,6 +7,7 @@ import (
 
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fidofiles"
 )
 
 func (s *Server) handleAdminFidoTIC(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +75,7 @@ func (s *Server) handleAdminFidoTIC(w http.ResponseWriter, r *http.Request) {
 			} else if s.Deps.Files == nil {
 				data.Error = "files store unavailable"
 			} else {
-				res := fido.ProcessInboundTICs(nd, s.Deps.Messages.DB(), s.Deps.Files)
+				res := fido.ProcessInboundTICs(nd, s.Deps.Messages.DB(), fidofiles.Adapt(s.Deps.Files))
 				data.Flash = fmt.Sprintf("Processed %d inbound TIC file(s)", res.Processed)
 				if len(res.Errors) > 0 {
 					data.Error = strings.Join(res.Errors, "; ")

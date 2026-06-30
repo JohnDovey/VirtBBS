@@ -12,6 +12,7 @@ import (
 type robotStatsDelta struct {
 	areafixSent, areafixRecv int
 	filefixSent, filefixRecv int
+	freqSent, freqRecv       int
 	ticSent, ticRecv         int
 	ticBytesSent             int64
 	ticBytesRecv             int64
@@ -20,6 +21,7 @@ type robotStatsDelta struct {
 type robotLinkDelta struct {
 	areafixSent, areafixRecv int
 	filefixSent, filefixRecv int
+	freqSent, freqRecv       int
 	ticSent, ticRecv         int
 	ticBytesSent             int64
 	ticBytesRecv             int64
@@ -31,6 +33,8 @@ func migrateRobotStats(db *sql.DB) error {
 		`ALTER TABLE fido_binkp_stats ADD COLUMN areafix_recv INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_stats ADD COLUMN filefix_sent INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_stats ADD COLUMN filefix_recv INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fido_binkp_stats ADD COLUMN freq_sent INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fido_binkp_stats ADD COLUMN freq_recv INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_stats ADD COLUMN tic_sent INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_stats ADD COLUMN tic_recv INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_stats ADD COLUMN tic_bytes_sent INTEGER NOT NULL DEFAULT 0`,
@@ -41,6 +45,8 @@ func migrateRobotStats(db *sql.DB) error {
 		`ALTER TABLE fido_binkp_link_stats ADD COLUMN areafix_recv INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_link_stats ADD COLUMN filefix_sent INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_link_stats ADD COLUMN filefix_recv INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fido_binkp_link_stats ADD COLUMN freq_sent INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE fido_binkp_link_stats ADD COLUMN freq_recv INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_link_stats ADD COLUMN tic_sent INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_link_stats ADD COLUMN tic_recv INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE fido_binkp_link_stats ADD COLUMN tic_bytes_sent INTEGER NOT NULL DEFAULT 0`,
@@ -59,11 +65,13 @@ func migrateRobotStats(db *sql.DB) error {
 
 func robotDeltaEmpty(d robotStatsDelta) bool {
 	return d.areafixSent == 0 && d.areafixRecv == 0 && d.filefixSent == 0 && d.filefixRecv == 0 &&
+		d.freqSent == 0 && d.freqRecv == 0 &&
 		d.ticSent == 0 && d.ticRecv == 0 && d.ticBytesSent == 0 && d.ticBytesRecv == 0
 }
 
 func robotLinkDeltaEmpty(d robotLinkDelta) bool {
 	return d.areafixSent == 0 && d.areafixRecv == 0 && d.filefixSent == 0 && d.filefixRecv == 0 &&
+		d.freqSent == 0 && d.freqRecv == 0 &&
 		d.ticSent == 0 && d.ticRecv == 0 && d.ticBytesSent == 0 && d.ticBytesRecv == 0
 }
 
@@ -84,19 +92,23 @@ func applyRobotStats(network string, at time.Time, d robotStatsDelta) {
 		_, _ = statsDB.Exec(`INSERT INTO fido_binkp_stats
 			(network, period, period_key,
 			 areafix_sent, areafix_recv, filefix_sent, filefix_recv,
+			 freq_sent, freq_recv,
 			 tic_sent, tic_recv, tic_bytes_sent, tic_bytes_recv)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
 			ON CONFLICT(network, period, period_key) DO UPDATE SET
 			 areafix_sent = areafix_sent + excluded.areafix_sent,
 			 areafix_recv = areafix_recv + excluded.areafix_recv,
 			 filefix_sent = filefix_sent + excluded.filefix_sent,
 			 filefix_recv = filefix_recv + excluded.filefix_recv,
+			 freq_sent = freq_sent + excluded.freq_sent,
+			 freq_recv = freq_recv + excluded.freq_recv,
 			 tic_sent = tic_sent + excluded.tic_sent,
 			 tic_recv = tic_recv + excluded.tic_recv,
 			 tic_bytes_sent = tic_bytes_sent + excluded.tic_bytes_sent,
 			 tic_bytes_recv = tic_bytes_recv + excluded.tic_bytes_recv`,
 			network, pk.period, pk.key,
 			d.areafixSent, d.areafixRecv, d.filefixSent, d.filefixRecv,
+			d.freqSent, d.freqRecv,
 			d.ticSent, d.ticRecv, d.ticBytesSent, d.ticBytesRecv)
 	}
 }
@@ -118,19 +130,23 @@ func applyRobotLinkStats(network, linkType, peerKey string, at time.Time, d robo
 		_, _ = statsDB.Exec(`INSERT INTO fido_binkp_link_stats
 			(network, period, period_key, link_type, peer_key,
 			 areafix_sent, areafix_recv, filefix_sent, filefix_recv,
+			 freq_sent, freq_recv,
 			 tic_sent, tic_recv, tic_bytes_sent, tic_bytes_recv)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 			ON CONFLICT(network, period, period_key, link_type, peer_key) DO UPDATE SET
 			 areafix_sent = areafix_sent + excluded.areafix_sent,
 			 areafix_recv = areafix_recv + excluded.areafix_recv,
 			 filefix_sent = filefix_sent + excluded.filefix_sent,
 			 filefix_recv = filefix_recv + excluded.filefix_recv,
+			 freq_sent = freq_sent + excluded.freq_sent,
+			 freq_recv = freq_recv + excluded.freq_recv,
 			 tic_sent = tic_sent + excluded.tic_sent,
 			 tic_recv = tic_recv + excluded.tic_recv,
 			 tic_bytes_sent = tic_bytes_sent + excluded.tic_bytes_sent,
 			 tic_bytes_recv = tic_bytes_recv + excluded.tic_bytes_recv`,
 			network, pk.period, pk.key, linkType, peerKey,
 			d.areafixSent, d.areafixRecv, d.filefixSent, d.filefixRecv,
+			d.freqSent, d.freqRecv,
 			d.ticSent, d.ticRecv, d.ticBytesSent, d.ticBytesRecv)
 	}
 }

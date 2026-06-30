@@ -245,6 +245,11 @@ func formBool(r *http.Request, key string) bool {
 	return v == "1" || strings.EqualFold(v, "on") || strings.EqualFold(v, "true")
 }
 
+func formBoolPtr(r *http.Request, key string) *bool {
+	v := formBool(r, key)
+	return &v
+}
+
 func selectedNetwork(r *http.Request) string {
 	n := strings.TrimSpace(r.FormValue("network"))
 	if n == "" {

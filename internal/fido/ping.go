@@ -65,6 +65,27 @@ func IsPong(subject string) bool {
 	return strings.EqualFold(strings.TrimSpace(subject), PongSubject)
 }
 
+// IsPingMessage reports a PING test by subject or the FTSC nodelist robot
+// convention (ToName "PING").
+func IsPingMessage(pm *Message) bool {
+	return IsPing(pm.Subject) || strings.EqualFold(strings.TrimSpace(pm.ToName), PingSubject)
+}
+
+// IsNetmailUtilityTest reports PING/PONG/TRACE diagnostic netmail. Such
+// messages must not be processed as AreaFix/FileFix: htick routes TRACE
+// through its areafix module (ToName AreaFix, Subject TRACE) and classic
+// AreaFix treats the subject line as a password.
+func IsNetmailUtilityTest(pm *Message) bool {
+	if pm == nil {
+		return false
+	}
+	return IsPingMessage(pm) ||
+		IsPong(pm.Subject) ||
+		IsTrace(pm.Subject) ||
+		IsTraceReply(pm.Subject) ||
+		strings.EqualFold(strings.TrimSpace(pm.ToName), TraceSubject)
+}
+
 // BuildPongReply constructs the automatic PONG reply to an inbound PING
 // netmail pm, addressed back to its sender. our is this node's own address
 // on the network the PING arrived on; botName is the sender identity used

@@ -82,6 +82,7 @@ func renderStatsBulletin(bbsName, title string, q *BinkpStatsQueryResult) string
 		statLine(&b, "Echomail recv/sent", fmt.Sprintf("%d / %d", n.EchomailRecv, n.EchomailSent))
 		statLine(&b, "AreaFix recv/sent", fmt.Sprintf("%d / %d", n.AreaFixRecv, n.AreaFixSent))
 		statLine(&b, "FileFix recv/sent", fmt.Sprintf("%d / %d", n.FileFixRecv, n.FileFixSent))
+		statLine(&b, "FREQ recv/sent", fmt.Sprintf("%d / %d", n.FreqRecv, n.FreqSent))
 		statLine(&b, "TIC recv/sent", fmt.Sprintf("%d / %d", n.TICRecv, n.TICSent))
 		statLine(&b, "TIC data recv/sent (MB)", fmt.Sprintf("%s / %s", FormatTICMegabytes(n.TICBytesRecv), FormatTICMegabytes(n.TICBytesSent)))
 		statLine(&b, "Toss imported/skipped/held", fmt.Sprintf("%d / %d / %d", n.TossImported, n.TossSkipped, n.TossHeld))
@@ -107,9 +108,10 @@ func renderStatsBulletin(bbsName, title string, q *BinkpStatsQueryResult) string
 				statLine(&b, label, fmt.Sprintf("poll %d/%d  files %d/%d  nm %d/%d  echo %d/%d",
 					l.PollOK, l.PollFail, l.FilesSent, l.FilesRecv,
 					l.NetmailSent, l.NetmailRecv, l.EchomailSent, l.EchomailRecv))
-				if l.AreaFixSent+l.AreaFixRecv+l.FileFixSent+l.FileFixRecv+l.TICSent+l.TICRecv > 0 {
-					statLine(&b, "  robots/TIC", fmt.Sprintf("AF %d/%d  FF %d/%d  TIC %d/%d (%.2f/%.2f MB)",
+				if l.AreaFixSent+l.AreaFixRecv+l.FileFixSent+l.FileFixRecv+l.FreqSent+l.FreqRecv+l.TICSent+l.TICRecv > 0 {
+					statLine(&b, "  robots/TIC", fmt.Sprintf("AF %d/%d  FF %d/%d  FREQ %d/%d  TIC %d/%d (%.2f/%.2f MB)",
 						l.AreaFixRecv, l.AreaFixSent, l.FileFixRecv, l.FileFixSent,
+						l.FreqRecv, l.FreqSent,
 						l.TICRecv, l.TICSent,
 						float64(l.TICBytesRecv)/(1024*1024), float64(l.TICBytesSent)/(1024*1024)))
 				}
@@ -157,6 +159,11 @@ func StartBinkpStatsBulletins(db *sql.DB, displayDir, bbsName string) func() {
 				LogBinkp("binkp stats bulletin: " + err.Error())
 			} else {
 				LogBinkp(fmt.Sprintf("binkp stats bulletins updated in %s", displayDir))
+			}
+			if err := WriteRobotStatsBulletins(db, displayDir, bbsName); err != nil {
+				LogBinkp("robot stats bulletin: " + err.Error())
+			} else {
+				LogBinkp(fmt.Sprintf("robot stats bulletin updated in %s", displayDir))
 			}
 		}
 		write() // once at startup

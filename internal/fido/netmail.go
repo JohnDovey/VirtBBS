@@ -69,7 +69,9 @@ type NetmailMsg struct {
 	ReplyMsgID string `json:"ReplyMsgID,omitempty"`
 
 	Crash   bool   `json:"Crash"`
-	Network string `json:"Network"`
+	// FileRequest sets FTS FILE_REQUEST (0x0800) on the outbound PKT message.
+	FileRequest bool   `json:"FileRequest"`
+	Network     string `json:"Network"`
 
 	// AuthorLang is the origin user's ISO 639-1 code (^ALANG kludge).
 	AuthorLang string `json:"AuthorLang,omitempty"`
@@ -273,6 +275,9 @@ func WritePKT(origAddr, destAddr Addr, password, outDir string, msgs []*NetmailM
 		attr := uint16(AttribPrivate)
 		if m.Crash {
 			attr |= AttribCrash
+		}
+		if m.FileRequest {
+			attr |= AttribFileRequest
 		}
 
 		pktMsgs = append(pktMsgs, &Message{

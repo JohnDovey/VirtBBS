@@ -45,6 +45,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fidofiles"
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
 )
@@ -118,7 +119,7 @@ func runDayRollover(networkName string, store *messages.Store, confStore *confer
 		if nd == nil || !nd.Enabled || !nd.IsHub() {
 			return
 		}
-		warnings := fido.RunDayRollover(nd, store.DB(), confStore, store, fileStore, cfg.BBS.Name, cfg.Sysop.Name, publish)
+		warnings := fido.RunDayRollover(nd, store.DB(), confStore, store, fidofiles.Adapt(fileStore), cfg.BBS.Name, cfg.Sysop.Name, publish)
 		for _, w := range warnings {
 			log.Printf("virtnet scheduler: %s rollover warning: %s", networkName, w)
 		}
@@ -147,7 +148,7 @@ func runNodelistMonitorAtStartup(cfg *config.Config, store *messages.Store, conf
 			continue
 		}
 		ndCopy := nd
-		for _, w := range fido.RunNodelistMonitorForNetwork(&ndCopy, store.DB(), confStore, store, fileStore, cfg.Sysop.Name) {
+		for _, w := range fido.RunNodelistMonitorForNetwork(&ndCopy, store.DB(), confStore, store, fidofiles.Adapt(fileStore), cfg.Sysop.Name) {
 			log.Printf("nodelist monitor [%s]: %s", nd.Name, w)
 		}
 	}
@@ -188,7 +189,7 @@ func runNetwork(networkName string, store *messages.Store, confStore *conference
 
 			var fileArea fido.FileArea
 			if fileStore != nil {
-				fileArea = fileStore
+				fileArea = fidofiles.Adapt(fileStore)
 			}
 			result := fido.PollAndToss(&config.Get().Fido, nd, store, confStore, config.Get().Sysop.Name, fileArea, config.Get().Paths.Files, config.Get().AttachmentsDir())
 			if result.Poll.Error != nil {
@@ -249,7 +250,7 @@ func runNodelistFetch(networkName string, store *messages.Store, fileStore *file
 				log.Printf("nodelist scheduler: %s — interval changed to %s", networkName, interval)
 			}
 
-			result, err := fido.FetchAndImport(nd, store.DB(), fileStore)
+			result, err := fido.FetchAndImport(nd, store.DB(), fidofiles.Adapt(fileStore))
 			if err != nil {
 				log.Printf("nodelist scheduler: %s fetch error: %v", networkName, err)
 				continue
@@ -261,7 +262,7 @@ func runNodelistFetch(networkName string, store *messages.Store, fileStore *file
 			}
 			if fileStore != nil && result.Inserted+result.Updated > 0 {
 				cfg := config.Get()
-				count, warns := fido.RebuildNetworkDiagrams(nd, store.DB(), fileStore, cfg.BBS.Name, cfg.Sysop.Name)
+				count, warns := fido.RebuildNetworkDiagrams(nd, store.DB(), fidofiles.Adapt(fileStore), cfg.BBS.Name, cfg.Sysop.Name)
 				if count > 0 {
 					log.Printf("nodelist scheduler: %s — rebuilt %d network diagram(s)", networkName, count)
 				}
@@ -285,7 +286,7 @@ func runNetworkTraffic(store *messages.Store, confStore *conferences.Store, file
 		}
 		var fileArea fido.FileArea
 		if fileStore != nil {
-			fileArea = fileStore
+				fileArea = fidofiles.Adapt(fileStore)
 		}
 		for _, w := range fido.RunWeeklyNetworkTrafficReports(store.DB(), store, confStore, fileArea, cfg.Fido.AllNetworks()) {
 			log.Printf("network traffic: %s", w)

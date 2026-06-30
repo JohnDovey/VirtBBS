@@ -122,6 +122,28 @@
         </div>
       </div>
 
+      <h3 class="section-head">{{t .Locale "admin_fido_networks.section.freq"}}</h3>
+      <div class="row g-3 mb-4">
+        <div class="col-md-3">
+          <label class="form-check mt-4">
+            <input class="form-check-input" type="checkbox" name="freq_enabled" value="1" {{if .Def.EffectiveFreqEnabled}}checked{{end}}>
+            {{t .Locale "admin_fido_networks.freq_enabled"}}
+          </label>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="network-freq-pw">{{t .Locale "admin_fido_networks.freq_password"}}</label>
+          <input class="form-control" id="network-freq-pw" name="freq_password" value="{{.Def.FreqPassword}}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="network-freq-max-files">{{t .Locale "admin_fido_networks.freq_max_files"}}</label>
+          <input class="form-control" id="network-freq-max-files" name="freq_max_files" type="number" min="1" value="{{if .Def.FreqMaxFiles}}{{.Def.FreqMaxFiles}}{{else}}5{{end}}">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="network-freq-max-bytes">{{t .Locale "admin_fido_networks.freq_max_bytes"}}</label>
+          <input class="form-control" id="network-freq-max-bytes" name="freq_max_bytes" type="number" min="1" value="{{if .Def.FreqMaxBytes}}{{.Def.FreqMaxBytes}}{{else}}5242880{{end}}">
+        </div>
+      </div>
+
       <h3 class="section-head">{{t .Locale "admin_fido_networks.section.mappings"}}</h3>
       <div class="mb-3">
         <label class="form-label" for="network-akas">{{t .Locale "admin_fido_networks.akas"}}</label>

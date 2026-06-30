@@ -379,6 +379,7 @@
   "netmail.app.reply": "Antwoord",
   "netmail.app.delete": "Skrap",
   "netmail.app.delete_confirm": "Skrap hierdie boodskap?",
+  "netmail.app.delete_thread_confirm": "Skrap hierdie hele draad?",
   "netmail.app.deleted": "Boodskap geskrap.",
   "netmail.app.delete_failed": "Skrap het misluk.",
   "netmail.app.tagline": "Tagline",

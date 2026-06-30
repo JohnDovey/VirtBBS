@@ -415,6 +415,9 @@ func appendEchoMessage(buckets map[string][]bucketEntry, destAddrs map[string]Ad
 			// this is a defensive second check).
 			continue
 		}
+		if areafixDB.IsDownlinkPaused(nd.Name, addrStr) {
+			continue
+		}
 		dlKey := dlAddr.String()
 		destAddrs[dlKey] = dlAddr
 		buckets[dlKey] = append(buckets[dlKey], bucketEntry{

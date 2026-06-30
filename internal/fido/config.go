@@ -135,6 +135,15 @@ type Config struct {
 	// MaxNetmailAttachmentBytes is the max decoded attachment size for outbound
 	// and inbound netmail on the primary network (default 5 MiB).
 	MaxNetmailAttachmentBytes int `toml:"max_netmail_attachment_bytes" json:"max_netmail_attachment_bytes"`
+
+	// FreqEnabled enables the FREQ file-request responder (nil = enabled).
+	FreqEnabled *bool `toml:"freq_enabled" json:"freq_enabled,omitempty"`
+	// FreqPassword is an optional global password FREQ requesters must supply.
+	FreqPassword string `toml:"freq_password" json:"freq_password"`
+	// FreqMaxFiles caps files queued per inbound FREQ request (default 5).
+	FreqMaxFiles int `toml:"freq_max_files" json:"freq_max_files"`
+	// FreqMaxBytes caps total bytes queued per inbound FREQ request (default 5 MiB).
+	FreqMaxBytes int64 `toml:"freq_max_bytes" json:"freq_max_bytes"`
 }
 
 // DefaultNodelistDiscoveryURL is used when NodelistURL is left blank: a
@@ -233,6 +242,11 @@ type NetworkDef struct {
 	// MaxNetmailAttachmentBytes overrides the primary network's netmail attachment
 	// limit for this network (default 5 MiB when unset/zero).
 	MaxNetmailAttachmentBytes int `toml:"max_netmail_attachment_bytes" json:"max_netmail_attachment_bytes"`
+
+	FreqEnabled  *bool  `toml:"freq_enabled" json:"freq_enabled,omitempty"`
+	FreqPassword string `toml:"freq_password" json:"freq_password"`
+	FreqMaxFiles int    `toml:"freq_max_files" json:"freq_max_files"`
+	FreqMaxBytes int64  `toml:"freq_max_bytes" json:"freq_max_bytes"`
 }
 
 // DefaultConfig returns a Config with sensible disabled defaults.
@@ -332,6 +346,10 @@ func (c *Config) AllNetworks() []NetworkDef {
 		NodeFlags:                   c.NodeFlags,
 		BinkpHost:                   c.BinkpHost,
 		AKAs:                        c.AKAs,
+		FreqEnabled:                 c.FreqEnabled,
+		FreqPassword:                c.FreqPassword,
+		FreqMaxFiles:                c.FreqMaxFiles,
+		FreqMaxBytes:                c.FreqMaxBytes,
 	}
 	result := []NetworkDef{primary}
 	result = append(result, c.Networks...)
@@ -546,6 +564,34 @@ func (n *NetworkDef) EffectiveNodelistEchoTag() string {
 // (no uplink configured) rather than a leaf/downlink polling an uplink.
 func (n *NetworkDef) IsHub() bool {
 	return n.Uplink == ""
+}
+
+// EffectiveFreqEnabled reports whether the FREQ responder is active.
+// Unset/nil freq_enabled defaults to enabled when the network is enabled.
+func (n *NetworkDef) EffectiveFreqEnabled() bool {
+	if !n.Enabled {
+		return false
+	}
+	if n.FreqEnabled == nil {
+		return true
+	}
+	return *n.FreqEnabled
+}
+
+// EffectiveFreqMaxFiles returns the per-request file cap (default 5).
+func (n *NetworkDef) EffectiveFreqMaxFiles() int {
+	if n.FreqMaxFiles > 0 {
+		return n.FreqMaxFiles
+	}
+	return DefaultFreqMaxFiles
+}
+
+// EffectiveFreqMaxBytes returns the per-request byte cap (default 5 MiB).
+func (n *NetworkDef) EffectiveFreqMaxBytes() int64 {
+	if n.FreqMaxBytes > 0 {
+		return n.FreqMaxBytes
+	}
+	return DefaultFreqMaxBytes
 }
 
 // DownlinkByAddr finds a configured Downlink by address (ignoring point),

@@ -10,6 +10,7 @@ import (
 
 	"github.com/virtbbs/virtbbs/internal/config"
 	"github.com/virtbbs/virtbbs/internal/fido"
+	"github.com/virtbbs/virtbbs/internal/fidofiles"
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/users"
@@ -390,7 +391,7 @@ func (s *Server) handleAdminBinkP(w http.ResponseWriter, r *http.Request) {
 		if nd == nil {
 			errMsg = tr(locale, "admin_binkp.error.network")
 		} else {
-			res := fido.PollAndToss(&cfg.Fido, nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, s.Deps.Files, cfg.Paths.Files, cfg.AttachmentsDir())
+			res := fido.PollAndToss(&cfg.Fido, nd, s.Deps.Messages, s.Deps.Conferences, cfg.Sysop.Name, fidofiles.Adapt(s.Deps.Files), cfg.Paths.Files, cfg.AttachmentsDir())
 			if res.Poll.Error != nil {
 				errMsg = res.Poll.Error.Error()
 			} else {

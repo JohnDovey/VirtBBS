@@ -23,6 +23,8 @@
   var composeNetwork = '';
   var composeReplyMsgID = '';
 
+  var threadMsgNumbers = [];
+
   function esc(s) {
     var d = document.createElement('div');
     d.textContent = s || '';
@@ -65,9 +67,11 @@
       .then(function (data) {
         var items = (data && data.messages) || [];
         if (!items.length) {
+          threadMsgNumbers = [];
           panelEl.innerHTML = '<div class="card-body"><p class="meta mb-0">' + esc(t('netmail.empty', 'No netmail.')) + '</p></div>';
           return;
         }
+        threadMsgNumbers = items.map(function (tm) { return tm.MsgNumber; });
         var html = '<div class="card-body"><h4 class="h6">' + esc(t('netmail.app.thread', 'Thread')) +
           ' (' + items.length + ')</h4>';
         items.forEach(function (tm) { html += renderThreadItem(tm); });
@@ -75,8 +79,14 @@
         panelEl.innerHTML = html;
       })
       .catch(function () {
+        threadMsgNumbers = [];
         panelEl.innerHTML = '<div class="card-body"><p class="meta mb-0">' + esc(t('netmail.app.load_failed', 'Could not load netmail.')) + '</p></div>';
       });
+  }
+
+  function threadPanelOpen() {
+    var panel = document.getElementById('netmail-thread-panel');
+    return !!(panel && !panel.classList.contains('d-none') && threadMsgNumbers.length > 0);
   }
 
   function syncComposeEditor() {
@@ -224,6 +234,7 @@
 
   function renderMessage(m) {
     selectedNum = m.MsgNumber;
+    threadMsgNumbers = [];
     renderList();
     var fromLine = t('netmail.app.from', 'From %s · #%d')
       .replace('%s', formatPerson(m.FromName, m.FidoOrigin))
@@ -271,7 +282,7 @@
       });
     }
     document.getElementById('netmail-delete-btn').addEventListener('click', function () {
-      deleteMessage(m.MsgNumber);
+      deleteMessage(m.MsgNumber, threadPanelOpen());
     });
     var addContactBtn = document.getElementById('netmail-add-contact-btn');
     if (addContactBtn) {
@@ -305,16 +316,25 @@
       });
   }
 
-  function deleteMessage(num) {
-    if (!window.confirm(t('netmail.app.delete_confirm', 'Delete this message?'))) return;
+  function deleteMessage(num, deleteThread) {
+    var confirmKey = deleteThread ? 'netmail.app.delete_thread_confirm' : 'netmail.app.delete_confirm';
+    var confirmFallback = deleteThread ? 'Delete this entire thread?' : 'Delete this message?';
+    if (!window.confirm(t(confirmKey, confirmFallback))) return;
     fetch('/api/netmail/delete', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ num: num })
+      body: JSON.stringify({ num: num, thread: !!deleteThread })
     }).then(function (r) {
       if (!r.ok) throw new Error('delete failed');
-      messages = messages.filter(function (m) { return m.MsgNumber !== num; });
+      if (deleteThread) {
+        var nums = {};
+        threadMsgNumbers.forEach(function (n) { nums[n] = true; });
+        messages = messages.filter(function (m) { return !nums[m.MsgNumber]; });
+      } else {
+        messages = messages.filter(function (m) { return m.MsgNumber !== num; });
+      }
+      threadMsgNumbers = [];
       selectedNum = null;
       paneEl.innerHTML = '<div class="card-body"><p class="meta mb-0">' + esc(t('netmail.app.select', 'Select a message')) + '</p></div>';
       renderList();
