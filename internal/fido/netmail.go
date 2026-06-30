@@ -70,7 +70,9 @@ type NetmailMsg struct {
 
 	Crash   bool   `json:"Crash"`
 	// FileRequest sets FTS FILE_REQUEST (0x0800) on the outbound PKT message.
-	FileRequest bool   `json:"FileRequest"`
+	FileRequest bool `json:"FileRequest"`
+	// NoSignature omits the VirtBBS tear line and Origin (robot/utility netmail).
+	NoSignature bool   `json:"NoSignature"`
 	Network     string `json:"Network"`
 
 	// AuthorLang is the origin user's ISO 639-1 code (^ALANG kludge).
@@ -343,6 +345,9 @@ func buildBody(m *NetmailMsg, from, to Addr) string {
 	}
 
 	sb.WriteString(m.Body)
+	if m.NoSignature {
+		return sb.String()
+	}
 	return AppendOutboundSignature(sb.String(), "", from)
 }
 

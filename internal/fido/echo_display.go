@@ -63,7 +63,7 @@ func EchoDisplayText(m *messages.Message, bbsName string, orig Addr) string {
 		return m.Body
 	}
 	if strings.TrimSpace(m.FidoSeenBy) != "" {
-		return normalizeDisplayEOL(m.Body)
+		return NormalizeDisplayEOL(m.Body)
 	}
 	taglines, _, _ := ParseEchoFooters(m.Body)
 	main := EchoMainBody(m.Body)
@@ -90,7 +90,7 @@ func QuoteEchoReplyBody(orig *messages.Message) string {
 	prefix := " " + echoReplyInitials(orig.FromName) + "> "
 
 	var quoted []string
-	for _, line := range strings.Split(normalizeDisplayEOL(EchoMainBody(orig.Body)), "\n") {
+	for _, line := range strings.Split(NormalizeDisplayEOL(EchoMainBody(orig.Body)), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			quoted = append(quoted, "")
@@ -118,10 +118,4 @@ func echoReplyInitials(name string) string {
 		return "??"
 	}
 	return string(letters)
-}
-
-func normalizeDisplayEOL(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", "\n")
-	s = strings.ReplaceAll(s, "\r", "\n")
-	return strings.ReplaceAll(s, "\n", "\r\n")
 }

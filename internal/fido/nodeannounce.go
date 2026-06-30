@@ -89,13 +89,14 @@ func SendNodeAnnounce(nd *NetworkDef, m *Member, changeType string) error {
 	}
 
 	msg := &NetmailMsg{
-		FromName: "VirtBBS NodeAnnounce",
-		FromAddr: our.String(),
-		ToName:   NodeAnnounceToName,
-		ToAddr:   uplink.String(),
-		Subject:  NodeAnnounceSubject,
-		Body:     b.String(),
-		Network:  nd.Name,
+		FromName:    "VirtBBS NodeAnnounce",
+		FromAddr:    our.String(),
+		ToName:      NodeAnnounceToName,
+		ToAddr:      uplink.String(),
+		Subject:     NodeAnnounceSubject,
+		Body:        b.String(),
+		Network:     nd.Name,
+		NoSignature: true,
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)

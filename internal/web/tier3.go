@@ -174,7 +174,7 @@ func (s *Server) handleAPINetmail(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = s.Deps.Users.SetLastRead(u.ID, netmailConferenceID, num)
-		writeNetmailMessageJSON(w, s.Deps.Messages, s.Deps.Messages.DB(), localeFromRequest(r), u, m)
+		writeNetmailMessageJSON(w, s.Deps.Messages, s.Deps.Messages.DB(), localeFromRequest(r), u, m, u.Sysop && r.URL.Query().Get("source") == "1")
 		return
 	}
 	msgs, err := s.Deps.Messages.ListNetmail(u.Name, u.Sysop, 0, 200)

@@ -92,12 +92,13 @@ func BuildTraceReply(nd *NetworkDef, our Addr, botName string, pm *Message) *Net
 	fmt.Fprintf(&body, "  Software:   VirtBBS\r\n")
 
 	return &NetmailMsg{
-		FromName: botName,
-		FromAddr: our.String(),
-		ToName:   pm.FromName,
-		ToAddr:   pm.OrigAddr.String(),
-		Subject:  TraceReplySubject,
-		Body:     body.String(),
+		FromName:    botName,
+		FromAddr:    our.String(),
+		ToName:      pm.FromName,
+		ToAddr:      pm.OrigAddr.String(),
+		Subject:     TraceReplySubject,
+		NoSignature: true,
+		Body:        body.String(),
 	}
 }
 
@@ -135,12 +136,13 @@ func SendTrace(nd *NetworkDef, fromName, toName, toAddr string) (pktPath string,
 	}
 
 	msg := &NetmailMsg{
-		FromName: fromName,
-		FromAddr: our.String(),
-		ToName:   toName,
-		ToAddr:   dest.String(),
-		Subject:  TraceSubject,
-		Body:     fmt.Sprintf("TRACE from %s at %s.\r\n", our.String(), time.Now().Format("02 Jan 06  15:04:05")),
+		FromName:    fromName,
+		FromAddr:    our.String(),
+		ToName:      toName,
+		ToAddr:      dest.String(),
+		Subject:     TraceSubject,
+		NoSignature: true,
+		Body:        fmt.Sprintf("TRACE from %s at %s.\r\n", our.String(), time.Now().Format("02 Jan 06  15:04:05")),
 	}
 
 	uplink := nd.UplinkAddr()

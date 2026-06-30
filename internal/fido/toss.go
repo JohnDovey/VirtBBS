@@ -422,6 +422,9 @@ func tossFile(cfg *Config, nd *NetworkDef, store *messages.Store, confStore *con
 		posted := parseFidoDate(pm.DateTime)
 
 		bodyText := pb.Text
+		if IsRobotNetmailMessage(pm) {
+			bodyText = StripRobotNetmailFooter(bodyText)
+		}
 		var attachFiles []messages.AttachmentInput
 		attachLimit := InboundAttachmentLimit(cfg, nd, confStore, confID, isNetmail)
 		if clean, files, aerr := ExtractInboundAttachments(pb.Text, attachLimit); aerr != nil {

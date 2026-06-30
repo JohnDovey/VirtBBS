@@ -1880,7 +1880,16 @@ func (s *session) fidoFreq() {
 		s.writeln(ansi.Colorize(ansi.Yellow, "No commands entered."))
 		return
 	}
-	pktPath, err := fido.RequestFreq(target, s.user.Name, lines, addr)
+	def := target.EffectiveFreqOutboundMode()
+	s.write(ansi.Prompt(fmt.Sprintf("Format [C]lassic / [F]ILE_REQUEST [Enter=%s]: ", def)))
+	mode := def
+	switch strings.ToUpper(strings.TrimSpace(s.readline())) {
+	case "F", "2":
+		mode = fido.FreqOutboundFileRequest
+	case "C", "1":
+		mode = fido.FreqOutboundClassic
+	}
+	pktPath, err := fido.RequestFreq(target, s.user.Name, lines, addr, mode)
 	if err != nil {
 		s.writeln(ansi.Colorize(ansi.Red, "FREQ error: "+err.Error()))
 		return
@@ -2168,7 +2177,7 @@ func (s *session) netmailRead(startNum int) {
 		if m.FidoOrigin != "" {
 			s.writeln(ansi.Color(ansi.White) + "  Addr: " + m.FidoOrigin + ansi.Reset())
 		}
-		s.writeln(m.Body)
+		s.writeln(fido.NetmailDisplayText(m.Body))
 
 		s.statMsgsRead++
 		s.write(ansi.Prompt("[N]ext / [R]eply / [T]hread / [Q]uit: "))

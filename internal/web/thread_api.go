@@ -56,7 +56,7 @@ func (s *Server) handleAPINetmailThread(w http.ResponseWriter, r *http.Request) 
 	for _, m := range thread {
 		out = append(out, threadMessageJSON{
 			Message:     m,
-			DisplayBody: FormatMessageBodyHTML(m.Body),
+			DisplayBody: formatNetmailBodyForDisplay(m, false),
 			LangLabel:   messageLangLabel(locale, m),
 		})
 	}

@@ -387,12 +387,13 @@ func replyFreq(nd *NetworkDef, our Addr, pm *Message, body string) error {
 		return fmt.Errorf("freq: no uplink configured to route reply")
 	}
 	reply := &NetmailMsg{
-		FromName: FreqRobotName,
-		FromAddr: our.String(),
-		ToName:   pm.FromName,
-		ToAddr:   pm.OrigAddr.String(),
-		Subject:  "FREQ response",
-		Body:     body,
+		FromName:    FreqRobotName,
+		FromAddr:    our.String(),
+		ToName:      pm.FromName,
+		ToAddr:      pm.OrigAddr.String(),
+		Subject:     "FREQ response",
+		Body:        body,
+		NoSignature: true,
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply}, nd.Name)
@@ -403,10 +404,18 @@ func replyFreq(nd *NetworkDef, our Addr, pm *Message, body string) error {
 	return err
 }
 
-// RequestFreq composes and writes a FILE_REQUEST netmail (FTS attrib 0x0800) to
-// toAddr. Filenames are space-separated in the subject; optional freq_password
-// is sent on the first body line for remote hubs such as BinktermPHP.
-func RequestFreq(nd *NetworkDef, fromName string, lines []string, toAddr string) (pktPath string, err error) {
+// RequestFreq composes and writes an outbound FREQ request to toAddr.
+// mode overrides the network freq_outbound setting when non-empty (classic or file_request).
+func RequestFreq(nd *NetworkDef, fromName string, lines []string, toAddr, mode string) (pktPath string, err error) {
+	switch ResolveFreqOutboundMode(nd, mode) {
+	case FreqOutboundFileRequest:
+		return requestFreqFileRequest(nd, fromName, lines, toAddr)
+	default:
+		return requestFreqClassic(nd, fromName, lines, toAddr)
+	}
+}
+
+func requestFreqFileRequest(nd *NetworkDef, fromName string, lines []string, toAddr string) (pktPath string, err error) {
 	our := nd.NodeAddr()
 	if our == (Addr{}) {
 		return "", fmt.Errorf("invalid local address %q", nd.Address)
@@ -429,8 +438,39 @@ func RequestFreq(nd *NetworkDef, fromName string, lines []string, toAddr string)
 		Subject:     subject,
 		Body:        body,
 		FileRequest: true,
+		NoSignature: true,
+	}
+	return writeFreqRequest(nd, our, dest, msg)
+}
+
+func requestFreqClassic(nd *NetworkDef, fromName string, lines []string, toAddr string) (pktPath string, err error) {
+	our := nd.NodeAddr()
+	if our == (Addr{}) {
+		return "", fmt.Errorf("invalid local address %q", nd.Address)
+	}
+	dest, err := ParseAddr(toAddr)
+	if err != nil {
+		return "", fmt.Errorf("invalid destination %q: %w", toAddr, err)
 	}
 
+	subject, body, err := BuildClassicFreqRequest(lines, nd.FreqPassword)
+	if err != nil {
+		return "", err
+	}
+
+	msg := &NetmailMsg{
+		FromName:    fromName,
+		FromAddr:    our.String(),
+		ToName:      FreqRobotName,
+		ToAddr:      dest.String(),
+		Subject:     subject,
+		Body:        body,
+		NoSignature: true,
+	}
+	return writeFreqRequest(nd, our, dest, msg)
+}
+
+func writeFreqRequest(nd *NetworkDef, our, dest Addr, msg *NetmailMsg) (string, error) {
 	outDir := OutboundDir(nd.OutboundDir, dest, nd.UplinkAddr(), true)
 	path, err := WritePKT(our, dest, nd.Password, outDir, []*NetmailMsg{msg}, nd.Name)
 	if err == nil {
@@ -444,7 +484,28 @@ func RequestFreq(nd *NetworkDef, fromName string, lines []string, toAddr string)
 	return path, err
 }
 
-// BuildFreqFileRequest formats lines for a FILE_REQUEST netmail: requested names
+// BuildClassicFreqRequest formats classic FREQ netmail: commands in the body,
+// optional remote password in the subject (same as AreaFix/FileFix robots).
+func BuildClassicFreqRequest(lines []string, remotePassword string) (subject, body string, err error) {
+	var b strings.Builder
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			fmt.Fprintf(&b, "%s\r\n", line)
+		}
+	}
+	body = b.String()
+	if body == "" {
+		return "", "", fmt.Errorf("no commands to request")
+	}
+	subject = FreqRobotName
+	if pw := strings.TrimSpace(remotePassword); pw != "" {
+		subject = pw
+	}
+	return subject, body, nil
+}
+
+// BuildFreqFileRequest formats FILE_REQUEST netmail: requested names in the
 // in the subject (space-separated), optional remote password as the body.
 func BuildFreqFileRequest(lines []string, remotePassword string) (subject, body string, err error) {
 	names, err := freqFileRequestNames(lines)

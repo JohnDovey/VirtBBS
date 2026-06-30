@@ -414,6 +414,7 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 				merged.Fido.FreqPassword = r.FormValue("freq_password")
 				merged.Fido.FreqMaxFiles = formInt(r, "freq_max_files", 0)
 				merged.Fido.FreqMaxBytes = int64(formInt(r, "freq_max_bytes", 0))
+				merged.Fido.FreqOutbound = strings.TrimSpace(r.FormValue("freq_outbound"))
 				merged.Fido.PollIntervalMins = formInt(r, "poll_interval_mins", 0)
 				merged.Fido.NodelistURL = strings.TrimSpace(r.FormValue("nodelist_url"))
 				merged.Fido.NodelistUpdateIntervalHours = formInt(r, "nodelist_update_hours", 0)
@@ -447,6 +448,7 @@ func (s *Server) handleAdminFidoNetworks(w http.ResponseWriter, r *http.Request)
 					nd.FreqPassword = r.FormValue("freq_password")
 					nd.FreqMaxFiles = formInt(r, "freq_max_files", 0)
 					nd.FreqMaxBytes = int64(formInt(r, "freq_max_bytes", 0))
+					nd.FreqOutbound = strings.TrimSpace(r.FormValue("freq_outbound"))
 					nd.PollIntervalMins = formInt(r, "poll_interval_mins", 0)
 					nd.NodelistURL = strings.TrimSpace(r.FormValue("nodelist_url"))
 					nd.NodelistUpdateIntervalHours = formInt(r, "nodelist_update_hours", 0)
@@ -711,7 +713,7 @@ func (s *Server) handleAdminFidoTools(w http.ResponseWriter, r *http.Request) {
 				if toAddr == "" {
 					err = fmt.Errorf("FREQ target address required")
 				} else {
-					pkt, err = fido.RequestFreq(nd, fromName, lines, toAddr)
+					pkt, err = fido.RequestFreq(nd, fromName, lines, toAddr, r.FormValue("freq_format"))
 				}
 			}
 			if err != nil {

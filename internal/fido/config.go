@@ -144,6 +144,9 @@ type Config struct {
 	FreqMaxFiles int `toml:"freq_max_files" json:"freq_max_files"`
 	// FreqMaxBytes caps total bytes queued per inbound FREQ request (default 5 MiB).
 	FreqMaxBytes int64 `toml:"freq_max_bytes" json:"freq_max_bytes"`
+	// FreqOutbound selects outbound FREQ request format: "classic" (netmail to
+	// Freq) or "file_request" (FTS FILE_REQUEST attribute). Default classic.
+	FreqOutbound string `toml:"freq_outbound" json:"freq_outbound"`
 }
 
 // DefaultNodelistDiscoveryURL is used when NodelistURL is left blank: a
@@ -247,6 +250,7 @@ type NetworkDef struct {
 	FreqPassword string `toml:"freq_password" json:"freq_password"`
 	FreqMaxFiles int    `toml:"freq_max_files" json:"freq_max_files"`
 	FreqMaxBytes int64  `toml:"freq_max_bytes" json:"freq_max_bytes"`
+	FreqOutbound string `toml:"freq_outbound" json:"freq_outbound"`
 }
 
 // DefaultConfig returns a Config with sensible disabled defaults.
@@ -350,6 +354,7 @@ func (c *Config) AllNetworks() []NetworkDef {
 		FreqPassword:                c.FreqPassword,
 		FreqMaxFiles:                c.FreqMaxFiles,
 		FreqMaxBytes:                c.FreqMaxBytes,
+		FreqOutbound:                c.FreqOutbound,
 	}
 	result := []NetworkDef{primary}
 	result = append(result, c.Networks...)
@@ -592,6 +597,49 @@ func (n *NetworkDef) EffectiveFreqMaxBytes() int64 {
 		return n.FreqMaxBytes
 	}
 	return DefaultFreqMaxBytes
+}
+
+// Freq outbound request formats.
+const (
+	FreqOutboundClassic     = "classic"
+	FreqOutboundFileRequest = "file_request"
+)
+
+// NormalizeFreqOutboundMode returns a canonical outbound FREQ mode name, or ""
+// when mode is empty/unknown.
+func NormalizeFreqOutboundMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case FreqOutboundFileRequest, "file-request", "filerequest", "file request":
+		return FreqOutboundFileRequest
+	case FreqOutboundClassic, "freq", "robot":
+		return FreqOutboundClassic
+	default:
+		return ""
+	}
+}
+
+// EffectiveFreqOutboundMode returns the configured outbound FREQ format (default classic).
+func (n *NetworkDef) EffectiveFreqOutboundMode() string {
+	if n == nil {
+		return FreqOutboundClassic
+	}
+	if m := NormalizeFreqOutboundMode(n.FreqOutbound); m != "" {
+		return m
+	}
+	return FreqOutboundClassic
+}
+
+// ResolveFreqOutboundMode picks override when set, otherwise the network default.
+func ResolveFreqOutboundMode(nd *NetworkDef, override string) string {
+	if strings.TrimSpace(override) != "" {
+		if m := NormalizeFreqOutboundMode(override); m != "" {
+			return m
+		}
+	}
+	if nd != nil {
+		return nd.EffectiveFreqOutboundMode()
+	}
+	return FreqOutboundClassic
 }
 
 // DownlinkByAddr finds a configured Downlink by address (ignoring point),

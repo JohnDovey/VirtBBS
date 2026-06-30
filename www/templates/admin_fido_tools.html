@@ -36,6 +36,11 @@
     <input type="hidden" name="network" value="{{.Network}}">
     <label>{{t .Locale "common.from_name"}} <input class="form-control" name="from_name" value="{{t .Locale "menu.sysop"}}"></label>
     <label>{{t .Locale "admin_fido_tools.freq_to_addr"}} <input class="form-control" name="freq_to_addr" required placeholder="1:234/567"></label>
+    <label>{{t .Locale "admin_fido_tools.freq_format"}} <select class="form-select" name="freq_format">
+      <option value="">{{t .Locale "admin_fido_tools.freq_format_default"}}</option>
+      <option value="classic">{{t .Locale "admin_fido_networks.freq_outbound_classic"}}</option>
+      <option value="file_request">{{t .Locale "admin_fido_networks.freq_outbound_file_request"}}</option>
+    </select></label>
     <label>{{t .Locale "admin_fido_tools.freq_commands"}} <textarea class="form-control" name="freq_commands" rows="4" placeholder="%LIST&#10;readme.txt&#10;*.zip"></textarea></label>
     <div class="btn-row">
       <button class="btn btn-primary" type="submit" name="action" value="freq">{{t .Locale "admin_fido_tools.freq_btn"}}</button>

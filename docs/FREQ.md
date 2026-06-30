@@ -30,9 +30,19 @@ Limits per request: **freq_max_files** (default 5) and **freq_max_bytes** (defau
 - **Web admin:** FidoNet tools → FREQ section
 - **API:** compose netmail via `RequestFreq()`
 
-Outbound requests use **FILE_REQUEST** netmail (FTS attribute `0x0800`): requested
-filenames are space-separated in the **subject**, and `freq_password` (if set) is
-sent on the first body line for remote hubs such as BinktermPHP.
+Outbound requests support two formats (per-network default in `freq_outbound`, overridable per send):
+
+| Format | Use when |
+|--------|----------|
+| **classic** (default) | Netmail **To: Freq** with commands in the body (VirtBBS, HPT, Squish-style robots) |
+| **file_request** | FTS **FILE_REQUEST** attribute (`0x0800`); filenames in subject (BinktermPHP) |
+
+- **Terminal:** `[G] FREQ` — press Enter for network default, or `C` / `F` to override
+- **Web admin:** FidoNet tools → FREQ section (format dropdown)
+- **Config:** `freq_outbound = "classic"` or `"file_request"` per network
+
+For **classic**, `freq_password` (if set) is sent in the **subject**; commands go in the body.
+For **file_request**, filenames are space-separated in the **subject** and optional remote password is on the first body line.
 
 ## Configuration (`VirtBBS.DAT` / network admin)
 
@@ -42,6 +52,7 @@ sent on the first body line for remote hubs such as BinktermPHP.
 | `freq_password` | (none) | Optional global password |
 | `freq_max_files` | 5 | Max files queued per request |
 | `freq_max_bytes` | 5242880 | Max total bytes per request |
+| `freq_outbound` | classic | Outbound request format: `classic` or `file_request` |
 
 Add **FRQ** to node flags to advertise file-request support in the nodelist.
 
@@ -57,4 +68,4 @@ WaZOO `.REQ`, Bark, SRIF `M_GET`, BinkP `M_GET`, and per-file passwords are **no
 
 ## Comparison with BinktermPHP
 
-BinktermPHP supports multiple FREQ transports (WaZOO `.REQ`, netmail `FILE_REQUEST`, BinkP `M_GET`). VirtBBS outbound FREQ uses **FILE_REQUEST** netmail (filenames in the subject). The inbound responder still accepts classic netmail to **Freq** with commands in the body, and delivers files by raw BinkP outbound `.OUT` pickup.
+BinktermPHP supports multiple FREQ transports (WaZOO `.REQ`, netmail `FILE_REQUEST`, BinkP `M_GET`). VirtBBS outbound FREQ defaults to **classic** netmail to **Freq**; set `freq_outbound = "file_request"` (or choose per send) for BinktermPHP hubs. The inbound responder accepts both styles and delivers files by raw BinkP outbound `.OUT` pickup.

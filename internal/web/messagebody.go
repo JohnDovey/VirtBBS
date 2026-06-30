@@ -21,6 +21,7 @@ func FormatMessageBodyHTML(body string) string {
 	if body == "" {
 		return ""
 	}
+	body = fido.DecodeMessageEntities(body)
 	if bodyHasANSI(body) {
 		return `<div class="ansi-screen">` + ansiToHTML(body) + `</div>`
 	}
@@ -32,6 +33,14 @@ func FormatMessageBodyHTML(body string) string {
 	escaped = strings.ReplaceAll(escaped, "\r", "\n")
 	escaped = strings.ReplaceAll(escaped, "\n", "<br>")
 	return escaped
+}
+
+// formatNetmailBodyForDisplay renders stored netmail for HTML clients.
+func formatNetmailBodyForDisplay(m *messages.Message, showSource bool) string {
+	if showSource {
+		return FormatMessageBodyHTML(fido.ReconstructSource(fidoSourceOpts(m, "")))
+	}
+	return FormatMessageBodyHTML(fido.NetmailDisplayText(m.Body))
 }
 
 // formatConferenceMessageBody renders a conference message for HTML display,

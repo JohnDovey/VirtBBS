@@ -92,11 +92,12 @@ func IsNetmailUtilityTest(pm *Message) bool {
 // for the automatic reply (e.g. "VirtBBS PingBot").
 func BuildPongReply(our Addr, botName string, pm *Message) *NetmailMsg {
 	return &NetmailMsg{
-		FromName: botName,
-		FromAddr: our.String(),
-		ToName:   pm.FromName,
-		ToAddr:   pm.OrigAddr.String(),
-		Subject:  PongSubject,
+		FromName:    botName,
+		FromAddr:    our.String(),
+		ToName:      pm.FromName,
+		ToAddr:      pm.OrigAddr.String(),
+		Subject:     PongSubject,
+		NoSignature: true,
 		Body: fmt.Sprintf(
 			"Automatic PONG reply from %s.\r\n"+
 				"Your PING was received at %s.\r\n"+
@@ -139,12 +140,13 @@ func SendPing(nd *NetworkDef, fromName, toName, toAddr string) (pktPath string, 
 	}
 
 	msg := &NetmailMsg{
-		FromName: fromName,
-		FromAddr: our.String(),
-		ToName:   toName,
-		ToAddr:   dest.String(),
-		Subject:  PingSubject,
-		Body:     fmt.Sprintf("PING from %s at %s.\r\n", our.String(), time.Now().Format("02 Jan 06  15:04:05")),
+		FromName:    fromName,
+		FromAddr:    our.String(),
+		ToName:      toName,
+		ToAddr:      dest.String(),
+		Subject:     PingSubject,
+		NoSignature: true,
+		Body:        fmt.Sprintf("PING from %s at %s.\r\n", our.String(), time.Now().Format("02 Jan 06  15:04:05")),
 	}
 
 	uplink := nd.UplinkAddr()

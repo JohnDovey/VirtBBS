@@ -324,12 +324,13 @@ func replyFileFix(nd *NetworkDef, our Addr, pm *Message, body string) error {
 		return fmt.Errorf("filefix: no uplink configured to route reply")
 	}
 	reply := &NetmailMsg{
-		FromName: FileFixRobotName,
-		FromAddr: our.String(),
-		ToName:   pm.FromName,
-		ToAddr:   pm.OrigAddr.String(),
-		Subject:  "FileFix response",
-		Body:     body,
+		FromName:    FileFixRobotName,
+		FromAddr:    our.String(),
+		ToName:      pm.FromName,
+		ToAddr:      pm.OrigAddr.String(),
+		Subject:     "FileFix response",
+		Body:        body,
+		NoSignature: true,
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply}, nd.Name)
@@ -363,12 +364,13 @@ func RequestFileFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	msg := &NetmailMsg{
-		FromName: fromName,
-		FromAddr: our.String(),
-		ToName:   FileFixRobotName,
-		ToAddr:   uplink.String(),
-		Subject:  subject,
-		Body:     body.String(),
+		FromName:    fromName,
+		FromAddr:    our.String(),
+		ToName:      FileFixRobotName,
+		ToAddr:      uplink.String(),
+		Subject:     subject,
+		Body:        body.String(),
+		NoSignature: true,
 	}
 
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)

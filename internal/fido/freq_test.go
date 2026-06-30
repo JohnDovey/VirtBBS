@@ -86,7 +86,7 @@ func TestBuildFreqFileRequest(t *testing.T) {
 
 func TestRequestFreq_setsFileRequestAttribute(t *testing.T) {
 	_, nd, _, _, _ := setupFreqTest(t)
-	path, err := RequestFreq(nd, "Sysop", []string{"readme.txt", "ALLFILES"}, "1:234/2")
+	path, err := RequestFreq(nd, "Sysop", []string{"readme.txt", "ALLFILES"}, "1:234/2", FreqOutboundFileRequest)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,6 +114,33 @@ func TestRequestFreq_setsFileRequestAttribute(t *testing.T) {
 	}
 	if m.ToName != "FileRequest" {
 		t.Fatalf("ToName=%q", m.ToName)
+	}
+}
+
+func TestRequestFreq_classicMode(t *testing.T) {
+	_, nd, _, _, _ := setupFreqTest(t)
+	path, err := RequestFreq(nd, "Sysop", []string{"%HELP", "readme.txt"}, "1:234/2", FreqOutboundClassic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	msgs, err := ReadPacket(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := msgs[0]
+	if m.Attrib&AttribFileRequest != 0 {
+		t.Fatalf("classic FREQ must not set FILE_REQUEST, attrib=%#x", m.Attrib)
+	}
+	if m.ToName != FreqRobotName {
+		t.Fatalf("ToName=%q", m.ToName)
+	}
+	if !strings.Contains(m.Body, "readme.txt") {
+		t.Fatalf("body=%q", m.Body)
 	}
 }
 

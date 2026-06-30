@@ -166,13 +166,14 @@ func sendNodediffNetmail(nd *NetworkDef, our Addr, diffBody []byte, filename str
 	body := fmt.Sprintf("Attached: %s\r\n\r\n%s", filename, string(diffBody))
 
 	msg := &NetmailMsg{
-		FromName: "VirtBBS",
-		FromAddr: our.String(),
-		ToName:   "Nodelist",
-		ToAddr:   uplink.String(),
-		Subject:  subject,
-		Body:     body,
-		Network:  nd.Name,
+		FromName:    "VirtBBS",
+		FromAddr:    our.String(),
+		ToName:      "Nodelist",
+		ToAddr:      uplink.String(),
+		Subject:     subject,
+		Body:        body,
+		Network:     nd.Name,
+		NoSignature: true,
 	}
 
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)

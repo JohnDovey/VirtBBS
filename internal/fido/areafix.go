@@ -598,12 +598,13 @@ func replyAreaFix(nd *NetworkDef, our Addr, pm *Message, body string) error {
 		return fmt.Errorf("areafix: no uplink configured to route reply")
 	}
 	reply := &NetmailMsg{
-		FromName: AreaFixRobotName,
-		FromAddr: our.String(),
-		ToName:   pm.FromName,
-		ToAddr:   pm.OrigAddr.String(),
-		Subject:  "AreaFix response",
-		Body:     body,
+		FromName:    AreaFixRobotName,
+		FromAddr:    our.String(),
+		ToName:      pm.FromName,
+		ToAddr:      pm.OrigAddr.String(),
+		Subject:     "AreaFix response",
+		Body:        body,
+		NoSignature: true,
 	}
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)
 	_, err := WritePKT(our, uplink, nd.Password, outDir, []*NetmailMsg{reply}, nd.Name)
@@ -637,12 +638,13 @@ func RequestAreaFix(nd *NetworkDef, fromName string, adds, removes []string) (pk
 	}
 
 	msg := &NetmailMsg{
-		FromName: fromName,
-		FromAddr: our.String(),
-		ToName:   AreaFixRobotName,
-		ToAddr:   uplink.String(),
-		Subject:  subject,
-		Body:     body.String(),
+		FromName:    fromName,
+		FromAddr:    our.String(),
+		ToName:      AreaFixRobotName,
+		ToAddr:      uplink.String(),
+		Subject:     subject,
+		Body:        body.String(),
+		NoSignature: true,
 	}
 
 	outDir := OutboundDir(nd.OutboundDir, uplink, uplink, false)

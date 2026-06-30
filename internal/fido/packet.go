@@ -133,7 +133,7 @@ func (m *Message) Parse() ParsedBody {
 	var pb ParsedBody
 	var text, kludges []string
 
-	for _, line := range strings.Split(m.Body, "\r") {
+	for _, line := range fidoLines(m.Body) {
 		line = strings.TrimRight(line, "\n")
 
 		switch {
