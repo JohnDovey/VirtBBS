@@ -112,6 +112,77 @@ func TestMessagesMarkRead(t *testing.T) {
 	}
 }
 
+func TestMessagesDeleteNetmailOnly(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	filesRoot := filepath.Join(dir, "files")
+	_ = os.MkdirAll(filesRoot, 0755)
+	if _, err := config.Load(filepath.Join(dir, "virtbbs.dat")); err != nil {
+		t.Fatalf("config.Load: %v", err)
+	}
+	sqlDB, _ := db.Open(dbPath)
+	defer sqlDB.Close()
+	userStore, _ := users.Open(sqlDB)
+	msgStore, _ := messages.Open(sqlDB)
+	confStore, _ := conferences.Open(sqlDB)
+	fileStore, _ := files.Open(sqlDB, filesRoot)
+
+	_ = confStore.Create(&conferences.Conference{ID: 0, Name: "General", ReadSec: 10, WriteSec: 10})
+	_ = confStore.Create(&conferences.Conference{ID: 1, Name: "Echo", ReadSec: 10, WriteSec: 10, Echo: true})
+	u := &users.User{Name: "Alice", SecurityLevel: 20, PageLength: 24, XferProtocol: "Z", ANSI: true}
+	_ = userStore.Create(u, "password123")
+
+	_ = msgStore.PostWithNumber(&messages.Message{
+		ConferenceID: 0, MsgNumber: 1, FromName: "Bob", ToName: "Alice",
+		Subject: "Netmail", Body: "private", Status: "A",
+		FidoOrigin: "1:2/3 @ Somewhere",
+	})
+	_ = msgStore.PostWithNumber(&messages.Message{
+		ConferenceID: 1, MsgNumber: 1, FromName: "Sysop", ToName: "All",
+		Subject: "Echo", Body: "public echo", Status: "A", Echo: true,
+	})
+
+	addr := startTestServer(t, userStore, msgStore, confStore, fileStore)
+	client := newTestClient(addr, "Alice", "password123")
+
+	client.call(t, "messages.delete", map[string]any{
+		"ConferenceID": VirtAndNetmailConferenceID,
+		"MsgNumber":    1,
+	})
+	if _, err := msgStore.GetNetmail("Alice", false, 1); err == nil {
+		t.Fatal("netmail should be deleted on server")
+	}
+
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer conn.Close()
+	req := map[string]any{
+		"method": "messages.delete",
+		"auth":   map[string]string{"username": "Alice", "password": "password123"},
+		"params": map[string]any{"ConferenceID": 1, "MsgNumber": 1},
+	}
+	line, _ := json.Marshal(req)
+	line = append(line, '\n')
+	if _, err := conn.Write(line); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	sc := bufio.NewScanner(conn)
+	if !sc.Scan() {
+		t.Fatalf("no response")
+	}
+	var resp struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(sc.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Error == "" {
+		t.Fatal("expected error deleting echomail from server")
+	}
+}
+
 func startTestServer(t *testing.T, userStore *users.Store, msgStore *messages.Store,
 	confStore *conferences.Store, fileStore *files.Store) string {
 	t.Helper()

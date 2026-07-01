@@ -217,6 +217,22 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 				LastRead:   lastRead,
 			})
 		}
+		if nmTotal, err := s.Deps.Messages.CountNetmail(u.Name, u.Sysop); err == nil {
+			nmLast := lastMap[0]
+			nmUnread, _ := s.Deps.Messages.CountNetmailUnread(u.Name, u.Sysop, nmLast)
+			out = append(out, conferenceListItem{
+				Conference: conferences.Conference{
+					ID:          VirtAndNetmailConferenceID,
+					Name:        "Netmail",
+					Description: "FidoNet personal mail",
+					ReadSec:     10,
+					WriteSec:    10,
+				},
+				Total:    nmTotal,
+				Unread:   nmUnread,
+				LastRead: nmLast,
+			})
+		}
 		return nonNilSlice(out), nil
 
 	case "files.dirs.list":
@@ -473,6 +489,9 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 
 	case "messages.mark_read":
 		return s.handleMessagesMarkRead(req, u)
+
+	case "messages.delete":
+		return s.handleMessagesDelete(req, u)
 
 	case "messages.attachment.download":
 		return s.handleMessagesAttachmentDownload(req, u)

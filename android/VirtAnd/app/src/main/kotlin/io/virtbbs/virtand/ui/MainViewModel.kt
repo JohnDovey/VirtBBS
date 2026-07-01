@@ -332,8 +332,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun purgeNow() {
         viewModelScope.launch {
-            val days = settings.purgeDays.first()
-            SyncEngine(getApplication()).purgeOldMessages(days)
+            val cfg = settings.snapshot()
+            val days = cfg.purgeDays
+            val api = if (cfg.host.isNotBlank() && cfg.username.isNotBlank() && cfg.password.isNotBlank()) {
+                UserApiClient(cfg.host.trim(), cfg.userApiPort, cfg.username.trim(), cfg.password)
+            } else {
+                null
+            }
+            withContext(Dispatchers.IO) {
+                SyncEngine(getApplication()).purgeOldMessages(api, days)
+            }
         }
     }
 

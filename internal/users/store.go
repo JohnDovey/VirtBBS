@@ -111,6 +111,7 @@ func (s *Store) migrate() error {
 		`ALTER TABLE users ADD COLUMN locale TEXT NOT NULL DEFAULT 'en'`,
 		`ALTER TABLE user_conferences ADD COLUMN qwk_last_msg INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE user_conferences ADD COLUMN app_last_msg INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN app_last_netmail INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, stmt := range alters {
 		if _, err := s.db.Exec(stmt); err != nil {
@@ -389,6 +390,19 @@ func (s *Store) SetAppLast(userID int64, conferenceID, lastMsgIncluded int) erro
 		VALUES (?,?,?)
 		ON CONFLICT(user_id, conference_id) DO UPDATE SET app_last_msg=excluded.app_last_msg`,
 		userID, conferenceID, lastMsgIncluded)
+	return err
+}
+
+// GetAppLastNetmail returns the highest netmail msg_number delivered via VirtAnd sync.
+func (s *Store) GetAppLastNetmail(userID int64) int {
+	var n int
+	_ = s.db.QueryRow(`SELECT app_last_netmail FROM users WHERE id=?`, userID).Scan(&n)
+	return n
+}
+
+// SetAppLastNetmail records the highest netmail msg_number included in a VirtAnd sync.
+func (s *Store) SetAppLastNetmail(userID int64, lastMsgIncluded int) error {
+	_, err := s.db.Exec(`UPDATE users SET app_last_netmail=? WHERE id=?`, lastMsgIncluded, userID)
 	return err
 }
 

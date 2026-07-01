@@ -60,7 +60,7 @@ class SyncEngine(private val context: Context) {
         )
 
         try {
-            purgeOldMessages(cfg.purgeDays)
+            purgeOldMessages(api, cfg.purgeDays)
             val sessionInfo = refreshSessionInfo(api)
             refreshConferences(api)
             syncPendingReadPointers(api)
@@ -78,12 +78,31 @@ class SyncEngine(private val context: Context) {
         }
     }
 
-    suspend fun purgeOldMessages(purgeDays: Int) {
+    suspend fun purgeOldMessages(api: UserApiClient?, purgeDays: Int) {
         if (purgeDays <= 0) return
         val cutoffMs = System.currentTimeMillis() - purgeDays.toLong() * 24 * 60 * 60 * 1000
         runBlockingDb {
             val stale = db.messageDao().messagesOlderThan(cutoffMs)
             if (stale.isEmpty()) return@runBlockingDb
+
+            if (api != null) {
+                for (m in stale.filter { it.isNetmail }) {
+                    try {
+                        api.call(
+                            "messages.delete",
+                            JsonObject(
+                                mapOf(
+                                    "ConferenceID" to JsonPrimitive(m.conferenceId),
+                                    "MsgNumber" to JsonPrimitive(m.msgNumber),
+                                )
+                            ),
+                        )
+                    } catch (_: Exception) {
+                        // Keep local copy if server delete fails; retry next purge.
+                    }
+                }
+            }
+
             val localIds = stale.map { it.localId }
             val attachments = localIds.flatMap { db.attachmentDao().forMessage(it) }
             for (a in attachments) {
@@ -185,6 +204,7 @@ class SyncEngine(private val context: Context) {
                 subject = o["Subject"]?.jsonPrimitive?.content ?: "",
                 body = o["Body"]?.jsonPrimitive?.content ?: "",
                 hasAttachment = o["HasAttachment"]?.jsonPrimitive?.booleanOrNull ?: false,
+                isNetmail = o["IsNetmail"]?.jsonPrimitive?.booleanOrNull ?: false,
             )
             val localId = runBlockingDb { db.messageDao().insert(entity) }
             newCount++

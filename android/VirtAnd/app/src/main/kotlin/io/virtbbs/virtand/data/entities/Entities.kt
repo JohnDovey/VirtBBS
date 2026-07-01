@@ -9,6 +9,9 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
+/** Synthetic conference ID for FidoNet netmail in the local cache (server uses 0). */
+const val NETMAIL_CONFERENCE_ID = -1
+
 @Entity(tableName = "conferences")
 data class ConferenceEntity(
     @PrimaryKey val id: Int,
@@ -39,6 +42,7 @@ data class CachedMessageEntity(
     val subject: String,
     val body: String,
     val hasAttachment: Boolean = false,
+    val isNetmail: Boolean = false,
     val isRead: Boolean = false,
 )
 

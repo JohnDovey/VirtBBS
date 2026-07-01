@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS users (
     deleted         INTEGER NOT NULL DEFAULT 0,
     sysop           INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-    updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+    updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    app_last_netmail INTEGER NOT NULL DEFAULT 0   -- last netmail msg_number delivered via VirtAnd sync
 );
 
 CREATE TABLE IF NOT EXISTS user_conferences (
@@ -41,6 +42,9 @@ CREATE TABLE IF NOT EXISTS user_conferences (
     app_last_msg    INTEGER NOT NULL DEFAULT 0,    -- last message number delivered via VirtAnd User API sync
     PRIMARY KEY (user_id, conference_id)
 );
+
+-- VirtAnd netmail sync cursor (netmail lives in conference 0 with a separate sequence filter).
+-- Stored on users because netmail shares conference_id 0 with General local messages.
 
 CREATE INDEX IF NOT EXISTS idx_users_name ON users(name);
 CREATE INDEX IF NOT EXISTS idx_users_deleted ON users(deleted);

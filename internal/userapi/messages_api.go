@@ -12,6 +12,10 @@ import (
 	"github.com/virtbbs/virtbbs/internal/users"
 )
 
+// VirtAndNetmailConferenceID is the synthetic conference ID VirtAnd uses for
+// netmail in its local cache (server netmail is stored in conference 0).
+const VirtAndNetmailConferenceID = -1
+
 type syncMessageAttachment struct {
 	ID        int64  `json:"ID"`
 	Filename  string `json:"Filename"`
@@ -28,6 +32,7 @@ type syncMessageItem struct {
 	DatePosted   string                  `json:"DatePosted"`
 	Body         string                  `json:"Body"`
 	HasAttachment bool                   `json:"HasAttachment"`
+	IsNetmail    bool                    `json:"IsNetmail"`
 	Attachments  []syncMessageAttachment `json:"Attachments"`
 }
 
@@ -90,6 +95,7 @@ func (s *Server) handleMessagesSync(req Request, u *users.User) (any, error) {
 				Subject:      m.Subject,
 				DatePosted:   m.DatePosted.Format(time.RFC3339),
 				Body:         m.Body,
+				IsNetmail:    messages.IsNetmail(m),
 			}
 			if atts, err := s.Deps.Messages.ListAttachments(m.ID); err == nil && len(atts) > 0 {
 				item.HasAttachment = true
@@ -110,6 +116,45 @@ func (s *Server) handleMessagesSync(req Request, u *users.User) (any, error) {
 			}
 		}
 	}
+
+	// Netmail (conference 0, separate from General local messages).
+	lastNetmail := s.Deps.Users.GetAppLastNetmail(u.ID)
+	nmMsgs, err := s.Deps.Messages.ListNetmail(u.Name, u.Sysop, lastNetmail+1, p.Limit)
+	if err != nil {
+		return nil, err
+	}
+	nmHigh := lastNetmail
+	for _, m := range nmMsgs {
+		item := syncMessageItem{
+			ID:           m.ID,
+			ConferenceID: VirtAndNetmailConferenceID,
+			MsgNumber:    m.MsgNumber,
+			FromName:     m.FromName,
+			ToName:       m.ToName,
+			Subject:      m.Subject,
+			DatePosted:   m.DatePosted.Format(time.RFC3339),
+			Body:         m.Body,
+			IsNetmail:    true,
+		}
+		if atts, err := s.Deps.Messages.ListAttachments(m.ID); err == nil && len(atts) > 0 {
+			item.HasAttachment = true
+			for _, a := range atts {
+				item.Attachments = append(item.Attachments, syncMessageAttachment{
+					ID: a.ID, Filename: a.Filename, SizeBytes: a.SizeBytes,
+				})
+			}
+		}
+		out = append(out, item)
+		if m.MsgNumber > nmHigh {
+			nmHigh = m.MsgNumber
+		}
+	}
+	if nmHigh > lastNetmail {
+		if err := s.Deps.Users.SetAppLastNetmail(u.ID, nmHigh); err != nil {
+			return nil, err
+		}
+	}
+
 	return syncResult{Messages: nonNilSlice(out)}, nil
 }
 
@@ -158,20 +203,24 @@ func (s *Server) handleMessagesMarkRead(req Request, u *users.User) (any, error)
 	if err := unmarshalParams(req.Params, &p); err != nil {
 		return nil, err
 	}
-	c, err := s.Deps.Conferences.Get(p.ConferenceID)
+	confID := p.ConferenceID
+	if confID == VirtAndNetmailConferenceID {
+		confID = 0
+	}
+	c, err := s.Deps.Conferences.Get(confID)
 	if err != nil {
 		return nil, err
 	}
 	if u.SecurityLevel < c.ReadSec {
 		return nil, fmt.Errorf("access denied")
 	}
-	if err := s.Deps.Users.SetLastRead(u.ID, p.ConferenceID, p.MsgNumber); err != nil {
+	if err := s.Deps.Users.SetLastRead(u.ID, confID, p.MsgNumber); err != nil {
 		return nil, err
 	}
 	unread, _ := s.Deps.Users.NewMessageCounts(u.ID)
 	return map[string]int{
 		"LastRead": p.MsgNumber,
-		"Unread":   unread[p.ConferenceID],
+		"Unread":   unread[confID],
 	}, nil
 }
 
@@ -184,14 +233,18 @@ func (s *Server) handleMessagesAttachmentDownload(req Request, u *users.User) (a
 	if err := unmarshalParams(req.Params, &p); err != nil {
 		return nil, err
 	}
-	c, err := s.Deps.Conferences.Get(p.ConferenceID)
+	confID := p.ConferenceID
+	if confID == VirtAndNetmailConferenceID {
+		confID = 0
+	}
+	c, err := s.Deps.Conferences.Get(confID)
 	if err != nil {
 		return nil, err
 	}
 	if u.SecurityLevel < c.ReadSec {
 		return nil, fmt.Errorf("access denied")
 	}
-	msg, err := s.Deps.Messages.Get(p.ConferenceID, p.MsgNumber)
+	msg, err := s.Deps.Messages.Get(confID, p.MsgNumber)
 	if err != nil {
 		return nil, fmt.Errorf("message not found")
 	}
@@ -212,4 +265,45 @@ func (s *Server) handleMessagesAttachmentDownload(req Request, u *users.User) (a
 		"filename": a.Filename,
 		"data":     base64.StdEncoding.EncodeToString(data),
 	}, nil
+}
+
+func (s *Server) handleMessagesDelete(req Request, u *users.User) (any, error) {
+	var p struct {
+		ConferenceID int `json:"ConferenceID"`
+		MsgNumber    int `json:"MsgNumber"`
+	}
+	if err := unmarshalParams(req.Params, &p); err != nil {
+		return nil, err
+	}
+	if p.MsgNumber <= 0 {
+		return nil, fmt.Errorf("invalid message number")
+	}
+	// VirtAnd uses -1 for netmail; server netmail is conference 0.
+	confID := p.ConferenceID
+	if confID == VirtAndNetmailConferenceID {
+		confID = 0
+	}
+	var msg *messages.Message
+	var err error
+	if confID == 0 {
+		msg, err = s.Deps.Messages.GetNetmail(u.Name, u.Sysop, p.MsgNumber)
+	} else {
+		msg, err = s.Deps.Messages.Get(confID, p.MsgNumber)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("message not found")
+	}
+	if !messages.IsNetmail(msg) {
+		return nil, fmt.Errorf("only netmail may be deleted from the server")
+	}
+	if !messages.CanViewNetmail(u.Name, u.Sysop, msg) {
+		return nil, fmt.Errorf("access denied")
+	}
+	if _, err := s.Deps.Messages.Delete(msg.ID); err != nil {
+		return nil, err
+	}
+	if confID == 0 {
+		_ = s.Deps.Users.ClampLastReadForConference(0, p.MsgNumber-1)
+	}
+	return map[string]bool{"deleted": true}, nil
 }

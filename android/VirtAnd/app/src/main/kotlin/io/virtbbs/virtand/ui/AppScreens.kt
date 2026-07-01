@@ -563,7 +563,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
             label = { Text("Purge messages older than (days)") },
         )
         Text(
-            "Purges cached messages and attachment files from this device only (default 7).",
+            "Echomail and local messages: purged from this device only. Netmail: also deleted on the server (default 7 days).",
             style = MaterialTheme.typography.bodySmall,
         )
         OutlinedButton(onClick = { viewModel.purgeNow() }) { Text("Purge now") }
