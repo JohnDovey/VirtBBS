@@ -21,8 +21,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
@@ -55,6 +59,21 @@ private sealed class Tab(val route: String, val label: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VirtAndApp(viewModel: MainViewModel) {
+    var splashDone by remember { mutableStateOf(false) }
+    val host by viewModel.settings.host.collectAsState(initial = "")
+    val username by viewModel.settings.username.collectAsState(initial = "")
+
+    if (!splashDone) {
+        SplashScreen(viewModel) { splashDone = true }
+        return
+    }
+
+    LaunchedEffect(splashDone) {
+        if (splashDone && host.isNotBlank() && username.isNotBlank()) {
+            viewModel.synchronize()
+        }
+    }
+
     val nav = rememberNavController()
     val syncing by viewModel.syncing.collectAsState()
     val syncStatus by viewModel.syncStatus.collectAsState()

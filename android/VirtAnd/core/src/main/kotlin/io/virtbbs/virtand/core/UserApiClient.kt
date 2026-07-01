@@ -69,8 +69,9 @@ class UserApiClient(
         private const val BULK_TIMEOUT_MS = 300_000
 
         private val bulkMethods = setOf(
-            "qwk.download",
-            "qwk.upload",
+            "messages.sync",
+            "messages.post",
+            "messages.attachment.download",
             "files.download",
             "files.upload",
         )

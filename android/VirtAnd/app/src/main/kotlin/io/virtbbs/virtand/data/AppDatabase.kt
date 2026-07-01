@@ -7,6 +7,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import io.virtbbs.virtand.data.dao.AttachmentDao
 import io.virtbbs.virtand.data.dao.ConferenceDao
 import io.virtbbs.virtand.data.dao.FileDao
 import io.virtbbs.virtand.data.dao.MessageDao
@@ -15,7 +16,9 @@ import io.virtbbs.virtand.data.entities.CachedMessageEntity
 import io.virtbbs.virtand.data.entities.ConferenceEntity
 import io.virtbbs.virtand.data.entities.FileDirEntity
 import io.virtbbs.virtand.data.entities.FileEntryEntity
+import io.virtbbs.virtand.data.entities.MessageAttachmentEntity
 import io.virtbbs.virtand.data.entities.NodelistVersionEntity
+import io.virtbbs.virtand.data.entities.PendingReadUpdateEntity
 import io.virtbbs.virtand.data.entities.QueuedDownloadEntity
 import io.virtbbs.virtand.data.entities.QueuedReplyEntity
 import io.virtbbs.virtand.data.entities.QueuedUploadEntity
@@ -24,6 +27,8 @@ import io.virtbbs.virtand.data.entities.QueuedUploadEntity
     entities = [
         ConferenceEntity::class,
         CachedMessageEntity::class,
+        MessageAttachmentEntity::class,
+        PendingReadUpdateEntity::class,
         QueuedReplyEntity::class,
         FileDirEntity::class,
         FileEntryEntity::class,
@@ -31,12 +36,13 @@ import io.virtbbs.virtand.data.entities.QueuedUploadEntity
         QueuedDownloadEntity::class,
         NodelistVersionEntity::class,
     ],
-    version = 4,
+    version = 5,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun conferenceDao(): ConferenceDao
     abstract fun messageDao(): MessageDao
+    abstract fun attachmentDao(): AttachmentDao
     abstract fun fileDao(): FileDao
     abstract fun nodelistDao(): NodelistDao
 
@@ -68,10 +74,39 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE cached_messages ADD COLUMN serverMessageId INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE cached_messages ADD COLUMN datePostedMs INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE cached_messages ADD COLUMN hasAttachment INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS message_attachments (
+                        localId INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        messageLocalId INTEGER NOT NULL,
+                        attachmentId INTEGER NOT NULL,
+                        filename TEXT NOT NULL,
+                        sizeBytes INTEGER NOT NULL,
+                        localPath TEXT NOT NULL DEFAULT '',
+                        FOREIGN KEY(messageLocalId) REFERENCES cached_messages(localId) ON DELETE CASCADE
+                    )""",
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS index_message_attachments_messageLocalId_attachmentId " +
+                        "ON message_attachments(messageLocalId, attachmentId)",
+                )
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS pending_read_updates (
+                        conferenceId INTEGER PRIMARY KEY NOT NULL,
+                        msgNumber INTEGER NOT NULL
+                    )""",
+                )
+            }
+        }
+
         fun get(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(context, AppDatabase::class.java, "virtand.db")
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .build()
                     .also { instance = it }
             }

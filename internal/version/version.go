@@ -302,6 +302,8 @@
 //                        Fido ops page layout improvements.
 //   v1.5.0  2026-06-28  Cleanup and web UI for admin: remove management API, BinkP stats
 //                        page with charts, networks nav, LANG badges, admin fixes.
+//   v2.1.4  2026-06-30  VirtAnd direct API sync (messages.sync/post), app usage stats
+//                        bulletin, attachment download; app_last_msg cursor separate from QWK.
 //   v2.1.3  2026-06-30  QWK attachment sidecars and separate qwk_last_msg cursor;
 //                        VirtAnd 1.0.0 conference stats, sync and attachment fixes.
 //   v2.1.2  2026-06-30  VirtAnd sync fixes (Unicode QWK headers, JSON empty lists),
@@ -336,4 +338,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "2.1.3"
+const Version = "2.1.4"

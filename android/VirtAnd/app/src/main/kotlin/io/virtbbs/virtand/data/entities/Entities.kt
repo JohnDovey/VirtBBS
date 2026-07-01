@@ -1,13 +1,11 @@
 // VirtAnd — Entities.kt
 //
 // Room entities for VirtAnd's local cache: conferences, cached messages
-// (from QWK downloads), the file catalog (browsed offline after one
-// sync), the nodelist version stamp per subscribed network, and the
-// upload/reply queues that only execute on an explicit "synchronize" —
-// per the plan's "store and forward" design.
+// (from User API sync), attachments, file catalog, and upload/reply queues.
 package io.virtbbs.virtand.data.entities
 
 import androidx.room.Entity
+import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
@@ -18,33 +16,53 @@ data class ConferenceEntity(
     val description: String,
     val readSec: Int,
     val writeSec: Int,
-    /** Display network for grouping — "Local" for non-echomail areas. */
     val network: String = "Local",
-    /** BBS message stats (Total/Unread/LastRead), refreshed on sync. */
     val total: Int = 0,
     val unread: Int = 0,
     val lastRead: Int = 0,
 )
 
-/** A message cached locally after a QWK download — read-only until synced again. */
 @Entity(
     tableName = "cached_messages",
     indices = [Index(value = ["conferenceId", "msgNumber"], unique = true)],
 )
 data class CachedMessageEntity(
     @PrimaryKey(autoGenerate = true) val localId: Long = 0,
+    val serverMessageId: Long = 0,
     val conferenceId: Int,
     val msgNumber: Int,
     val date: String,
     val time: String,
+    val datePostedMs: Long = 0,
     val toName: String,
     val fromName: String,
     val subject: String,
     val body: String,
+    val hasAttachment: Boolean = false,
     val isRead: Boolean = false,
 )
 
-/** A reply composed offline, queued until the next "synchronize" uploads it as part of a REP packet. */
+@Entity(
+    tableName = "message_attachments",
+    foreignKeys = [
+        ForeignKey(
+            entity = CachedMessageEntity::class,
+            parentColumns = ["localId"],
+            childColumns = ["messageLocalId"],
+            onDelete = ForeignKey.CASCADE,
+        ),
+    ],
+    indices = [Index(value = ["messageLocalId", "attachmentId"], unique = true)],
+)
+data class MessageAttachmentEntity(
+    @PrimaryKey(autoGenerate = true) val localId: Long = 0,
+    val messageLocalId: Long,
+    val attachmentId: Long,
+    val filename: String,
+    val sizeBytes: Long,
+    val localPath: String = "",
+)
+
 @Entity(tableName = "reply_queue")
 data class QueuedReplyEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -76,7 +94,6 @@ data class FileEntryEntity(
     val uploadDate: String,
 )
 
-/** A file the user picked locally, queued until "synchronize" actually uploads it. */
 @Entity(tableName = "upload_queue")
 data class QueuedUploadEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -87,7 +104,6 @@ data class QueuedUploadEntity(
     val createdAt: Long,
 )
 
-/** A file the user picked for download, queued until "synchronize" fetches it. */
 @Entity(tableName = "download_queue")
 data class QueuedDownloadEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -96,10 +112,15 @@ data class QueuedDownloadEntity(
     val createdAt: Long,
 )
 
-/** Last known nodelist version stamp per subscribed network — mirrors fido.nodelist.version. */
 @Entity(tableName = "nodelist_versions")
 data class NodelistVersionEntity(
     @PrimaryKey val network: String,
     val importedAt: String,
     val nodeCount: Int,
+)
+
+@Entity(tableName = "pending_read_updates")
+data class PendingReadUpdateEntity(
+    @PrimaryKey val conferenceId: Int,
+    val msgNumber: Int,
 )

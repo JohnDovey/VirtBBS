@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS user_conferences (
     registered      INTEGER NOT NULL DEFAULT 0,    -- 1 = registered member
     last_msg_read   INTEGER NOT NULL DEFAULT 0,    -- last message number read on the BBS
     qwk_last_msg    INTEGER NOT NULL DEFAULT 0,    -- last message number included in a QWK download
+    app_last_msg    INTEGER NOT NULL DEFAULT 0,    -- last message number delivered via VirtAnd User API sync
     PRIMARY KEY (user_id, conference_id)
 );
 

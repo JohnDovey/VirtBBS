@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/virtbbs/virtbbs/internal/ansi"
+	"github.com/virtbbs/virtbbs/internal/appstats"
 )
 
 const (
@@ -164,6 +165,9 @@ func StartBinkpStatsBulletins(db *sql.DB, displayDir, bbsName string) func() {
 				LogBinkp("robot stats bulletin: " + err.Error())
 			} else {
 				LogBinkp(fmt.Sprintf("robot stats bulletin updated in %s", displayDir))
+			}
+			if err := appstats.WriteBulletin(db, displayDir, bbsName); err != nil {
+				LogBinkp("app stats bulletin: " + err.Error())
 			}
 		}
 		write() // once at startup

@@ -1,7 +1,9 @@
 // VirtAnd — AppScreens.kt
 package io.virtbbs.virtand.ui
 
+import android.content.Intent
 import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -43,6 +45,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import io.virtbbs.virtand.data.entities.CachedMessageEntity
+import io.virtbbs.virtand.data.entities.MessageAttachmentEntity
 import io.virtbbs.virtand.data.entities.ConferenceEntity
 import io.virtbbs.virtand.data.entities.QueuedDownloadEntity
 import io.virtbbs.virtand.data.entities.QueuedReplyEntity
@@ -203,12 +206,16 @@ private fun MessageListItem(msg: CachedMessageEntity, onOpen: () -> Unit) {
 @Composable
 fun MessageDetailScreen(viewModel: MainViewModel, localId: Long, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var msg by remember { mutableStateOf<CachedMessageEntity?>(null) }
     var showReply by remember { mutableStateOf(false) }
+    val attachments by viewModel.attachmentsFor(localId).collectAsState(initial = emptyList())
 
-    androidx.compose.runtime.LaunchedEffect(localId) {
+    LaunchedEffect(localId) {
         msg = viewModel.getMessage(localId)
-        viewModel.markMessageRead(localId)
+        msg?.let {
+            viewModel.markMessageRead(it.localId, it.conferenceId, it.msgNumber)
+        }
     }
 
     val message = msg
@@ -233,6 +240,23 @@ fun MessageDetailScreen(viewModel: MainViewModel, localId: Long, onBack: () -> U
         Text("Subject: ${message.subject}")
         Text("${message.date} ${message.time}", style = MaterialTheme.typography.bodySmall)
         Text(message.body.replace("\r", ""))
+        if (attachments.isNotEmpty()) {
+            Text("Attachments", fontWeight = FontWeight.Bold)
+            attachments.forEach { att ->
+                AttachmentLink(att) { file ->
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file,
+                    )
+                    val intent = Intent(Intent.ACTION_VIEW).apply {
+                        setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "Open attachment"))
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = { showReply = true }) { Text("Reply") }
         }
@@ -250,6 +274,18 @@ fun MessageDetailScreen(viewModel: MainViewModel, localId: Long, onBack: () -> U
             },
         )
     }
+}
+
+@Composable
+private fun AttachmentLink(att: MessageAttachmentEntity, onOpen: (java.io.File) -> Unit) {
+    val enabled = att.localPath.isNotBlank()
+    Text(
+        text = if (enabled) "📎 ${att.filename} (${att.sizeBytes} bytes)" else "📎 ${att.filename} (not downloaded)",
+        modifier = Modifier
+            .padding(vertical = 4.dp)
+            .then(if (enabled) Modifier.clickable { onOpen(java.io.File(att.localPath)) } else Modifier),
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -468,6 +504,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
     val port by viewModel.settings.userApiPort.collectAsState(initial = 9998)
     val networks by viewModel.settings.subscribedNetworks.collectAsState(initial = listOf("FidoNet"))
     val availableNetworks by viewModel.availableNetworks.collectAsState()
+    val purgeDays by viewModel.settings.purgeDays.collectAsState(initial = 7)
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val nodeResults by viewModel.nodeSearchResults.collectAsState()
     val nodeSearching by viewModel.nodeSearching.collectAsState()
@@ -480,7 +517,8 @@ fun SettingsScreen(viewModel: MainViewModel) {
     var subscribed by remember(networks) { mutableStateOf(networks.toSet()) }
     var nodeQuery by remember { mutableStateOf("") }
     var nodeQueryDirty by remember { mutableStateOf(true) }
-    var nodeNetwork by remember { mutableStateOf<String?>(null) } // null = All networks
+    var purgeField by remember(purgeDays) { mutableStateOf(purgeDays.toString()) }
+    var nodeNetwork by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(hostField, portField, usernameField, passwordField) {
         if (hostField.isNotBlank() && usernameField.isNotBlank() && passwordField.isNotBlank()) {
@@ -518,6 +556,17 @@ fun SettingsScreen(viewModel: MainViewModel) {
             label = { Text("Password") },
             visualTransformation = PasswordVisualTransformation(),
         )
+        Text("Local storage", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+        TextField(
+            value = purgeField,
+            onValueChange = { purgeField = it.filter { c -> c.isDigit() } },
+            label = { Text("Purge messages older than (days)") },
+        )
+        Text(
+            "Purges cached messages and attachment files from this device only (default 7).",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedButton(onClick = { viewModel.purgeNow() }) { Text("Purge now") }
         Text("FidoNet networks", fontWeight = FontWeight.Bold)
         if (availableNetworks.isEmpty()) {
             Text(
@@ -550,6 +599,7 @@ fun SettingsScreen(viewModel: MainViewModel) {
                     usernameField,
                     passwordField,
                     subscribed.toList().sorted(),
+                    purgeField.toIntOrNull() ?: 7,
                 )
             }) { Text("Save") }
             OutlinedButton(onClick = {

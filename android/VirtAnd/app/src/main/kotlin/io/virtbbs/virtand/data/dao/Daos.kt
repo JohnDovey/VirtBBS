@@ -12,7 +12,9 @@ import io.virtbbs.virtand.data.entities.CachedMessageEntity
 import io.virtbbs.virtand.data.entities.ConferenceEntity
 import io.virtbbs.virtand.data.entities.FileDirEntity
 import io.virtbbs.virtand.data.entities.FileEntryEntity
+import io.virtbbs.virtand.data.entities.MessageAttachmentEntity
 import io.virtbbs.virtand.data.entities.NodelistVersionEntity
+import io.virtbbs.virtand.data.entities.PendingReadUpdateEntity
 import io.virtbbs.virtand.data.entities.QueuedDownloadEntity
 import io.virtbbs.virtand.data.entities.QueuedReplyEntity
 import io.virtbbs.virtand.data.entities.QueuedUploadEntity
@@ -37,6 +39,9 @@ interface MessageDao {
     @Query("SELECT * FROM cached_messages WHERE localId = :localId")
     suspend fun getByLocalId(localId: Long): CachedMessageEntity?
 
+    @Query("SELECT * FROM cached_messages WHERE conferenceId = :conferenceId AND msgNumber = :msgNumber")
+    suspend fun getByConferenceAndNumber(conferenceId: Int, msgNumber: Int): CachedMessageEntity?
+
     @Query("UPDATE cached_messages SET isRead = 1 WHERE localId = :localId")
     suspend fun markRead(localId: Long)
 
@@ -46,10 +51,18 @@ interface MessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(messages: List<CachedMessageEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(message: CachedMessageEntity): Long
+
     @Update
     suspend fun update(message: CachedMessageEntity)
 
-    // ── Reply queue ──────────────────────────────────────────────────────
+    @Query("SELECT * FROM cached_messages WHERE datePostedMs > 0 AND datePostedMs < :cutoffMs")
+    suspend fun messagesOlderThan(cutoffMs: Long): List<CachedMessageEntity>
+
+    @Query("DELETE FROM cached_messages WHERE localId IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
     @Query("SELECT * FROM reply_queue ORDER BY createdAt")
     fun observeQueuedReplies(): Flow<List<QueuedReplyEntity>>
 
@@ -64,6 +77,30 @@ interface MessageDao {
 
     @Query("DELETE FROM reply_queue WHERE id IN (:ids)")
     suspend fun removeQueuedReplies(ids: List<Long>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPendingRead(update: PendingReadUpdateEntity)
+
+    @Query("SELECT * FROM pending_read_updates")
+    suspend fun allPendingReads(): List<PendingReadUpdateEntity>
+
+    @Query("DELETE FROM pending_read_updates WHERE conferenceId = :conferenceId")
+    suspend fun clearPendingRead(conferenceId: Int)
+}
+
+@Dao
+interface AttachmentDao {
+    @Query("SELECT * FROM message_attachments WHERE messageLocalId = :messageLocalId ORDER BY filename")
+    fun observeForMessage(messageLocalId: Long): Flow<List<MessageAttachmentEntity>>
+
+    @Query("SELECT * FROM message_attachments WHERE messageLocalId = :messageLocalId")
+    suspend fun forMessage(messageLocalId: Long): List<MessageAttachmentEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAll(attachments: List<MessageAttachmentEntity>)
+
+    @Query("DELETE FROM message_attachments WHERE messageLocalId IN (:messageLocalIds)")
+    suspend fun deleteForMessages(messageLocalIds: List<Long>)
 }
 
 @Dao
@@ -83,7 +120,6 @@ interface FileDao {
     @Query("DELETE FROM file_entries WHERE dirId = :dirId")
     suspend fun clearFiles(dirId: Long)
 
-    // ── Upload / download queues ────────────────────────────────────────
     @Query("SELECT * FROM upload_queue ORDER BY createdAt")
     fun observeQueuedUploads(): Flow<List<QueuedUploadEntity>>
 

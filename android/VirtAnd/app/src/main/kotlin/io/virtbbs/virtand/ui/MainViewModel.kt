@@ -13,6 +13,7 @@ import io.virtbbs.virtand.data.entities.CachedMessageEntity
 import io.virtbbs.virtand.data.entities.ConferenceEntity
 import io.virtbbs.virtand.data.entities.FileDirEntity
 import io.virtbbs.virtand.data.entities.FileEntryEntity
+import io.virtbbs.virtand.data.entities.PendingReadUpdateEntity
 import io.virtbbs.virtand.data.entities.QueuedDownloadEntity
 import io.virtbbs.virtand.data.entities.QueuedReplyEntity
 import io.virtbbs.virtand.data.entities.QueuedUploadEntity
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -142,9 +144,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun markMessageRead(localId: Long) {
-        viewModelScope.launch { db.messageDao().markRead(localId) }
+    fun markMessageRead(localId: Long, conferenceId: Int, msgNumber: Int) {
+        viewModelScope.launch {
+            db.messageDao().markRead(localId)
+            db.messageDao().upsertPendingRead(PendingReadUpdateEntity(conferenceId, msgNumber))
+            val cfg = settings.snapshot()
+            if (cfg.host.isNotBlank() && cfg.username.isNotBlank() && cfg.password.isNotBlank()) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        val api = UserApiClient(cfg.host, cfg.userApiPort, cfg.username, cfg.password)
+                        api.call(
+                            "messages.mark_read",
+                            kotlinx.serialization.json.JsonObject(
+                                mapOf(
+                                    "ConferenceID" to kotlinx.serialization.json.JsonPrimitive(conferenceId),
+                                    "MsgNumber" to kotlinx.serialization.json.JsonPrimitive(msgNumber),
+                                )
+                            ),
+                        )
+                        db.messageDao().clearPendingRead(conferenceId)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
     }
+
+    fun attachmentsFor(messageLocalId: Long) = db.attachmentDao().observeForMessage(messageLocalId)
 
     suspend fun getMessage(localId: Long): CachedMessageEntity? =
         db.messageDao().getByLocalId(localId)
@@ -298,9 +324,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveSettings(host: String, port: Int, username: String, password: String, networks: List<String>) {
+    fun saveSettings(host: String, port: Int, username: String, password: String, networks: List<String>, purgeDays: Int = 7) {
         viewModelScope.launch {
-            settings.save(host, port, username, password, networks)
+            settings.save(host, port, username, password, networks, purgeDays)
+        }
+    }
+
+    fun purgeNow() {
+        viewModelScope.launch {
+            val days = settings.purgeDays.first()
+            SyncEngine(getApplication()).purgeOldMessages(days)
         }
     }
 

@@ -11,6 +11,9 @@
 /updates/
 /update/
 
+# Go test artifacts
+internal/qwk/data/
+
 # Go
 *.test
 *.out

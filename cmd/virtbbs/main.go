@@ -54,6 +54,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
 
+	"github.com/virtbbs/virtbbs/internal/appstats"
 	"github.com/virtbbs/virtbbs/internal/callers"
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/config"
@@ -122,6 +123,10 @@ func main() {
 		log.Fatalf("users store: %v", err)
 	}
 	defer userStore.Close()
+
+	if err := appstats.Open(sqlDB); err != nil {
+		log.Fatalf("appstats schema: %v", err)
+	}
 
 	if err := os.MkdirAll("data", 0755); err != nil {
 		log.Fatalf("create data dir: %v", err)

@@ -463,6 +463,23 @@ func (s *Server) dispatch(req Request, u *users.User) (any, error) {
 		}
 		return nonNilSlice(names), nil
 
+	// ── VirtAnd message sync (replaces QWK for Android) ───────────────────
+
+	case "messages.sync":
+		return s.handleMessagesSync(req, u)
+
+	case "messages.post":
+		return s.handleMessagesPost(req, u)
+
+	case "messages.mark_read":
+		return s.handleMessagesMarkRead(req, u)
+
+	case "messages.attachment.download":
+		return s.handleMessagesAttachmentDownload(req, u)
+
+	case "app.stats.report":
+		return s.handleAppStatsReport(req, u.ID)
+
 	default:
 		return nil, fmt.Errorf("unknown method: %s", req.Method)
 	}

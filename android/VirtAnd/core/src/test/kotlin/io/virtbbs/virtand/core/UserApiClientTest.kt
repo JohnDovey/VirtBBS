@@ -40,7 +40,7 @@ class UserApiClientTest {
 
     @Test
     fun timeoutFor_bulkMethodsUseLongerTimeout() {
-        assertEquals(300_000, UserApiClient.timeoutFor("qwk.download"))
+        assertEquals(300_000, UserApiClient.timeoutFor("messages.sync"))
         assertEquals(30_000, UserApiClient.timeoutFor("conferences.list"))
     }
 }

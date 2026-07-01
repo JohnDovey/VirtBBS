@@ -1,12 +1,10 @@
 // VirtAnd — SettingsStore.kt
-// DataStore-backed settings: server address, BBS login credentials, and which
-// FidoNet networks to keep a local nodelist version stamp for.
 package io.virtbbs.virtand.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -20,7 +18,8 @@ class SettingsStore(private val context: Context) {
         val USER_API_PORT = intPreferencesKey("user_api_port")
         val USERNAME = stringPreferencesKey("username")
         val PASSWORD = stringPreferencesKey("password")
-        val SUBSCRIBED_NETWORKS = stringPreferencesKey("subscribed_networks") // comma-separated
+        val SUBSCRIBED_NETWORKS = stringPreferencesKey("subscribed_networks")
+        val PURGE_DAYS = intPreferencesKey("purge_days")
     }
 
     val host: Flow<String> = context.dataStore.data.map { it[Keys.HOST] ?: "" }
@@ -30,6 +29,7 @@ class SettingsStore(private val context: Context) {
     val subscribedNetworks: Flow<List<String>> = context.dataStore.data.map {
         (it[Keys.SUBSCRIBED_NETWORKS] ?: "FidoNet").split(",").filter { n -> n.isNotBlank() }
     }
+    val purgeDays: Flow<Int> = context.dataStore.data.map { it[Keys.PURGE_DAYS] ?: 7 }
 
     suspend fun save(
         host: String,
@@ -37,6 +37,7 @@ class SettingsStore(private val context: Context) {
         username: String,
         password: String,
         subscribedNetworks: List<String>,
+        purgeDays: Int = 7,
     ) {
         context.dataStore.edit { prefs ->
             prefs[Keys.HOST] = host
@@ -45,16 +46,17 @@ class SettingsStore(private val context: Context) {
             prefs[Keys.PASSWORD] = password
             prefs.remove(stringPreferencesKey("token"))
             prefs[Keys.SUBSCRIBED_NETWORKS] = subscribedNetworks.joinToString(",")
+            prefs[Keys.PURGE_DAYS] = purgeDays.coerceAtLeast(1)
         }
     }
 
-    /** One-shot snapshot, for use from background work (WorkManager) where collecting a Flow is overkill. */
     suspend fun snapshot(): Snapshot = Snapshot(
         host = host.first(),
         userApiPort = userApiPort.first(),
         username = username.first(),
         password = password.first(),
         subscribedNetworks = subscribedNetworks.first(),
+        purgeDays = purgeDays.first(),
     )
 
     data class Snapshot(
@@ -63,5 +65,6 @@ class SettingsStore(private val context: Context) {
         val username: String,
         val password: String,
         val subscribedNetworks: List<String>,
+        val purgeDays: Int = 7,
     )
 }
