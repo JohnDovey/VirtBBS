@@ -337,6 +337,13 @@ func main() {
 	}
 	defer confStore.Close()
 
+	// ── Startup banner ───────────────────────────────────────────────────────
+	if err := uptime.InitFirstOnAir(filepath.Dir(cfg.Paths.DB)); err != nil {
+		log.Printf("uptime: first on air: %v", err)
+	}
+	uptime.RecordStart()
+	printStartupBanner(cfg, uptime.MessageLines(cfg.BBS.Name))
+
 	deps := session.Deps{
 		Users:       userStore,
 		Messages:    msgStore,
@@ -356,7 +363,6 @@ func main() {
 	// Start Telnet server
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.Network.TelnetPort)
-		log.Printf("Telnet listening on %s", addr)
 		srv := &telnet.Server{Addr: addr, Handler: telnetHandler}
 		if err := srv.ListenAndServe(); err != nil {
 			log.Printf("Telnet error: %v", err)
@@ -366,7 +372,6 @@ func main() {
 	// Start SSH server
 	go func() {
 		addr := fmt.Sprintf(":%d", cfg.Network.SSHPort)
-		log.Printf("SSH listening on %s", addr)
 		srv := &sshsrv.Server{
 			Addr:        addr,
 			HostKeyFile: "data/host_key.pem",
@@ -400,18 +405,8 @@ func main() {
 		fido.EnsureAllNetworkOwnNodes(sqlDB, cfg.Fido.AllNetworks(), cfg.BBS.Name, cfg.Sysop.Name, cfg.Network.TelnetPort)
 	}
 
-	log.Printf("VirtBBS %s starting", version.Version)
-	if err := uptime.InitFirstOnAir(filepath.Dir(cfg.Paths.DB)); err != nil {
-		log.Printf("uptime: first on air: %v", err)
-	}
-	uptime.RecordStart()
-	for _, line := range uptime.MessageLines(cfg.BBS.Name) {
-		log.Print(line)
-	}
-
 	// User API (VirtAnd) — token-authenticated JSON-over-TCP on a separate port.
 	userAPIAddr := fmt.Sprintf("%s:%d", cfg.Network.UserAPIBind, cfg.Network.UserAPIPort)
-	log.Printf("User API (VirtAnd) listening on %s", userAPIAddr)
 	userAPIDeps := userapi.Deps{
 		Users:       userStore,
 		Messages:    msgStore,
@@ -422,7 +417,6 @@ func main() {
 
 	// Start the browser-based BBS web UI (templates/static from paths.www).
 	webAddr := fmt.Sprintf("%s:%d", cfg.Network.WebBind, cfg.Network.WebPort)
-	log.Printf("Web UI listening on %s (www: %s)", webAddr, cfg.Paths.WWW)
 	webDeps := web.Deps{
 		Users:       userStore,
 		Messages:    msgStore,
@@ -441,6 +435,68 @@ func main() {
 	go watchVolume(cfg.Paths.DB)
 
 	log.Fatal(userAPISrv.ListenAndServe())
+}
+
+// printStartupBanner writes a boxed header with program name and version
+// followed by an organised list of service endpoints and storage paths.
+func printStartupBanner(cfg *config.Config, uptimeLines []string) {
+	const w = 60 // inner width (between the ║ borders)
+	border := strings.Repeat("═", w)
+	pad := func(s string) string {
+		n := len([]rune(s))
+		if n >= w {
+			return string([]rune(s)[:w])
+		}
+		return s + strings.Repeat(" ", w-n)
+	}
+	line := func(s string) { fmt.Printf("║ %s ║\n", pad(s)) }
+	sep := func() { fmt.Printf("╠═%s═╣\n", border) }
+
+	fmt.Printf("╔═%s═╗\n", border)
+	line("")
+	line(fmt.Sprintf("  VirtBBS  v%s", version.Version))
+	line("  A Modern BBS — Inspired by PCBoard")
+	line(fmt.Sprintf("  %s", cfg.BBS.Name))
+	line("")
+	fmt.Printf("╠═%s═╣\n", border)
+	line("  SERVERS")
+	sep()
+	line(fmt.Sprintf("  Telnet      :%d", cfg.Network.TelnetPort))
+	line(fmt.Sprintf("  SSH         :%d", cfg.Network.SSHPort))
+	line(fmt.Sprintf("  Web UI      %s:%d  (www: %s)", cfg.Network.WebBind, cfg.Network.WebPort, cfg.Paths.WWW))
+	line(fmt.Sprintf("  User API    %s:%d", cfg.Network.UserAPIBind, cfg.Network.UserAPIPort))
+	if cfg.Fido.Enabled {
+		sep()
+		line("  FIDO / VIRTNET")
+		sep()
+		for _, nd := range cfg.Fido.AllNetworks() {
+			if !nd.Enabled {
+				continue
+			}
+			if nd.Uplink == "" {
+				line(fmt.Sprintf("  BinkP hub   :%d  [%s]  %s", nd.BinkpPort, nd.Name, nd.Address))
+			} else {
+				line(fmt.Sprintf("  BinkP node  :%d  [%s]  uplink: %s", nd.BinkpPort, nd.Name, nd.Uplink))
+			}
+		}
+	}
+	sep()
+	line("  STORAGE")
+	sep()
+	line(fmt.Sprintf("  Database    %s", cfg.Paths.DB))
+	line(fmt.Sprintf("  Files       %s", cfg.Paths.Files))
+	line(fmt.Sprintf("  Logs        %s", cfg.Paths.Logs))
+	if len(uptimeLines) > 0 {
+		sep()
+		line("  UPTIME")
+		sep()
+		for _, ul := range uptimeLines {
+			line("  " + ul)
+		}
+	}
+	line("")
+	fmt.Printf("╚═%s═╝\n", border)
+	fmt.Println()
 }
 
 // watchVolume periodically confirms dbPath (and its containing directory)

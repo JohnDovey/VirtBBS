@@ -329,7 +329,7 @@ func (s *session) mainMenu() {
 			"  [M]essages   [F]iles   [C]onference   [U]sers   [W]ho's online" +
 			ansi.Reset())
 		s.writeln(ansi.Color(ansi.BrightWhite) +
-			"  [T]alk       [D]oors   [P]PE   [S]tats   [R]profile [G]oodbye" +
+			"  [T]alk       [D]oors   [P]PE   [S]tats   [R]profile [G]oodbye  [?]Menu" +
 			ansi.Reset())
 		if s.user.Sysop {
 			s.writeln(ansi.Color(ansi.BrightYellow) + "  [!] Sysop menu" + ansi.Reset())
@@ -362,12 +362,112 @@ func (s *session) mainMenu() {
 			}
 		case "P":
 			s.ppeMenu()
+		case "?", "H", "HELP", "MENU":
+			s.showPCBoardMenu()
 		case "G", "BYE", "QUIT", "EXIT", "":
 			return
 		default:
 			s.writeln(ansi.Colorize(ansi.Red, "Unknown command."))
 		}
 	}
+}
+
+// showPCBoardMenu renders a PCBoard-style ANSI command menu and waits for a
+// single command, dispatching it the same way mainMenu does.  Reached via [?].
+func (s *session) showPCBoardMenu() {
+	cfg := config.Get()
+
+	// ── helpers ──────────────────────────────────────────────────────────────
+	c := func(code int) string { return ansi.Color(code) }
+	rst := ansi.Reset()
+	// Column inner widths (characters between the │ borders):
+	//   left=22  centre=24  right=29  → total with 4 borders = 22+24+29+4 = 79
+	const (
+		w1 = 22
+		w2 = 24
+		w3 = 29
+	)
+	pad := func(s string, w int) string {
+		return ansi.FitVisibleWidth(s, w)
+	}
+
+	// box-drawing helpers
+	bc := c(ansi.BrightCyan) // border colour
+	hdr := func(h1, h2, h3 string) string {
+		return bc + "║" + rst +
+			c(ansi.BrightWhite) + pad(h1, w1) + rst +
+			bc + "║" + rst +
+			c(ansi.BrightWhite) + pad(h2, w2) + rst +
+			bc + "║" + rst +
+			c(ansi.BrightWhite) + pad(h3, w3) + rst +
+			bc + "║" + rst
+	}
+	// A single row with coloured [X] key and plain description in each column.
+	key := func(k, desc string) string {
+		return " " + c(ansi.BrightYellow) + "[" + k + "]" + rst + c(ansi.White) + " " + desc + rst
+	}
+	row := func(k1, d1, k2, d2, k3, d3 string) string {
+		var c1, c2, c3 string
+		if k1 != "" {
+			c1 = key(k1, d1)
+		}
+		if k2 != "" {
+			c2 = key(k2, d2)
+		}
+		if k3 != "" {
+			c3 = key(k3, d3)
+		}
+		return hdr(c1, c2, c3)
+	}
+	emptyRow := func() string { return hdr("", "", "") }
+	hline := func(l, m, r, fill string) string {
+		return bc + l + strings.Repeat(fill, w1) + m + strings.Repeat(fill, w2) + m + strings.Repeat(fill, w3) + r + rst
+	}
+	// A full-width row spanning all three columns
+	fullRow := func(label string) string {
+		inner := w1 + 1 + w2 + 1 + w3 // +2 for the two interior │ chars that become part of the span
+		content := c(ansi.BrightWhite) + pad(" "+label, inner) + rst
+		return bc + "║" + rst + content + bc + "║" + rst
+	}
+	fullHLine := func(l, r, fill string) string {
+		return bc + l + strings.Repeat(fill, w1+1+w2+1+w3) + r + rst
+	}
+
+	now := time.Now()
+	timeStr := now.Format("15:04")
+	nodeStr := fmt.Sprintf("NODE %d", s.nodeID)
+	titleLine := fmt.Sprintf("  %s  %s  %s — Main Board", timeStr, nodeStr, cfg.BBS.Name)
+
+	out := []string{
+		bc + "╔" + strings.Repeat("═", w1+1+w2+1+w3+2) + "╗" + rst,
+		bc + "║" + rst + c(ansi.BrightWhite) + pad(titleLine, w1+1+w2+1+w3+2) + rst + bc + "║" + rst,
+		hline("╠", "╦", "╣", "═"),
+		hdr(
+			c(ansi.BrightCyan)+"       FILES       "+rst,
+			c(ansi.BrightCyan)+"        CONFIG         "+rst,
+			c(ansi.BrightCyan)+"       MESSAGES        "+rst,
+		),
+		hline("╠", "╬", "╣", "═"),
+		row("F", "File Areas      ", "S", "Statistics      ", "M", "Messages Menu    "),
+		row("C", "Conferences     ", "R", "Profile/Settings", "Q", "Quick Scan (new) "),
+		row("J", "Join VirtNet    ", "G", "Goodbye/Logoff  ", "K", "NetMail    (fido)"),
+		row("", "                ", "", "                ", "O", "Offline Mail(QWK)"),
+		emptyRow(),
+		hline("╠", "╩", "╣", "═"),
+		fullRow("       MISC / OTHER"),
+		fullHLine("╠", "╣", "═"),
+		fullRow(key("W", "Who's Online") + "  " + key("T", "Talk") + "  " + key("U", "Users") + "  " + key("D", "Doors") + "  " + key("P", "PPE")),
+	}
+	if s.user.Sysop {
+		out = append(out, fullRow(key("!", "Sysop Menu")))
+	}
+	out = append(out, bc+"╚"+strings.Repeat("═", w1+1+w2+1+w3+2)+"╝"+rst)
+
+	s.writeln("")
+	for _, line := range out {
+		s.writeln(line)
+	}
+	s.writeln("")
 }
 
 // ── Messages ──────────────────────────────────────────────────────────────────
