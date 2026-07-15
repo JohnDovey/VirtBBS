@@ -7,12 +7,16 @@ import (
 	"unicode"
 )
 
-const undoLimit = 25 // minimum undo depth for paint/clear strokes
+const undoLimit = 25 // minimum undo depth for paint/clear strokes (batch entries count as 1)
 
-// undoEntry restores one cell change.
-type undoEntry struct {
+type undoEntryCell struct {
 	X, Y int
 	Prev Cell
+}
+
+// undoEntry restores one paint stroke or a multi-cell stamp (text insert).
+type undoEntry struct {
+	Cells []undoEntryCell
 }
 
 // Editor is the fullscreen ANSI art editor.
@@ -72,12 +76,19 @@ func (e *Editor) Run() error {
 
 func (e *Editor) viewportRows() int {
 	_, rows := e.term.Size()
-	// title, help, palette, status
-	vr := rows - 4
+	// title, help, top border, bottom ruler, palette, status
+	vr := rows - 6
 	if vr < 1 {
 		vr = 1
 	}
 	return vr
+}
+
+func (e *Editor) artStartRow() int { return 4 } // 1-based term row of first art line
+
+func (e *Editor) bottomRulerRow() int {
+	_, rows := e.term.Size()
+	return rows - 2
 }
 
 func (e *Editor) paletteRow() int {
@@ -90,9 +101,29 @@ func (e *Editor) statusRow() int {
 	return rows
 }
 
+// artViewGeom returns left column of art (1-based), art width in cells, and
+// column of the right border (1-based).
+func (e *Editor) artViewGeom(termCols int) (artLeft, viewW, rightBorderCol int) {
+	const leftBorder = 1
+	const rightChrome = 4 // │ + 3-digit row label
+	artLeft = leftBorder + 1
+	avail := termCols - leftBorder - rightChrome
+	if avail < 1 {
+		avail = 1
+	}
+	viewW = avail
+	if viewW > e.canvas.Cols {
+		viewW = e.canvas.Cols
+	}
+	rightBorderCol = artLeft + viewW
+	return artLeft, viewW, rightBorderCol
+}
+
 func (e *Editor) redraw() {
 	cols, rows := e.term.Size()
 	vr := e.viewportRows()
+	artLeft, viewW, rightCol := e.artViewGeom(cols)
+	topBorderRow := e.artStartRow() - 1
 
 	if e.cy < e.scrollY {
 		e.scrollY = e.cy
@@ -119,23 +150,29 @@ func (e *Editor) redraw() {
 	e.term.Print(padRight(title, cols))
 	e.term.Print("\x1b[0m")
 
-	help := " Arrows|Space paint|U undo|F/B+digit color|Tab glyph|C picker|S save|O open|I import|M SAUCE|? "
+	help := " Arrows|Space|T text|U undo|Z resize|A about|F/B+digit|Tab glyph|C picker|S save|O open|I import|M SAUCE|? "
 	e.term.MoveTo(2, 1)
 	e.term.Print("\x1b[1;40;96m")
 	e.term.Print(padRight(help, cols))
 	e.term.Print("\x1b[0m")
 
-	viewW := cols
-	if viewW > e.canvas.Cols {
-		viewW = e.canvas.Cols
-	}
+	// Top border of art window
+	e.term.MoveTo(topBorderRow, 1)
+	e.term.Print("\x1b[1;36m╔")
+	e.term.Print(strings.Repeat("═", viewW))
+	e.term.Print("╗\x1b[0m")
+	e.term.Print("\x1b[K")
 
 	for row := 0; row < vr; row++ {
 		sy := e.scrollY + row
-		termRow := 3 + row
+		termRow := e.artStartRow() + row
 		e.term.MoveTo(termRow, 1)
+		e.term.Print("\x1b[1;36m║\x1b[0m")
 		if sy >= e.canvas.Rows {
-			e.term.Print("\x1b[0m\x1b[K")
+			e.term.Print(strings.Repeat(" ", viewW))
+			e.term.Print("\x1b[1;36m║\x1b[0m")
+			e.drawRowRuler(sy, false)
+			e.term.Print("\x1b[K")
 			continue
 		}
 		var lastFG, lastBG *Color
@@ -162,8 +199,15 @@ func (e *Editor) redraw() {
 			}
 			e.term.Printf("%c", ch)
 		}
-		e.term.Print("\x1b[0m\x1b[K")
+		e.term.Print("\x1b[0m\x1b[1;36m║\x1b[0m")
+		e.drawRowRuler(sy, true)
+		e.term.Print("\x1b[K")
+		_ = artLeft
+		_ = rightCol
 	}
+
+	// Bottom border + column ruler on the next chrome row
+	e.drawBottomRuler(e.bottomRulerRow(), viewW)
 
 	e.drawPalette(e.paletteRow(), cols)
 
@@ -182,7 +226,48 @@ func (e *Editor) redraw() {
 	_ = rows
 }
 
-// drawPalette renders FG color keys: blue solid block + white label 0-9 a-f.
+// drawRowRuler prints a 3-wide measure for canvas row sy (0-based).
+func (e *Editor) drawRowRuler(sy int, inBounds bool) {
+	e.term.Print("\x1b[1;33m")
+	if !inBounds || sy < 0 || sy >= e.canvas.Rows {
+		e.term.Print("   ")
+		e.term.Print("\x1b[0m")
+		return
+	}
+	n := sy + 1 // 1-based
+	switch {
+	case n%10 == 0:
+		e.term.Printf("%3d", n)
+	case n%5 == 0:
+		e.term.Printf("%2d─", n%100)
+	default:
+		e.term.Printf("  ┤")
+	}
+	e.term.Print("\x1b[0m")
+}
+
+// drawBottomRuler draws the bottom frame line with an embedded column measure.
+func (e *Editor) drawBottomRuler(row, viewW int) {
+	e.term.MoveTo(row, 1)
+	e.term.Print("\x1b[1;36m╚\x1b[0m")
+	e.term.Print("\x1b[1;33m")
+	for x := 0; x < viewW; x++ {
+		col := x + 1 // 1-based canvas column in the viewport (starts at left)
+		switch {
+		case col%10 == 0:
+			e.term.Printf("%d", (col / 10) % 10)
+		case col%5 == 0:
+			e.term.Print("┼")
+		default:
+			e.term.Print("─")
+		}
+	}
+	e.term.Print("\x1b[1;36m╝\x1b[0m\x1b[K")
+}
+
+
+// drawPalette renders FG keys 0-f as solid blocks in their actual classic colors
+// with white number/letter labels.
 func (e *Editor) drawPalette(row, cols int) {
 	e.term.MoveTo(row, 1)
 	e.term.Print("\x1b[0m\x1b[K")
@@ -196,11 +281,18 @@ func (e *Editor) drawPalette(row, cols int) {
 			break
 		}
 		cur := !e.fg.True && int(e.fg.Idx) == i
-		e.term.Print("\x1b[1;34m█") // blue solid block
+		fg := classicFG(uint8(i))
+		bg := classicBG(0)
+		// Black (0) is invisible on a black canvas — show on light background.
+		if i == 0 {
+			bg = classicBG(7)
+		}
+		e.term.Print(sgrSeq(fg, bg))
+		e.term.Print("█")
 		if cur {
-			e.term.Print("\x1b[1;30;47m") // white-on / standout for selected key
+			e.term.Print("\x1b[1;30;47m") // standout for selected key
 		} else {
-			e.term.Print("\x1b[1;37m") // white label
+			e.term.Print("\x1b[0m\x1b[1;37m") // white label
 		}
 		e.term.Printf("%c", lab)
 		e.term.Print("\x1b[0m ")
@@ -311,6 +403,9 @@ func (e *Editor) handleRune(r rune) {
 	case '?':
 		e.runHelp()
 		return
+	case 'A':
+		e.runAbout()
+		return
 	case 'C':
 		e.runCharPicker()
 		return
@@ -337,8 +432,14 @@ func (e *Editor) handleRune(r rune) {
 	case 'N':
 		e.doNew()
 		return
+	case 'T':
+		e.runTextInsertUI()
+		return
 	case 'U':
 		e.undoLast()
+		return
+	case 'Z':
+		e.runResizeUI()
 		return
 	case ' ':
 		e.paint(e.drawCh)
@@ -386,7 +487,14 @@ func (e *Editor) pushUndo(x, y int) {
 	if !e.canvas.InBounds(x, y) {
 		return
 	}
-	e.undo = append(e.undo, undoEntry{X: x, Y: y, Prev: e.canvas.Get(x, y)})
+	e.pushUndoBatch([]undoEntryCell{{X: x, Y: y, Prev: e.canvas.Get(x, y)}})
+}
+
+func (e *Editor) pushUndoBatch(cells []undoEntryCell) {
+	if len(cells) == 0 {
+		return
+	}
+	e.undo = append(e.undo, undoEntry{Cells: cells})
 	if len(e.undo) > undoLimit {
 		e.undo = append([]undoEntry(nil), e.undo[len(e.undo)-undoLimit:]...)
 	}
@@ -403,8 +511,11 @@ func (e *Editor) undoLast() {
 	}
 	u := e.undo[len(e.undo)-1]
 	e.undo = e.undo[:len(e.undo)-1]
-	e.canvas.Set(u.X, u.Y, u.Prev)
-	e.cx, e.cy = u.X, u.Y
+	for i := len(u.Cells) - 1; i >= 0; i-- {
+		c := u.Cells[i]
+		e.canvas.Set(c.X, c.Y, c.Prev)
+		e.cx, e.cy = c.X, c.Y
+	}
 	e.dirty = true
 	e.status = fmt.Sprintf("Undo (%d left)", len(e.undo))
 }

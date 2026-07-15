@@ -2,6 +2,8 @@
 
 Standalone fullscreen ANSI art editor for VirtBBS and classic BBS screens.
 
+**Full user manual:** [HELP.md](HELP.md)
+
 Not a door game — run it locally in a terminal against `.ANS` / `.ASC` files (for example under `../display/`).
 
 ## Build
@@ -59,7 +61,10 @@ Requires an interactive TTY. On macOS Terminal / iTerm, CP437 glyphs are shown a
 | `S` / F2 | Save |
 | `O` / F3 | Open |
 | `I` | Import image (PNG/JPEG/GIF/WebP) |
-| `U` | Undo last paint/clear (25 deep) |
+| `U` | Undo last paint/clear/text (25 deep) |
+| `T` | Insert text (choose font, size 1–4, drop shadow) |
+| `Z` | Resize canvas (presets or custom; default 80×25) |
+| `A` | About (copyright, GitHub, description) |
 | `M` | SAUCE + COMNT editor |
 | `N` | New canvas |
 | Ctrl+L | Redraw |
@@ -87,7 +92,12 @@ Files are stored as art bytes + `0x1A` + optional `COMNT` + 128-byte `SAUCE00`.
 
 ## Version
 
-Current version: **1.0.5** (patch bump on every change).
+Current version: **1.0.9** (patch bump on every change).
+
+## Copyright
+
+Copyright (c) 2026 John Dovey \<dovey.john@gmail.com\>  
+MIT License — [github.com/JohnDovey/VirtBBS](https://github.com/JohnDovey/VirtBBS) (`AnsiEdit/`)
 
 ### Single release zip (Linux + Windows + macOS)
 
@@ -97,3 +107,5 @@ cd AnsiEdit
 ```
 
 Creates `AnsiEdit-<version>.zip` with three amd64 binaries and `HELP.txt` under `/Volumes/JohnDovey/tmp/ansiedit-bundle-<version>/`.
+
+See also the full manual: [HELP.md](HELP.md).

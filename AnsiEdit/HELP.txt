@@ -1,5 +1,9 @@
-AnsiEdit 1.0.5 — Help
+AnsiEdit 1.0.9 — Help
 ======================
+
+Copyright (c) 2026 John Dovey <dovey.john@gmail.com>
+MIT License
+https://github.com/JohnDovey/VirtBBS  (AnsiEdit/)
 
 Fullscreen ANSI art editor for classic BBS .ANS / .ASC screens.
 Requires an interactive terminal (TTY). SyncTerm or Windows Terminal
@@ -23,6 +27,9 @@ KEYS (letter commands are UPPERCASE)
   Space                               Paint draw glyph (default █)
   Backspace / Del                     Clear cell
   U                                   Undo last paint/clear (25 deep)
+  T                                   Insert text (font / size / shadow)
+  Z                                   Resize canvas (size presets)
+  A                                   About (copyright & GitHub)
   F then 0-9 or a-f                   Set foreground (see palette)
   B then 0-7                          Set background
   Tab / Shift+Tab                     Cycle draw glyph
@@ -36,7 +43,7 @@ KEYS (letter commands are UPPERCASE)
   Ctrl+Q  or  Esc Esc                 Quit (confirm if dirty)
   ? / F1                              In-editor help
 
-Bottom row: blue █ + white 0-f = FG color keys (use F then digit).
+Bottom row: colored █ 0-f = actual FG colors (use F then digit).
 
 IMPORT IMAGE (I)
 ----------------
@@ -56,4 +63,4 @@ FILES
 Saves .ANS / .ASC as art bytes + optional EOF + COMNT + SAUCE00.
 Import sets SAUCE width/height and a COMNT note automatically.
 
-More detail: see README.md in the VirtBBS AnsiEdit/ tree.
+More detail: see [HELP.md](HELP.md) (full manual) and [README.md](README.md).

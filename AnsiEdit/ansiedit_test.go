@@ -279,6 +279,39 @@ func TestUndoStack(t *testing.T) {
 	}
 }
 
+func TestRenderTextAndStamp(t *testing.T) {
+	grid := fontBlock.RenderText("Hi", 1)
+	if len(grid) != 5 {
+		t.Fatalf("rows=%d", len(grid))
+	}
+	hasInk := false
+	for _, row := range grid {
+		for _, ch := range row {
+			if ch != ' ' {
+				hasInk = true
+			}
+		}
+	}
+	if !hasInk {
+		t.Fatal("empty render")
+	}
+	big := fontBlock.RenderText("A", 2)
+	if len(big) != 10 {
+		t.Fatalf("size2 height=%d", len(big))
+	}
+	e := NewEditor(nil, NewCanvas(40, 20), "", Sauce{})
+	e.cx, e.cy = 1, 1
+	e.fg = classicFG(14)
+	n := e.stampTextGrid(fontMini.RenderText("OK", 1), true)
+	if n < 2 {
+		t.Fatalf("stamped cells=%d", n)
+	}
+	e.undoLast()
+	if len(e.undo) != 0 {
+		t.Fatalf("batch undo left %d", len(e.undo))
+	}
+}
+
 func TestTrimPathSpaces(t *testing.T) {
 	s := strings.TrimSpace("  /tmp/foo.png  ")
 	if s != "/tmp/foo.png" {

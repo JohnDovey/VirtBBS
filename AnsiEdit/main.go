@@ -13,7 +13,7 @@ func main() {
 	flag.Parse()
 
 	if *version {
-		fmt.Printf("AnsiEdit %s\n", Version)
+		printVersion()
 		os.Exit(0)
 	}
 
