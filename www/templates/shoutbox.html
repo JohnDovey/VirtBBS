@@ -1,0 +1,28 @@
+{{define "shoutbox.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "shoutbox.title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
+  {{if .Flash}}<p class="alert alert-success">{{.Flash}}</p>{{end}}
+  {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
+  <form method="post" action="/shoutbox" class="mb-4">
+    <label class="form-label" for="body">{{t .Locale "shoutbox.post_label"}}</label>
+    <textarea class="form-control mb-2" id="body" name="body" rows="2" maxlength="500" required></textarea>
+    <button type="submit" class="btn btn-primary">{{t .Locale "common.send"}}</button>
+  </form>
+  <ul class="list-group list-group-flush shout-list">
+  {{range .Shouts}}
+    <li class="list-group-item bg-transparent">
+      <strong>{{.UserName}}</strong>
+      <span class="meta ms-2">{{.CreatedAt}}</span>
+      <div>{{.Body}}</div>
+    </li>
+  {{else}}
+    <li class="list-group-item bg-transparent meta">{{t .Locale "shoutbox.empty"}}</li>
+  {{end}}
+  </ul>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

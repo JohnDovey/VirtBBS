@@ -1,0 +1,11 @@
+{{define "packetbbs.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "packetbbs.title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
+  <p>{{.Message}}</p>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

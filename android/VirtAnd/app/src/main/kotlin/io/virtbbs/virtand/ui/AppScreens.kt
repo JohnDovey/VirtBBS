@@ -44,12 +44,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import io.virtbbs.virtand.core.stripAnsi
 import io.virtbbs.virtand.data.entities.CachedMessageEntity
 import io.virtbbs.virtand.data.entities.MessageAttachmentEntity
 import io.virtbbs.virtand.data.entities.ConferenceEntity
 import io.virtbbs.virtand.data.entities.QueuedDownloadEntity
 import io.virtbbs.virtand.data.entities.QueuedReplyEntity
 import io.virtbbs.virtand.data.entities.QueuedUploadEntity
+import io.virtbbs.virtand.util.isNetworkAvailable
 import kotlinx.coroutines.launch
 
 @Composable
@@ -57,41 +59,87 @@ fun MessagesScreen(viewModel: MainViewModel) {
     val conferences by viewModel.conferences.collectAsState()
     var selectedConference by remember { mutableStateOf<Int?>(null) }
     var selectedMessageId by remember { mutableStateOf<Long?>(null) }
+    var messageSearchQuery by remember { mutableStateOf("") }
+    val messageSearchResults by viewModel.messageSearchResults.collectAsState()
+    val messageSearchStatus by viewModel.messageSearchStatus.collectAsState()
 
     when {
         selectedMessageId != null -> MessageDetailScreen(
             viewModel = viewModel,
             localId = selectedMessageId!!,
-            onBack = { selectedMessageId = null },
+            onBack = {
+                selectedMessageId = null
+                viewModel.clearMessageSearch()
+            },
         )
         selectedConference == null -> {
             val grouped = conferences
                 .groupBy { it.network }
                 .toList()
                 .sortedWith(compareBy({ (net, _) -> if (net == "Local") "" else net }))
-            LazyColumn {
-                item(key = "stats-legend") {
+            Column(modifier = Modifier.fillMaxSize()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TextField(
+                        value = messageSearchQuery,
+                        onValueChange = { messageSearchQuery = it },
+                        label = { Text("Search messages") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true,
+                    )
+                    Button(
+                        onClick = { viewModel.searchMessages(messageSearchQuery) },
+                        enabled = messageSearchQuery.isNotBlank(),
+                    ) { Text("Search") }
+                }
+                if (messageSearchStatus.isNotBlank()) {
                     Text(
-                        "Total / Unread / Last read",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                        messageSearchStatus,
+                        modifier = Modifier.padding(horizontal = 12.dp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                grouped.forEach { (network, confs) ->
-                    item(key = "net-$network") {
+                if (messageSearchResults.isNotEmpty()) {
+                    LazyColumn(modifier = Modifier.weight(1f, fill = false)) {
+                        items(messageSearchResults, key = { it.localId }) { msg ->
+                            MessageListItem(
+                                msg = msg,
+                                conferenceLabel = viewModel.conferenceName(msg.conferenceId),
+                                onOpen = { selectedMessageId = msg.localId },
+                            )
+                        }
+                    }
+                }
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    item(key = "stats-legend") {
                         Text(
-                            network,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            fontWeight = FontWeight.Bold,
-                            style = MaterialTheme.typography.titleMedium,
+                            "Total / Unread / Last read",
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    items(confs, key = { it.id }) { conf ->
-                        ConferenceListItem(
-                            conf = conf,
-                            onOpen = { selectedConference = conf.id },
-                        )
+                    grouped.forEach { (network, confs) ->
+                        item(key = "net-$network") {
+                            Text(
+                                network,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                        items(confs, key = { it.id }) { conf ->
+                            ConferenceListItem(
+                                conf = conf,
+                                onOpen = {
+                                    viewModel.clearMessageSearch()
+                                    messageSearchQuery = ""
+                                    selectedConference = conf.id
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -182,17 +230,24 @@ private fun NetworkChoiceButtons(
 }
 
 @Composable
-private fun MessageListItem(msg: CachedMessageEntity, onOpen: () -> Unit) {
+private fun MessageListItem(
+    msg: CachedMessageEntity,
+    onOpen: () -> Unit,
+    conferenceLabel: String? = null,
+) {
     ListItem(
         headlineContent = {
             Text(
-                "${msg.fromName} → ${msg.toName}: ${msg.subject}",
+                buildString {
+                    if (conferenceLabel != null) append("[$conferenceLabel] ")
+                    append("${msg.fromName} → ${msg.toName}: ${msg.subject}")
+                },
                 fontWeight = if (msg.isRead) FontWeight.Normal else FontWeight.Bold,
             )
         },
         supportingContent = {
             Text(
-                "${msg.date} ${msg.time} — ${msg.body.replace("\r", "").take(120)}",
+                "${msg.date} ${msg.time} — ${stripAnsi(msg.body).replace("\r", "").take(120)}",
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -210,6 +265,7 @@ fun MessageDetailScreen(viewModel: MainViewModel, localId: Long, onBack: () -> U
     var msg by remember { mutableStateOf<CachedMessageEntity?>(null) }
     var showReply by remember { mutableStateOf(false) }
     val attachments by viewModel.attachmentsFor(localId).collectAsState(initial = emptyList())
+    val renderAnsi by viewModel.settings.renderAnsi.collectAsState(initial = true)
 
     LaunchedEffect(localId) {
         msg = viewModel.getMessage(localId)
@@ -239,7 +295,11 @@ fun MessageDetailScreen(viewModel: MainViewModel, localId: Long, onBack: () -> U
         Text("To: ${message.toName}")
         Text("Subject: ${message.subject}")
         Text("${message.date} ${message.time}", style = MaterialTheme.typography.bodySmall)
-        Text(message.body.replace("\r", ""))
+        if (renderAnsi) {
+            AnsiText(message.body.replace("\r", ""))
+        } else {
+            Text(stripAnsi(message.body).replace("\r", ""), fontFamily = FontFamily.Monospace)
+        }
         if (attachments.isNotEmpty()) {
             Text("Attachments", fontWeight = FontWeight.Bold)
             attachments.forEach { att ->
@@ -336,11 +396,14 @@ fun FilesScreen(viewModel: MainViewModel) {
     val username by viewModel.settings.username.collectAsState(initial = "")
     val password by viewModel.settings.password.collectAsState(initial = "")
     val port by viewModel.settings.userApiPort.collectAsState(initial = 9998)
+    val localFileSearch by viewModel.settings.localFileSearch.collectAsState(initial = true)
     val searchResults by viewModel.fileSearchResults.collectAsState()
+    val fileSearchStatus by viewModel.fileSearchStatus.collectAsState()
     var selectedDir by remember { mutableStateOf<Long?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var pendingUpload by remember { mutableStateOf<Triple<Long, Uri, String>?>(null) }
     val context = LocalContext.current
+    val offline = remember(context) { !context.isNetworkAvailable() }
 
     val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null && selectedDir != null) {
@@ -360,9 +423,35 @@ fun FilesScreen(viewModel: MainViewModel) {
                 label = { Text("Search files") },
                 modifier = Modifier.weight(1f),
             )
-            Button(onClick = { viewModel.searchFiles(host, port, username, password, searchQuery) }) {
-                Text("Search")
+            Button(onClick = {
+                viewModel.searchFiles(host, port, username, password, searchQuery, forceServer = false)
+            }) {
+                Text(if (localFileSearch || offline) "Local" else "Search")
             }
+            if (!offline) {
+                OutlinedButton(onClick = {
+                    viewModel.searchFiles(host, port, username, password, searchQuery, forceServer = true)
+                }) { Text("Server") }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                when {
+                    offline -> "Offline — searching local cache"
+                    localFileSearch -> "Local search preferred (toggle in Settings)"
+                    else -> "Server search (enable Local search in Settings for cache-first)"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (fileSearchStatus.isNotBlank()) {
+            Text(fileSearchStatus, modifier = Modifier.padding(horizontal = 12.dp), style = MaterialTheme.typography.bodySmall)
         }
 
         if (searchResults.isNotEmpty()) {
@@ -505,6 +594,8 @@ fun SettingsScreen(viewModel: MainViewModel) {
     val networks by viewModel.settings.subscribedNetworks.collectAsState(initial = listOf("FidoNet"))
     val availableNetworks by viewModel.availableNetworks.collectAsState()
     val purgeDays by viewModel.settings.purgeDays.collectAsState(initial = 7)
+    val renderAnsi by viewModel.settings.renderAnsi.collectAsState(initial = true)
+    val localFileSearch by viewModel.settings.localFileSearch.collectAsState(initial = true)
     val connectionStatus by viewModel.connectionStatus.collectAsState()
     val nodeResults by viewModel.nodeSearchResults.collectAsState()
     val nodeSearching by viewModel.nodeSearching.collectAsState()
@@ -567,6 +658,21 @@ fun SettingsScreen(viewModel: MainViewModel) {
             style = MaterialTheme.typography.bodySmall,
         )
         OutlinedButton(onClick = { viewModel.purgeNow() }) { Text("Purge now") }
+        Text("Display", fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Render ANSI colors in message reader")
+            Switch(checked = renderAnsi, onCheckedChange = { viewModel.setRenderAnsi(it) })
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text("Prefer local file search")
+            Switch(checked = localFileSearch, onCheckedChange = { viewModel.setLocalFileSearch(it) })
+        }
         Text("FidoNet networks", fontWeight = FontWeight.Bold)
         if (availableNetworks.isEmpty()) {
             Text(
@@ -600,6 +706,8 @@ fun SettingsScreen(viewModel: MainViewModel) {
                     passwordField,
                     subscribed.toList().sorted(),
                     purgeField.toIntOrNull() ?: 7,
+                    renderAnsi,
+                    localFileSearch,
                 )
             }) { Text("Save") }
             OutlinedButton(onClick = {

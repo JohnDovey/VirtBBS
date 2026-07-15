@@ -323,6 +323,12 @@
 //                        body line; upstream requests send password in subject.
 //   v1.7.8  2026-06-30  BinkP: receive interleaved inbound M_FILE while waiting for M_GOT
 //                        (fixes session stall against binkd when both sides have mail).
+//   v2.2.1  2026-07-15  BinkP: rate-limit port-scan handshake disconnects (EOF/reset);
+//                        shorter handshake deadline so scans do not hold sockets.
+//   v2.2.0  2026-07-15  Close deferred gaps: BinkP M_GET resume; FREQ WaZOO/Bark/SRIF/
+//                        session M_GET + per-file passwords; Zmodem CRC-32 negotiation;
+//                        VirtAnd local notify + ANSI + offline search; web doors, shoutbox,
+//                        chat, polls, credits, PGP profile, ads HTML, PacketBBS/AI stubs.
 //   v2.1.5  2026-07-15  Public GET /sniff (+ /api/sniff) for MeshSniff LAN discovery.
 //   v1.7.7  2026-06-30  Bundled quotes.txt starter taglines; uptime shows hours in full breakdown.
 //   v1.7.6  2026-06-29  Random taglines on all locally originated echomail at post and export;
@@ -339,4 +345,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "2.1.5"
+const Version = "2.2.1"

@@ -1,0 +1,36 @@
+{{define "admin_polls.html"}}
+{{template "header" .}}
+<div class="card mb-3 sysop-panel">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "admin_polls.title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/admin">{{t .Locale "common.admin_back"}}</a></p>
+  {{if .Flash}}<p class="alert alert-success">{{.Flash}}</p>{{end}}
+  {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
+  <form method="post" action="/admin/polls" class="admin-form mb-4">
+    <input type="hidden" name="action" value="create">
+    <label>{{t .Locale "polls.question"}} <input class="form-control" name="question" required></label>
+    <label>{{t .Locale "admin_polls.options_label"}} <textarea class="form-control" name="options" rows="4" placeholder="{{t .Locale "admin_polls.options_help"}}" required></textarea></label>
+    <button type="submit" class="btn btn-primary">{{t .Locale "admin_polls.create"}}</button>
+  </form>
+  <table class="table table-dark table-striped">
+    <thead><tr><th>{{t .Locale "polls.question"}}</th><th>{{t .Locale "common.status"}}</th><th></th></tr></thead>
+    <tbody>
+    {{range .Polls}}
+    <tr>
+      <td><a href="/polls/view?id={{.ID}}">{{.Question}}</a></td>
+      <td>{{if .Open}}{{t $.Locale "polls.open"}}{{else}}{{t $.Locale "polls.closed"}}{{end}}</td>
+      <td>{{if .Open}}
+        <form method="post" action="/admin/polls" class="d-inline">
+          <input type="hidden" name="action" value="close">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button type="submit" class="btn btn-sm btn-outline-warning">{{t $.Locale "admin_polls.close"}}</button>
+        </form>
+      {{end}}</td>
+    </tr>
+    {{end}}
+    </tbody>
+  </table>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

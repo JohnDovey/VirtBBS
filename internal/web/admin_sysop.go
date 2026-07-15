@@ -34,6 +34,7 @@ func (s *Server) handleAdminConfig(w http.ResponseWriter, r *http.Request) {
 		merged := *cfg
 		merged.BBS.Name = strings.TrimSpace(r.FormValue("bbs_name"))
 		merged.BBS.MaxNodes = formInt(r, "max_nodes", merged.BBS.MaxNodes)
+		merged.BBS.AdHTML = r.FormValue("ad_html")
 		merged.Network.TelnetPort = formInt(r, "telnet_port", merged.Network.TelnetPort)
 		merged.Network.SSHPort = formInt(r, "ssh_port", merged.Network.SSHPort)
 		merged.Network.UserAPIPort = formInt(r, "userapi_port", merged.Network.UserAPIPort)
@@ -318,6 +319,7 @@ func (s *Server) handleAdminUserEdit(w http.ResponseWriter, r *http.Request) {
 		u.Sysop = formBool(r, "sysop")
 		u.Deleted = formBool(r, "deleted")
 		u.Comment1 = strings.TrimSpace(r.FormValue("comment"))
+		u.Credits = formInt(r, "credits", u.Credits)
 		u.EditorType = strings.TrimSpace(r.FormValue("editor_type"))
 		if u.EditorType == "" {
 			u.EditorType = "simple"

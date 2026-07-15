@@ -2,6 +2,7 @@
 package io.virtbbs.virtand.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -20,6 +21,8 @@ class SettingsStore(private val context: Context) {
         val PASSWORD = stringPreferencesKey("password")
         val SUBSCRIBED_NETWORKS = stringPreferencesKey("subscribed_networks")
         val PURGE_DAYS = intPreferencesKey("purge_days")
+        val RENDER_ANSI = booleanPreferencesKey("render_ansi")
+        val LOCAL_FILE_SEARCH = booleanPreferencesKey("local_file_search")
     }
 
     val host: Flow<String> = context.dataStore.data.map { it[Keys.HOST] ?: "" }
@@ -30,6 +33,8 @@ class SettingsStore(private val context: Context) {
         (it[Keys.SUBSCRIBED_NETWORKS] ?: "FidoNet").split(",").filter { n -> n.isNotBlank() }
     }
     val purgeDays: Flow<Int> = context.dataStore.data.map { it[Keys.PURGE_DAYS] ?: 7 }
+    val renderAnsi: Flow<Boolean> = context.dataStore.data.map { it[Keys.RENDER_ANSI] ?: true }
+    val localFileSearch: Flow<Boolean> = context.dataStore.data.map { it[Keys.LOCAL_FILE_SEARCH] ?: true }
 
     suspend fun save(
         host: String,
@@ -38,6 +43,8 @@ class SettingsStore(private val context: Context) {
         password: String,
         subscribedNetworks: List<String>,
         purgeDays: Int = 7,
+        renderAnsi: Boolean = true,
+        localFileSearch: Boolean = true,
     ) {
         context.dataStore.edit { prefs ->
             prefs[Keys.HOST] = host
@@ -47,7 +54,17 @@ class SettingsStore(private val context: Context) {
             prefs.remove(stringPreferencesKey("token"))
             prefs[Keys.SUBSCRIBED_NETWORKS] = subscribedNetworks.joinToString(",")
             prefs[Keys.PURGE_DAYS] = purgeDays.coerceAtLeast(1)
+            prefs[Keys.RENDER_ANSI] = renderAnsi
+            prefs[Keys.LOCAL_FILE_SEARCH] = localFileSearch
         }
+    }
+
+    suspend fun setRenderAnsi(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.RENDER_ANSI] = enabled }
+    }
+
+    suspend fun setLocalFileSearch(enabled: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.LOCAL_FILE_SEARCH] = enabled }
     }
 
     suspend fun snapshot(): Snapshot = Snapshot(
@@ -57,6 +74,8 @@ class SettingsStore(private val context: Context) {
         password = password.first(),
         subscribedNetworks = subscribedNetworks.first(),
         purgeDays = purgeDays.first(),
+        renderAnsi = renderAnsi.first(),
+        localFileSearch = localFileSearch.first(),
     )
 
     data class Snapshot(
@@ -66,5 +85,7 @@ class SettingsStore(private val context: Context) {
         val password: String,
         val subscribedNetworks: List<String>,
         val purgeDays: Int = 7,
+        val renderAnsi: Boolean = true,
+        val localFileSearch: Boolean = true,
     )
 }

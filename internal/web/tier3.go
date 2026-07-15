@@ -326,6 +326,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	lastNew := -1
 	lastNet := -1
+	lastShout := int64(0)
 	for i := 0; i < 120; i++ {
 		if r.Context().Err() != nil {
 			return
@@ -337,11 +338,19 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		netmail := s.netmailUnreadCount(u)
-		if newTotal != lastNew || netmail != lastNet {
-			payload, _ := json.Marshal(map[string]int{"new_messages": newTotal, "netmail": netmail})
+		shoutID := int64(0)
+		if store, err := s.socialStore(); err == nil {
+			shoutID, _ = store.LatestShoutID()
+		}
+		if newTotal != lastNew || netmail != lastNet || shoutID != lastShout {
+			payload, _ := json.Marshal(map[string]int64{
+				"new_messages": int64(newTotal),
+				"netmail":      int64(netmail),
+				"shouts":       shoutID,
+			})
 			fmt.Fprintf(w, "event: notify\ndata: %s\n\n", payload)
 			flusher.Flush()
-			lastNew, lastNet = newTotal, netmail
+			lastNew, lastNet, lastShout = newTotal, netmail, shoutID
 		} else {
 			fmt.Fprintf(w, ": keepalive\n\n")
 			flusher.Flush()

@@ -2939,6 +2939,7 @@ func (s *session) runDoor(cfg door.Config) {
 		BaudRate:      38400,
 		BBSName:       config.Get().BBS.Name,
 		SysopName:     config.Get().Sysop.Name,
+		Credits:       s.user.Credits,
 	}
 
 	s.writeln(ansi.Colorize(ansi.BrightGreen, fmt.Sprintf("Launching %s... (type CTRL+] to abort)", cfg.Name)))

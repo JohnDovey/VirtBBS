@@ -92,6 +92,7 @@ type Session struct {
 	BaudRate    int    // always 38400 for Telnet/SSH
 	BBSName     string
 	SysopName   string
+	Credits     int // remaining upload credit (DOOR.SYS line 50)
 }
 
 // Run writes a drop file and executes the door program, bridging I/O to rw.
@@ -259,7 +260,7 @@ func writeDoorSYS(path string, s Session) error {
 		"0",                                           // 47 byte ratio
 		"0",                                           // 48 daily download limit
 		"0",                                           // 49 remaining downloads today
-		"0",                                           // 50 remaining upload credit
+		fmt.Sprintf("%d", s.Credits),                  // 50 remaining upload credit
 		"0",                                           // 51 total messages
 		"0",                                           // 52 total files
 	}

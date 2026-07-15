@@ -30,6 +30,10 @@
         <li class="nav-item"><a class="nav-link" href="/subscriptions" data-nav="/subscriptions">{{t .Locale "nav.echo"}}</a></li>
         <li class="nav-item"><a class="nav-link" href="/addressbook" data-nav="/addressbook">{{t .Locale "nav.addressbook"}}</a></li>
         <li class="nav-item"><a class="nav-link" href="/bulletins" data-nav="/bulletins">{{t .Locale "nav.bulletins"}}</a></li>
+        <li class="nav-item"><a class="nav-link" href="/shoutbox" data-nav="/shoutbox">{{t .Locale "nav.shoutbox"}}</a></li>
+        <li class="nav-item"><a class="nav-link" href="/chat" data-nav="/chat">{{t .Locale "nav.chat"}}</a></li>
+        <li class="nav-item"><a class="nav-link" href="/polls" data-nav="/polls">{{t .Locale "nav.polls"}}</a></li>
+        <li class="nav-item"><a class="nav-link" href="/doors" data-nav="/doors">{{t .Locale "nav.doors"}}</a></li>
         <li class="nav-item"><a class="nav-link" href="/stats" data-nav="/stats">{{t .Locale "nav.stats"}}</a></li>
         <li class="nav-item"><a class="nav-link" href="/online" data-nav="/online">{{t .Locale "nav.online"}}</a></li>
         {{if .NavNetworks}}
@@ -71,6 +75,7 @@
 
 {{define "footer"}}
 </main>
+{{if .AdHTML}}<div class="container-lg py-2 ad-footer">{{safeHTML .AdHTML}}</div>{{end}}
 <script src="/static/jquery.min.js"></script>
 <script src="/static/bootstrap.bundle.min.js"></script>
 <script src="/static/nav.js"></script>

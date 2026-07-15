@@ -38,6 +38,7 @@
 package fido
 
 import (
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -145,8 +146,12 @@ type Config struct {
 	// FreqMaxBytes caps total bytes queued per inbound FREQ request (default 5 MiB).
 	FreqMaxBytes int64 `toml:"freq_max_bytes" json:"freq_max_bytes"`
 	// FreqOutbound selects outbound FREQ request format: "classic" (netmail to
-	// Freq) or "file_request" (FTS FILE_REQUEST attribute). Default classic.
+	// Freq), "file_request" (FTS FILE_REQUEST), "wazoo" (.REQ), or "bark". Default classic.
 	FreqOutbound string `toml:"freq_outbound" json:"freq_outbound"`
+	// FreqFilePasswords maps filename (case-insensitive) → password for per-file FREQ auth.
+	FreqFilePasswords map[string]string `toml:"freq_file_passwords" json:"freq_file_passwords"`
+	// SRIFHelper optional external command; if empty, VirtBBS handles SRIF files itself.
+	SRIFHelper string `toml:"srif_helper" json:"srif_helper"`
 }
 
 // DefaultNodelistDiscoveryURL is used when NodelistURL is left blank: a
@@ -251,6 +256,9 @@ type NetworkDef struct {
 	FreqMaxFiles int    `toml:"freq_max_files" json:"freq_max_files"`
 	FreqMaxBytes int64  `toml:"freq_max_bytes" json:"freq_max_bytes"`
 	FreqOutbound string `toml:"freq_outbound" json:"freq_outbound"`
+	// FreqFilePasswords maps filename → password for per-file FREQ auth.
+	FreqFilePasswords map[string]string `toml:"freq_file_passwords" json:"freq_file_passwords"`
+	SRIFHelper        string            `toml:"srif_helper" json:"srif_helper"`
 }
 
 // DefaultConfig returns a Config with sensible disabled defaults.
@@ -355,6 +363,8 @@ func (c *Config) AllNetworks() []NetworkDef {
 		FreqMaxFiles:                c.FreqMaxFiles,
 		FreqMaxBytes:                c.FreqMaxBytes,
 		FreqOutbound:                c.FreqOutbound,
+		FreqFilePasswords:           c.FreqFilePasswords,
+		SRIFHelper:                  c.SRIFHelper,
 	}
 	result := []NetworkDef{primary}
 	result = append(result, c.Networks...)
@@ -603,6 +613,8 @@ func (n *NetworkDef) EffectiveFreqMaxBytes() int64 {
 const (
 	FreqOutboundClassic     = "classic"
 	FreqOutboundFileRequest = "file_request"
+	FreqOutboundWaZooMode   = "wazoo"
+	FreqOutboundBark        = "bark"
 )
 
 // NormalizeFreqOutboundMode returns a canonical outbound FREQ mode name, or ""
@@ -613,9 +625,27 @@ func NormalizeFreqOutboundMode(mode string) string {
 		return FreqOutboundFileRequest
 	case FreqOutboundClassic, "freq", "robot":
 		return FreqOutboundClassic
+	case FreqOutboundWaZooMode, "req", ".req":
+		return FreqOutboundWaZooMode
+	case FreqOutboundBark:
+		return FreqOutboundBark
 	default:
 		return ""
 	}
+}
+
+// FreqFilePassword returns the configured per-file password for name, or "".
+func (n *NetworkDef) FreqFilePassword(name string) string {
+	if n == nil || len(n.FreqFilePasswords) == 0 {
+		return ""
+	}
+	base := filepath.Base(strings.TrimSpace(name))
+	for k, v := range n.FreqFilePasswords {
+		if strings.EqualFold(filepath.Base(k), base) {
+			return v
+		}
+	}
+	return ""
 }
 
 // EffectiveFreqOutboundMode returns the configured outbound FREQ format (default classic).

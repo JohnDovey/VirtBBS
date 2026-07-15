@@ -1,0 +1,31 @@
+{{define "poll_view.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{.Poll.Question}}</h2></div>
+  <div class="card-body">
+  <p><a href="/polls">{{t .Locale "polls.back"}}</a></p>
+  {{if .Flash}}<p class="alert alert-success">{{.Flash}}</p>{{end}}
+  {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
+  {{if .Poll.Open}}
+  <form method="post" action="/polls/view?id={{.Poll.ID}}">
+    {{range .Options}}
+    <div class="form-check mb-2">
+      <input class="form-check-input" type="radio" name="option_id" id="opt{{.ID}}" value="{{.ID}}" {{if eq $.UserVoteID .ID}}checked{{end}}>
+      <label class="form-check-label" for="opt{{.ID}}">{{.Label}}</label>
+    </div>
+    {{end}}
+    <button type="submit" class="btn btn-primary">{{t .Locale "polls.vote"}}</button>
+  </form>
+  {{else}}
+  <p class="meta">{{t .Locale "polls.closed"}}</p>
+  {{end}}
+  <h3 class="h6 mt-4">{{t .Locale "polls.results"}}</h3>
+  <ul class="compact-list">
+  {{range .Options}}
+    <li>{{.Label}} — {{.Votes}}</li>
+  {{end}}
+  </ul>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

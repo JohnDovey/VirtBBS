@@ -30,7 +30,9 @@ CREATE TABLE IF NOT EXISTS users (
     sysop           INTEGER NOT NULL DEFAULT 0,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
     updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
-    app_last_netmail INTEGER NOT NULL DEFAULT 0   -- last netmail msg_number delivered via VirtAnd sync
+    app_last_netmail INTEGER NOT NULL DEFAULT 0,  -- last netmail msg_number delivered via VirtAnd sync
+    credits         INTEGER NOT NULL DEFAULT 0,   -- download / door credits
+    pgp_key         TEXT    NOT NULL DEFAULT ''   -- optional PGP public key block
 );
 
 CREATE TABLE IF NOT EXISTS user_conferences (

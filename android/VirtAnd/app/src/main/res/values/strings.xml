@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">VirtAnd</string>
+    <string name="notification_channel_new_mail">New mail</string>
+    <string name="notification_channel_new_mail_desc">Alerts when synchronize finds new messages</string>
+    <string name="notification_new_mail_title">New BBS mail</string>
+    <plurals name="notification_new_mail_body">
+        <item quantity="one">%d new message — tap to open</item>
+        <item quantity="other">%d new messages — tap to open</item>
+    </plurals>
 </resources>

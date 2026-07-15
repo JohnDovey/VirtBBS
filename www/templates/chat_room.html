@@ -1,0 +1,37 @@
+{{define "chat_room.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{tf .Locale "chat.room_title" .Room.Name}}</h2></div>
+  <div class="card-body">
+  <p><a href="/chat">{{t .Locale "chat.back"}}</a></p>
+  {{if .Flash}}<p class="alert alert-success">{{.Flash}}</p>{{end}}
+  {{if .Error}}<p class="alert alert-danger">{{.Error}}</p>{{end}}
+  <div class="chat-log mb-3 p-2 border rounded" id="chat-log">
+  {{range .Messages}}
+    <div class="chat-line"><strong>{{.UserName}}</strong> <span class="meta">{{.CreatedAt}}</span><br>{{.Body}}</div>
+  {{end}}
+  </div>
+  <form method="post" action="/chat/room?id={{.Room.ID}}">
+    <textarea class="form-control mb-2" name="body" rows="3" maxlength="2000" required></textarea>
+    <button type="submit" class="btn btn-primary">{{t .Locale "common.send"}}</button>
+  </form>
+  </div>
+</div>
+<script defer>
+(function(){
+  var log = document.getElementById('chat-log');
+  if (log) log.scrollTop = log.scrollHeight;
+  var roomId = {{.Room.ID}};
+  setInterval(function(){
+    fetch('/api/chat?id=' + roomId).then(function(r){ return r.json(); }).then(function(msgs){
+      if (!Array.isArray(msgs) || !log) return;
+      log.innerHTML = msgs.map(function(m){
+        return '<div class="chat-line"><strong>' + m.user_name + '</strong> <span class="meta">' + m.created_at + '</span><br>' + m.body + '</div>';
+      }).join('');
+      log.scrollTop = log.scrollHeight;
+    }).catch(function(){});
+  }, 10000);
+})();
+</script>
+{{template "footer" .}}
+{{end}}

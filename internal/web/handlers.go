@@ -19,6 +19,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/postname"
+	"github.com/virtbbs/virtbbs/internal/social"
 	"github.com/virtbbs/virtbbs/internal/uptime"
 )
 
@@ -92,6 +93,7 @@ func (s *Server) handleMenu(w http.ResponseWriter, r *http.Request) {
 		Bulletins     []BulletinView
 		LogonHTML     string
 		UptimeLines   []string
+		Shouts        []*social.Shout
 	}{
 		pageData: s.page(r),
 	}
@@ -105,6 +107,7 @@ func (s *Server) handleMenu(w http.ResponseWriter, r *http.Request) {
 	if html, err := s.renderDisplayHTML("LOGON", u); err == nil {
 		data.LogonHTML = html
 	}
+	data.Shouts = s.gatherShoutsForMenu()
 	s.render(w, "menu.html", data)
 }
 

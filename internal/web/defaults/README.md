@@ -140,10 +140,14 @@ Legend: `[x]` done · `[ ]` not yet implemented
 - [x] API tokens: list, revoke
 - [x] FidoNet: networks, toss/scan/poll, nodelist, routing, join, tools
 
-### Still out of scope (terminal-only or future)
+### Extended community features
 
-- [ ] Doors / games (WebDoor, DOS, xterm)
-- [ ] Chat rooms, shoutbox, polls, credits, PGP, AI/MCP, PacketBBS, ads
+- [x] Doors / games (native web doors via WebSocket terminal)
+- [x] Chat rooms, shoutbox, polls, credits, PGP, AI/MCP, PacketBBS, ads
+
+### Still out of scope
+
+- [ ] DOS doors, WebDoor protocol, full xterm.js ANSI terminal
 
 ## Related docs
 

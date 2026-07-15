@@ -183,19 +183,20 @@ func SendFile(rw io.ReadWriter, path string) error {
 
 	br := bufio.NewReader(rw)
 
-	// 1. Wait for ZRQINIT from receiver.
-	if err := waitForZRQINIT(br); err != nil {
-		return fmt.Errorf("waiting for ZRQINIT: %w", err)
+	// 1. Wait for receiver init (ZRQINIT or ZRINIT); learn CANFC32 from ZRINIT.
+	use32, err := waitForReceiverInit(br)
+	if err != nil {
+		return fmt.Errorf("waiting for receiver init: %w", err)
 	}
 
-	// 2. Send ZFILE header (CRC-16 hex).
+	// 2. Send ZFILE header (CRC-16 hex — universal control framing).
 	if err := sendHexHeader(rw, ZFILE, 0); err != nil {
 		return err
 	}
 	// ZFILE data subpacket: "filename\x00size mtime mode serialno\x00"
 	fileData := fmt.Sprintf("%s\x00%d %d 0 0",
 		filepath.Base(path), info.Size(), info.ModTime().Unix())
-	if err := sendDataSubpacket(rw, []byte(fileData), ZCRCW, false); err != nil {
+	if err := sendDataSubpacket(rw, []byte(fileData), ZCRCW, use32); err != nil {
 		return err
 	}
 
@@ -208,11 +209,15 @@ func SendFile(rw io.ReadWriter, path string) error {
 	case ZSKIP:
 		return nil // receiver wants to skip
 	case ZRINIT:
+		if len(hdrData) >= 4 {
+			flags := binary.LittleEndian.Uint32(hdrData[:4])
+			use32 = flags&CANFC32 != 0
+		}
 		// Re-send ZFILE
 		if err := sendHexHeader(rw, ZFILE, 0); err != nil {
 			return err
 		}
-		if err := sendDataSubpacket(rw, []byte(fileData), ZCRCW, false); err != nil {
+		if err := sendDataSubpacket(rw, []byte(fileData), ZCRCW, use32); err != nil {
 			return err
 		}
 		ftype, hdrData, _, err = readAnyFrame(br)
@@ -249,7 +254,7 @@ func SendFile(rw io.ReadWriter, path string) error {
 			if isLast {
 				pktType = ZCRCW // wait for ack on last packet
 			}
-			if err := sendDataSubpacket(rw, buf[:n], pktType, false); err != nil {
+			if err := sendDataSubpacket(rw, buf[:n], pktType, use32); err != nil {
 				return err
 			}
 			if isLast {
@@ -295,13 +300,14 @@ func ReceiveFile(rw io.ReadWriter, destDir string) (string, error) {
 
 	// 1. Send ZRINIT announcing our capabilities (CRC-32 + overlap I/O).
 	zrinitFlags := [4]byte{CANOVIO | CANFC32, 0, 0, 0}
+	recvUse32 := true // we advertise CANFC32; capable senders use CRC-32 data subpackets
 	if err := sendHexHeader(rw, ZRINIT, binary.LittleEndian.Uint32(zrinitFlags[:])); err != nil {
 		return "", err
 	}
 
 	// 2. Wait for ZFILE from sender.
 	for {
-		ftype, data, _, err := readAnyFrame(br)
+		ftype, data, _, err := readAnyFrameOpts(br, recvUse32)
 		if err != nil {
 			return "", fmt.Errorf("waiting for ZFILE: %w", err)
 		}
@@ -340,7 +346,7 @@ func ReceiveFile(rw io.ReadWriter, destDir string) (string, error) {
 			// 4. Receive data.
 			received := resumeAt
 			for {
-				ftype, pkt, marker, err := readAnyFrame(br)
+				ftype, pkt, marker, err := readAnyFrameOpts(br, recvUse32)
 				if err != nil {
 					return outPath, fmt.Errorf("receiving data: %w", err)
 				}
@@ -379,7 +385,7 @@ func ReceiveFile(rw io.ReadWriter, destDir string) (string, error) {
 						if marker == ZCRCW {
 							break
 						}
-						pkt, marker, err = readDataSubpacket(br)
+						pkt, marker, err = readDataSubpacket(br, recvUse32)
 						if err != nil {
 							return outPath, fmt.Errorf("receiving data: %w", err)
 						}
@@ -430,7 +436,7 @@ func sendHexHeader(w io.Writer, frameType byte, pos uint32) error {
 
 // sendDataSubpacket writes a ZDLE-escaped data subpacket followed by the CRC.
 // pktType is one of ZCRCE, ZCRCG, ZCRCQ, ZCRCW.
-// use32 selects CRC-32 (not yet used in the send path — kept for future).
+// use32 selects CRC-32 when the peer advertised CANFC32.
 func sendDataSubpacket(w io.Writer, data []byte, pktType byte, use32 bool) error {
 	escaped := escapeData(data)
 	// Escape the pktType byte itself if needed (it follows a ZDLE).
@@ -484,6 +490,10 @@ func needsEscape(b byte) bool {
 // For header-only frames (ZRPOS, ZRQINIT, etc.) the returned data slice contains
 // the raw 4-byte position field.
 func readAnyFrame(br *bufio.Reader) (byte, []byte, byte, error) {
+	return readAnyFrameOpts(br, false)
+}
+
+func readAnyFrameOpts(br *bufio.Reader, dataUse32 bool) (byte, []byte, byte, error) {
 	canCount := 0
 	for {
 		b, err := br.ReadByte()
@@ -528,7 +538,7 @@ func readAnyFrame(br *bufio.Reader) (byte, []byte, byte, error) {
 		}
 		switch enc {
 		case ZHEX:
-			return readHexFrame(br)
+			return readHexFrame(br, dataUse32)
 		case ZBIN:
 			return readBinFrame(br, false)
 		case ZBIN32:
@@ -543,7 +553,7 @@ func readAnyFrame(br *bufio.Reader) (byte, []byte, byte, error) {
 // Returns the frame type, the 4-byte position (or subpacket payload for
 // ZFILE/ZDATA) as data, and — for ZFILE/ZDATA only — the subpacket's ZCRC
 // end-marker (ZCRCE/ZCRCG/ZCRCQ/ZCRCW), 0 otherwise.
-func readHexFrame(br *bufio.Reader) (byte, []byte, byte, error) {
+func readHexFrame(br *bufio.Reader, dataUse32 bool) (byte, []byte, byte, error) {
 	// 14 hex digits = 7 bytes (type[1] + pos[4] + crc[2])
 	hexBuf := make([]byte, 14)
 	for i := range hexBuf {
@@ -594,7 +604,7 @@ func readHexFrame(br *bufio.Reader) (byte, []byte, byte, error) {
 				break
 			}
 		}
-		payload, marker, err := readDataSubpacket(br)
+		payload, marker, err := readDataSubpacket(br, dataUse32)
 		if err != nil {
 			return ft, nil, 0, err
 		}
@@ -642,7 +652,7 @@ func readBinFrame(br *bufio.Reader, use32 bool) (byte, []byte, byte, error) {
 	ft := raw[0]
 	pos := raw[1:5]
 	if ft == ZFILE || ft == ZDATA {
-		payload, marker, err := readDataSubpacket(br)
+		payload, marker, err := readDataSubpacket(br, use32)
 		if err != nil {
 			return ft, nil, 0, err
 		}
@@ -679,11 +689,9 @@ func readEscapedByte(br *bufio.Reader) (byte, error) {
 }
 
 // readDataSubpacket reads a ZDLE-escaped data stream up to the end-of-subpacket
-// marker (ZDLE ZCRCE/ZCRCG/ZCRCQ/ZCRCW), verifies its CRC-16, and returns that
-// marker byte alongside the data: ZCRCG/ZCRCQ mean more subpackets follow
-// immediately with no new header in between (see ReceiveFile's inner loop),
-// ZCRCW means the sender will issue a fresh header next.
-func readDataSubpacket(br *bufio.Reader) ([]byte, byte, error) {
+// marker (ZDLE ZCRCE/ZCRCG/ZCRCQ/ZCRCW), verifies its CRC, and returns that
+// marker byte alongside the data.
+func readDataSubpacket(br *bufio.Reader, use32 bool) ([]byte, byte, error) {
 	var data []byte
 	for {
 		b, err := br.ReadByte()
@@ -701,21 +709,35 @@ func readDataSubpacket(br *bufio.Reader) ([]byte, byte, error) {
 		}
 		switch b2 {
 		case ZCRCE, ZCRCG, ZCRCQ, ZCRCW:
-			// End of subpacket. Read the 2-byte CRC, itself ZDLE-escaped
-			// the same way the payload is (see readEscapedByte above).
-			c1, err := readEscapedByte(br)
-			if err != nil {
-				return data, 0, err
-			}
-			c2, err := readEscapedByte(br)
-			if err != nil {
-				return data, 0, err
-			}
-			want := uint16(c1)<<8 | uint16(c2)
 			crcData := append(data, b2)
-			got := crc16(crcData)
-			if got != want {
-				return data, 0, fmt.Errorf("subpacket CRC mismatch: got %04x want %04x", got, want)
+			if use32 {
+				var crcBuf [4]byte
+				for i := 0; i < 4; i++ {
+					cb, err := readEscapedByte(br)
+					if err != nil {
+						return data, 0, err
+					}
+					crcBuf[i] = cb
+				}
+				want := binary.LittleEndian.Uint32(crcBuf[:])
+				got := crc32b(crcData)
+				if got != want {
+					return data, 0, fmt.Errorf("subpacket CRC32 mismatch: got %08x want %08x", got, want)
+				}
+			} else {
+				c1, err := readEscapedByte(br)
+				if err != nil {
+					return data, 0, err
+				}
+				c2, err := readEscapedByte(br)
+				if err != nil {
+					return data, 0, err
+				}
+				want := uint16(c1)<<8 | uint16(c2)
+				got := crc16(crcData)
+				if got != want {
+					return data, 0, fmt.Errorf("subpacket CRC mismatch: got %04x want %04x", got, want)
+				}
 			}
 			return data, b2, nil
 		case ZDLEE:
@@ -753,16 +775,28 @@ func readEscaped(br *bufio.Reader, n int) ([]byte, error) {
 }
 
 // waitForZRQINIT scans the byte stream until it sees a valid ZRQINIT frame.
-func waitForZRQINIT(br *bufio.Reader) error {
+func waitForReceiverInit(br *bufio.Reader) (use32 bool, err error) {
 	for {
-		ft, _, _, err := readAnyFrame(br)
+		ft, data, _, err := readAnyFrame(br)
 		if err != nil {
-			return err
+			return false, err
 		}
-		if ft == ZRQINIT {
-			return nil
+		switch ft {
+		case ZRQINIT:
+			return false, nil
+		case ZRINIT:
+			if len(data) >= 4 {
+				flags := binary.LittleEndian.Uint32(data[:4])
+				return flags&CANFC32 != 0, nil
+			}
+			return false, nil
 		}
 	}
+}
+
+func waitForZRQINIT(br *bufio.Reader) error {
+	_, err := waitForReceiverInit(br)
+	return err
 }
 
 // hexDecode converts a 14-character hex string (bytes in pairs) to 7 bytes.

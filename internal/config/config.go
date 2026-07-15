@@ -97,6 +97,7 @@ type SysopConfig struct {
 type BBSConfig struct {
 	Name     string `toml:"name"      json:"name"`
 	MaxNodes int    `toml:"max_nodes" json:"max_nodes"`
+	AdHTML   string `toml:"ad_html"   json:"ad_html"` // optional trusted HTML snippet for web footer
 }
 
 var (

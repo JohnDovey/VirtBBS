@@ -32,6 +32,8 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 		}
 		fresh.City = strings.TrimSpace(r.FormValue("city"))
 		fresh.RealName = strings.TrimSpace(r.FormValue("real_name"))
+		fresh.PGPKey = strings.TrimSpace(r.FormValue("pgp_key"))
+		fresh.PGPKey = strings.TrimSpace(r.FormValue("pgp_key"))
 		if fresh.RealName == "" {
 			data.Error = tr(data.Locale, "register.error.real_name_required")
 			data.Profile = fresh

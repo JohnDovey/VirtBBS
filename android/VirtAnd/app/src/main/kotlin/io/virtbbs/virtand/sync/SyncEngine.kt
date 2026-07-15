@@ -15,6 +15,7 @@ import io.virtbbs.virtand.data.entities.FileEntryEntity
 import io.virtbbs.virtand.data.entities.MessageAttachmentEntity
 import io.virtbbs.virtand.data.entities.NodelistVersionEntity
 import io.virtbbs.virtand.data.entities.PendingReadUpdateEntity
+import io.virtbbs.virtand.notification.SyncNotifications
 import io.virtbbs.virtand.settings.SettingsStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,6 +72,10 @@ class SyncEngine(private val context: Context) {
             val nodelistsChanged = checkNodelists(api, cfg.subscribedNetworks)
             val repliesUploaded = uploadQueuedReplies(api)
             reportUsageStats(api, newMessages, repliesUploaded, filesDownloaded, filesUploaded)
+
+            if (newMessages > 0) {
+                SyncNotifications.showNewMessages(context, newMessages)
+            }
 
             SyncResult(newMessages, repliesUploaded, filesUploaded, filesDownloaded, nodelistsChanged, sessionInfo)
         } catch (e: Exception) {

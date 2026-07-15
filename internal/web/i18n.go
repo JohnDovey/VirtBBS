@@ -142,10 +142,11 @@ func translateAPIError(locale, msg string) string {
 func (s *Server) page(r *http.Request) pageData {
 	u, _ := s.currentUser(r)
 	return pageData{
-		BBSName:      config.Get().BBS.Name,
-		User:         u,
-		Locale:       localeFromRequest(r),
-		NavNetworks:  networkNavItems(),
+		BBSName:     config.Get().BBS.Name,
+		User:        u,
+		Locale:      localeFromRequest(r),
+		NavNetworks: networkNavItems(),
+		AdHTML:      config.Get().BBS.AdHTML,
 	}
 }
 

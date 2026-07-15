@@ -3,11 +3,15 @@
 
 [93mUsage reported by the VirtAnd Android client via User API.[0m
 
-[1m[96m  Previous 24 Hours (2026-06-30)[0m[0m
+[1m[96m  Previous 24 Hours (2026-07-14)[0m[0m
 [90m--------------------------------------------------------------[0m
 [33m    No VirtAnd activity recorded for this period.[0m
 
 [1m[96m  All Time[0m[0m
 [90m--------------------------------------------------------------[0m
-[33m    No VirtAnd activity recorded for this period.[0m
-[90m  Generated 2026-07-01T07:44:55+02:00[0m
+  [36mUnique app users            [0m [37m1[0m
+  [36mMessages downloaded         [0m [37m13[0m
+  [36mMessages uploaded           [0m [37m1[0m
+  [36mFiles downloaded            [0m [37m0[0m
+  [36mFiles uploaded              [0m [37m0[0m
+[90m  Generated 2026-07-15T08:44:29+02:00[0m

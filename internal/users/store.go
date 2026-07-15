@@ -83,6 +83,8 @@ type User struct {
 	Deleted         bool
 	Sysop           bool
 	Locale          string // UI language: en, es, af (also ^ALANG kludge on outbound mail)
+	Credits         int
+	PGPKey          string
 }
 
 // Store wraps a SQLite database for user operations.
@@ -112,6 +114,8 @@ func (s *Store) migrate() error {
 		`ALTER TABLE user_conferences ADD COLUMN qwk_last_msg INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE user_conferences ADD COLUMN app_last_msg INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN app_last_netmail INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN credits INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE users ADD COLUMN pgp_key TEXT NOT NULL DEFAULT ''`,
 	}
 	for _, stmt := range alters {
 		if _, err := s.db.Exec(stmt); err != nil {
@@ -216,14 +220,14 @@ func (s *Store) Update(u *User) error {
 		    page_length=?, expert_mode=?, xfer_protocol=?, ansi=?, full_screen_editor=?,
 		    editor_type=?, sysop=?, comment1=?, comment2=?, expiration_date=?, deleted=?,
 		    times_online=?, uploads=?, downloads=?, bytes_uploaded=?, bytes_downloaded=?,
-		    elapsed_time=?, locale=?, updated_at=?
+		    elapsed_time=?, locale=?, credits=?, pgp_key=?, updated_at=?
 		WHERE id=?`,
 		u.City, u.RealName, u.PhoneBusiness, u.PhoneHome, u.SecurityLevel,
 		u.PageLength, boolInt(u.ExpertMode), u.XferProtocol, boolInt(u.ANSI),
 		boolInt(u.FullScreenEditor), u.EditorType, boolInt(u.Sysop), u.Comment1, u.Comment2,
 		u.ExpirationDate, boolInt(u.Deleted),
 		u.TimesOnline, u.Uploads, u.Downloads, u.BytesUploaded, u.BytesDownloaded,
-		u.ElapsedTime, u.Locale, time.Now().Format("2006-01-02 15:04:05"),
+		u.ElapsedTime, u.Locale, u.Credits, u.PGPKey, time.Now().Format("2006-01-02 15:04:05"),
 		u.ID,
 	)
 	return err
@@ -278,7 +282,7 @@ const userCols = `id, name, real_name, city, password_hash, phone_business, phon
 	last_login_date, last_login_time, security_level, times_online, page_length,
 	uploads, downloads, bytes_uploaded, bytes_downloaded, comment1, comment2,
 	elapsed_time, expiration_date, expert_mode, xfer_protocol, ansi,
-	full_screen_editor, editor_type, deleted, sysop, locale`
+	full_screen_editor, editor_type, deleted, sysop, locale, credits, pgp_key`
 
 func scanUser(sc scanner) (*User, error) {
 	var u User
@@ -289,7 +293,7 @@ func scanUser(sc scanner) (*User, error) {
 		&u.Uploads, &u.Downloads, &u.BytesUploaded, &u.BytesDownloaded,
 		&u.Comment1, &u.Comment2, &u.ElapsedTime, &u.ExpirationDate,
 		&expertMode, &u.XferProtocol, &ansi, &fullScreen, &u.EditorType, &deleted, &sysop,
-		&u.Locale,
+		&u.Locale, &u.Credits, &u.PGPKey,
 	)
 	if err != nil {
 		return nil, err

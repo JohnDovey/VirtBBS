@@ -1,0 +1,18 @@
+{{define "doors.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "doors.title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
+  <p class="meta">{{t .Locale "doors.help"}}</p>
+  <ul class="compact-list">
+  {{range .Doors}}
+    <li><a href="/doors/play?n={{.Index}}">{{.Name}}</a>{{if .Description}} — {{.Description}}{{end}}</li>
+  {{else}}
+    <li class="meta">{{t .Locale "doors.empty"}}</li>
+  {{end}}
+  </ul>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

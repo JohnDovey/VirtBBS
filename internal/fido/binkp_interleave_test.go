@@ -24,7 +24,7 @@ func TestWaitForGOT_interleavedInbound(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		done <- bp.waitForGOT("out.pkt", 4)
+		done <- bp.waitForGOT("out.pkt", 4, 1700000001)
 	}()
 
 	// Remote sends its own file while we wait for GOT on out.pkt.

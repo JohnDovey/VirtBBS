@@ -1,0 +1,17 @@
+{{define "chat.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "chat.title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
+  <ul class="compact-list">
+  {{range .Rooms}}
+    <li><a href="/chat/room?id={{.ID}}">{{.Name}}</a> — {{.Description}}</li>
+  {{else}}
+    <li class="meta">{{t .Locale "chat.no_rooms"}}</li>
+  {{end}}
+  </ul>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

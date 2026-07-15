@@ -11,6 +11,7 @@
     <label>{{t .Locale "profile.real_name"}} <input class="form-control" name="real_name" value="{{.Edit.RealName}}" maxlength="36"></label>
     <label>{{t .Locale "common.phone"}} <input class="form-control" name="phone" value="{{.Edit.PhoneBusiness}}"></label>
     <label>{{t .Locale "common.security"}} <input class="form-control" type="number" name="security" value="{{.Edit.SecurityLevel}}"></label>
+    <label>{{t .Locale "profile.credits"}} <input class="form-control" type="number" name="credits" value="{{.Edit.Credits}}"></label>
     <label>{{t .Locale "common.page_length"}} <input class="form-control" type="number" name="page_length" value="{{.Edit.PageLength}}"></label>
     <label><input type="checkbox" name="ansi" value="1" {{if .Edit.ANSI}}checked{{end}}> {{t .Locale "common.ansi"}}</label>
     <label><input type="checkbox" name="sysop" value="1" {{if .Edit.Sysop}}checked{{end}}> {{t .Locale "menu.sysop"}}</label>

@@ -24,6 +24,12 @@
     <input class="form-control" type="text" id="city" name="city" value="{{.Profile.City}}" autocomplete="address-level2">
     </div>
 
+    <div class="mb-3">
+      <label for="pgp_key" class="form-label">{{t .Locale "profile.pgp_key"}}</label>
+    <textarea class="form-control font-monospace" id="pgp_key" name="pgp_key" rows="6">{{.Profile.PGPKey}}</textarea>
+    </div>
+    <p class="meta">{{t .Locale "profile.pgp_key_help"}}</p>
+
     <h3 class="section-head">{{t .Locale "profile.change_password"}}</h3>
     <p class="meta">{{t .Locale "profile.change_password_help"}}</p>
     <div class="mb-3">
@@ -50,6 +56,7 @@
   <div class="table-responsive">
   <table class="table table-dark table-striped table-hover align-middle mb-0">
     <tr><th>{{t .Locale "profile.security_level"}}</th><td>{{.Profile.SecurityLevel}}</td></tr>
+    <tr><th>{{t .Locale "profile.credits"}}</th><td>{{.Profile.Credits}}</td></tr>
     <tr><th>{{t .Locale "profile.times_online"}}</th><td>{{.Profile.TimesOnline}}</td></tr>
     <tr><th>{{t .Locale "stats.uploads"}}</th><td>{{.Profile.Uploads}}</td></tr>
     <tr><th>{{t .Locale "stats.downloads"}}</th><td>{{.Profile.Downloads}}</td></tr>

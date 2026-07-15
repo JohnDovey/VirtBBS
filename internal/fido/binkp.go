@@ -51,7 +51,9 @@
 package fido
 
 import (
+	"database/sql"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -60,8 +62,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"database/sql"
 
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/messages"
@@ -337,7 +337,8 @@ func binkpAcceptLoop(ln net.Listener, cfg *Config, candidates []NetworkDef, stor
 // whatever is queued for them, then toss what was received.
 func binkpHandleIncoming(conn net.Conn, cfg *Config, candidates []NetworkDef, store *messages.Store, confStore *conferences.Store, sysopName string, fileArea FileArea, filesRoot, attachmentsRoot string) {
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(5 * time.Minute))
+	// Short deadline for the initial handshake so port scans don't linger.
+	_ = conn.SetDeadline(time.Now().Add(binkpHandshakeTimeout))
 	bp := &binkpConn{conn: conn}
 
 	_ = bp.sendCmd(bpM_NUL, "SYS VirtBBS")
@@ -348,6 +349,10 @@ func binkpHandleIncoming(conn net.Conn, cfg *Config, candidates []NetworkDef, st
 
 	peerAddrs, err := binkpWaitForADRAddrs(bp)
 	if err != nil {
+		if isBinkpProbeError(err) {
+			noteBinkpProbe(conn.RemoteAddr(), err)
+			return
+		}
 		LogBinkp(fmt.Sprintf("binkp server: handshake error from %s: %v", conn.RemoteAddr(), err))
 		RecordSessionError("")
 		return
@@ -386,6 +391,10 @@ func binkpHandleIncoming(conn net.Conn, cfg *Config, candidates []NetworkDef, st
 	if wantPassword != "" {
 		gotPwd, err := binkpWaitForPWD(bp)
 		if err != nil {
+			if isBinkpProbeError(err) {
+				noteBinkpProbe(conn.RemoteAddr(), err)
+				return
+			}
 			LogBinkp(fmt.Sprintf("binkp server [%s]: password handshake error: %v", nd.Name, err))
 			RecordSessionError(nd.Name)
 			RecordServerSession(nd.Name, linkType, peerKey, false, 0, 0)
@@ -400,8 +409,14 @@ func binkpHandleIncoming(conn net.Conn, cfg *Config, candidates []NetworkDef, st
 		}
 	}
 	if err := bp.sendCmd(bpM_OK, ""); err != nil {
+		if isBinkpProbeError(err) {
+			noteBinkpProbe(conn.RemoteAddr(), err)
+		}
 		return
 	}
+
+	// Authenticated peer — extend deadline for the transfer session.
+	_ = conn.SetDeadline(time.Now().Add(binkpSessionTimeout))
 
 	if err := os.MkdirAll(nd.InboundDir, 0755); err != nil {
 		LogBinkp(fmt.Sprintf("binkp server [%s]: %v", nd.Name, err))
@@ -409,6 +424,25 @@ func binkpHandleIncoming(conn net.Conn, cfg *Config, candidates []NetworkDef, st
 		RecordServerSession(nd.Name, linkType, peerKey, false, 0, 0)
 		return
 	}
+
+	peerAddr, _ := ParseAddr(peerAddrs[0])
+	if catalog, ok := fileArea.(FreqCatalog); ok && nd.EffectiveFreqEnabled() {
+		ndb := OpenNodelistDB(store.DB())
+		bp.onFreqGET = func(arg string) error {
+			okAuth, _ := authorizeFreqRequester(nd, ndb, peerAddr)
+			if !okAuth {
+				return fmt.Errorf("unauthorized FREQ from %s", peerAddr)
+			}
+			cmds := strings.Fields(arg)
+			if len(cmds) == 0 {
+				return nil
+			}
+			RecordFreqRecv(nd.Name, linkType, peerKey)
+			_, _, _, err := FulfillFreqCommands(nd, catalog, filesRoot, nd.Name, peerAddr, cmds)
+			return err
+		}
+	}
+
 	received, err := bp.receiveUntilEOB(nd.InboundDir)
 	if err != nil {
 		LogBinkp(fmt.Sprintf("binkp server [%s]: receive error: %v", nd.Name, err))
@@ -417,7 +451,13 @@ func binkpHandleIncoming(conn net.Conn, cfg *Config, candidates []NetworkDef, st
 		return
 	}
 
-	peerAddr, _ := ParseAddr(peerAddrs[0])
+	if catalog, ok := fileArea.(FreqCatalog); ok && nd.EffectiveFreqEnabled() {
+		ndb := OpenNodelistDB(store.DB())
+		for _, note := range ProcessInboundREQFiles(nd, catalog, filesRoot, ndb, nd.Name, nd.InboundDir, peerAddr) {
+			LogBinkp(fmt.Sprintf("binkp server [%s]: %s", nd.Name, note))
+		}
+	}
+
 	outFiles := binkpOutboundFilesFor(nd, dl, peerAddr)
 	var sent []string
 	for _, f := range outFiles {
@@ -704,6 +744,8 @@ type binkpConn struct {
 	inboundDir    string
 	earlyReceived []string
 	inbound       *inboundXfer
+	// onFreqGET handles session FREQ via bare-name M_GET (optional).
+	onFreqGET func(arg string) error
 }
 
 type inboundXfer struct {
@@ -726,23 +768,36 @@ func (b *binkpConn) abortInboundXfer() {
 
 func (b *binkpConn) beginInboundFILE(arg, destDir string) error {
 	b.abortInboundXfer()
-	parts := strings.Fields(arg)
-	if len(parts) < 3 {
+	name, size, mtime, offset, ok := parseBinkpFileArg(arg)
+	if !ok || name == "" || size <= 0 {
 		return fmt.Errorf("invalid M_FILE: %q", arg)
 	}
-	var size, mtime int64
-	fmt.Sscanf(parts[1], "%d", &size)
-	fmt.Sscanf(parts[2], "%d", &mtime)
-	destPath := filepath.Join(destDir, parts[0])
-	f, err := os.Create(destPath)
-	if err != nil {
-		return fmt.Errorf("create inbound %s: %w", destPath, err)
+	destPath := filepath.Join(destDir, name)
+	var f *os.File
+	var err error
+	received := int64(0)
+	if offset > 0 {
+		f, err = os.OpenFile(destPath, os.O_RDWR|os.O_CREATE, 0644)
+		if err != nil {
+			return fmt.Errorf("open inbound %s: %w", destPath, err)
+		}
+		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			_ = f.Close()
+			return err
+		}
+		received = offset
+	} else {
+		f, err = os.Create(destPath)
+		if err != nil {
+			return fmt.Errorf("create inbound %s: %w", destPath, err)
+		}
 	}
 	b.inbound = &inboundXfer{
-		file:  f,
-		name:  parts[0],
-		size:  size,
-		mtime: mtime,
+		file:     f,
+		name:     name,
+		size:     size,
+		mtime:    mtime,
+		received: received,
 	}
 	return nil
 }
@@ -899,7 +954,45 @@ func (b *binkpConn) waitForAuth() error {
 	}
 }
 
+// errGetRestart signals the peer requested a resume via M_GET.
+type errGetRestart struct {
+	offset int64
+}
+
+func (e errGetRestart) Error() string {
+	return fmt.Sprintf("M_GET restart at offset %d", e.offset)
+}
+
+var errRemoteSkip = fmt.Errorf("remote skipped file")
+
+// parseBinkpFileArg parses "name size mtime [offset]" from M_FILE / M_GET.
+func parseBinkpFileArg(arg string) (name string, size, mtime, offset int64, ok bool) {
+	parts := strings.Fields(arg)
+	if len(parts) < 1 {
+		return "", 0, 0, 0, false
+	}
+	name = parts[0]
+	if len(parts) >= 2 {
+		fmt.Sscanf(parts[1], "%d", &size)
+	}
+	if len(parts) >= 3 {
+		fmt.Sscanf(parts[2], "%d", &mtime)
+	}
+	if len(parts) >= 4 {
+		fmt.Sscanf(parts[3], "%d", &offset)
+	}
+	return name, size, mtime, offset, true
+}
+
+// isResumeGET reports whether arg is an FTS-1026 resume M_GET (name size time offset)
+// rather than a bare filename FREQ request.
+func isResumeGET(arg string) bool {
+	parts := strings.Fields(arg)
+	return len(parts) >= 4
+}
+
 // sendFile sends one file using M_FILE + M_DATA frames then waits for M_GOT.
+// Honours peer M_GET resume requests (FTS-1026).
 func (b *binkpConn) sendFile(path string) error {
 	fi, err := os.Stat(path)
 	if err != nil {
@@ -907,12 +1000,40 @@ func (b *binkpConn) sendFile(path string) error {
 	}
 	size := fi.Size()
 	mtime := fi.ModTime().Unix()
+	offset := int64(0)
+	for {
+		err := b.sendFileFrom(path, size, mtime, offset)
+		if err == nil {
+			return nil
+		}
+		if err == errRemoteSkip {
+			b.tracef("remote skipped %s", filepath.Base(path))
+			return nil
+		}
+		var gr errGetRestart
+		if errors.As(err, &gr) {
+			if gr.offset < 0 || gr.offset > size {
+				return fmt.Errorf("M_GET %s: invalid offset %d", filepath.Base(path), gr.offset)
+			}
+			offset = gr.offset
+			b.tracef("resuming %s at offset %d", filepath.Base(path), offset)
+			continue
+		}
+		return err
+	}
+}
 
-	// M_FILE <name> <size> <mtime> <offset>
-	fileArg := fmt.Sprintf("%s %d %d 0", filepath.Base(path), size, mtime)
-	b.tracef("sending file %s (%d bytes)", filepath.Base(path), size)
+func (b *binkpConn) sendFileFrom(path string, size, mtime, offset int64) error {
+	name := filepath.Base(path)
+	fileArg := fmt.Sprintf("%s %d %d %d", name, size, mtime, offset)
+	b.tracef("sending file %s (%d bytes, offset %d)", name, size, offset)
 	if err := b.sendCmd(bpM_FILE, fileArg); err != nil {
-		return fmt.Errorf("M_FILE %s: %w", filepath.Base(path), err)
+		return fmt.Errorf("M_FILE %s: %w", name, err)
+	}
+
+	// Brief window for early M_GET / M_SKIP after the announce.
+	if err := b.pollOutboundCtrl(name, size, mtime, 200*time.Millisecond); err != nil {
+		return err
 	}
 
 	f, err := os.Open(path)
@@ -920,13 +1041,16 @@ func (b *binkpConn) sendFile(path string) error {
 		return err
 	}
 	defer f.Close()
+	if _, err := f.Seek(offset, io.SeekStart); err != nil {
+		return err
+	}
 
 	buf := make([]byte, 8192)
 	for {
 		n, err := f.Read(buf)
 		if n > 0 {
 			if serr := b.sendData(buf[:n]); serr != nil {
-				return fmt.Errorf("M_DATA %s: %w", filepath.Base(path), serr)
+				return fmt.Errorf("M_DATA %s: %w", name, serr)
 			}
 		}
 		if err == io.EOF {
@@ -937,17 +1061,87 @@ func (b *binkpConn) sendFile(path string) error {
 		}
 	}
 
-	// Wait for M_GOT acknowledgement for this file.
-	if err := b.waitForGOT(filepath.Base(path), size); err != nil {
-		return fmt.Errorf("M_GOT %s: %w", filepath.Base(path), err)
+	if err := b.waitForGOT(name, size, mtime); err != nil {
+		return err
 	}
 	return nil
+}
+
+// pollOutboundCtrl checks for peer control frames without blocking longer than wait.
+// wait=0 means a zero-deadline non-blocking peek (best-effort).
+func (b *binkpConn) pollOutboundCtrl(name string, size, mtime int64, wait time.Duration) error {
+	if b.conn == nil {
+		return nil
+	}
+	deadline := time.Now().Add(wait)
+	if wait == 0 {
+		deadline = time.Now()
+	}
+	_ = b.conn.SetReadDeadline(deadline)
+	defer func() { _ = b.conn.SetReadDeadline(time.Time{}) }()
+
+	isCmd, cmd, payload, err := b.recvFrame()
+	if err != nil {
+		if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			return nil
+		}
+		if errors.Is(err, os.ErrDeadlineExceeded) {
+			return nil
+		}
+		// Some platforms wrap deadline differently.
+		if strings.Contains(err.Error(), "deadline") || strings.Contains(err.Error(), "timeout") {
+			return nil
+		}
+		return err
+	}
+	return b.handleOutboundCtrl(name, size, mtime, isCmd, cmd, payload)
+}
+
+func (b *binkpConn) handleOutboundCtrl(name string, size, mtime int64, isCmd bool, cmd byte, payload []byte) error {
+	if !isCmd {
+		done, err := b.writeInboundDATA(payload)
+		if err != nil {
+			return err
+		}
+		b.noteInboundFile(done)
+		return nil
+	}
+	switch cmd {
+	case bpM_GET:
+		gName, gSize, gMtime, gOff, ok := parseBinkpFileArg(string(payload))
+		if !ok {
+			return nil
+		}
+		if gName == name && (gSize == 0 || gSize == size) && (gMtime == 0 || gMtime == mtime) {
+			return errGetRestart{offset: gOff}
+		}
+		return nil
+	case bpM_SKIP:
+		parts := strings.Fields(string(payload))
+		if len(parts) > 0 && parts[0] == name {
+			return errRemoteSkip
+		}
+		return nil
+	case bpM_FILE:
+		if b.inboundDir == "" {
+			return nil
+		}
+		return b.beginInboundFILE(string(payload), b.inboundDir)
+	case bpM_GOT:
+		// Unexpected during send; ignore non-matching.
+		return nil
+	case bpM_ERR:
+		return fmt.Errorf("remote error: %s", string(payload))
+	default:
+		return nil
+	}
 }
 
 // waitForGOT reads frames until M_GOT for the named file arrives.
 // binkd and other hosts may send their own M_FILE batches while we wait;
 // those must be received and acknowledged or the session stalls.
-func (b *binkpConn) waitForGOT(name string, size int64) error {
+// Peer M_GET triggers errGetRestart so sendFile can resume from offset.
+func (b *binkpConn) waitForGOT(name string, size, mtime int64) error {
 	destDir := b.inboundDir
 	for {
 		isCmd, cmd, payload, err := b.recvFrame()
@@ -964,7 +1158,6 @@ func (b *binkpConn) waitForGOT(name string, size int64) error {
 		}
 		switch cmd {
 		case bpM_GOT:
-			// payload: "<name> <size> <mtime>"
 			parts := strings.SplitN(string(payload), " ", 2)
 			if parts[0] == name {
 				return nil
@@ -977,11 +1170,20 @@ func (b *binkpConn) waitForGOT(name string, size int64) error {
 				return err
 			}
 		case bpM_SKIP:
-			return fmt.Errorf("remote skipped %s", name)
+			parts := strings.Fields(string(payload))
+			if len(parts) > 0 && parts[0] == name {
+				return errRemoteSkip
+			}
 		case bpM_ERR:
 			return fmt.Errorf("remote error: %s", string(payload))
 		case bpM_GET:
-			// Restart file from offset — not implemented, skip.
+			gName, gSize, gMtime, gOff, ok := parseBinkpFileArg(string(payload))
+			if !ok {
+				continue
+			}
+			if gName == name && (gSize == 0 || gSize == size) && (gMtime == 0 || gMtime == mtime) {
+				return errGetRestart{offset: gOff}
+			}
 		}
 	}
 }
@@ -1023,6 +1225,14 @@ func (b *binkpConn) receiveUntilEOB(destDir string) ([]string, error) {
 		case bpM_FILE:
 			if err := b.beginInboundFILE(string(payload), destDir); err != nil {
 				return received, err
+			}
+
+		case bpM_GET:
+			// Session FREQ: bare filename(s), not FTS-1026 resume (handled in send).
+			if !isResumeGET(string(payload)) && b.onFreqGET != nil {
+				if err := b.onFreqGET(string(payload)); err != nil {
+					b.tracef("FREQ M_GET: %v", err)
+				}
 			}
 
 		case bpM_ERR:

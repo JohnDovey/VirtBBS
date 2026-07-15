@@ -10,6 +10,8 @@
     <h3>{{t .Locale "admin_config.section_bbs"}}</h3>
     <label>{{t .Locale "common.name"}} <input class="form-control" name="bbs_name" value="{{.Config.BBS.Name}}"></label>
     <label>{{t .Locale "admin_config.max_nodes"}} <input class="form-control" type="number" name="max_nodes" value="{{.Config.BBS.MaxNodes}}"></label>
+    <label>{{t .Locale "admin_config.ad_html"}} <textarea class="form-control font-monospace" name="ad_html" rows="3">{{.Config.BBS.AdHTML}}</textarea></label>
+    <p class="meta">{{t .Locale "admin_config.ad_html_help"}}</p>
     <h3>{{t .Locale "admin_config.section_ports"}}</h3>
     <label>{{t .Locale "admin_config.telnet"}} <input class="form-control" type="number" name="telnet_port" value="{{.Config.Network.TelnetPort}}"></label>
     <label>{{t .Locale "admin_config.ssh"}} <input class="form-control" type="number" name="ssh_port" value="{{.Config.Network.SSHPort}}"></label>

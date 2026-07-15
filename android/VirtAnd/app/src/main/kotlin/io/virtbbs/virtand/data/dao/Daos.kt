@@ -86,6 +86,19 @@ interface MessageDao {
 
     @Query("DELETE FROM pending_read_updates WHERE conferenceId = :conferenceId")
     suspend fun clearPendingRead(conferenceId: Int)
+
+    @Query(
+        """
+        SELECT * FROM cached_messages
+        WHERE subject LIKE '%' || :query || '%'
+           OR body LIKE '%' || :query || '%'
+           OR fromName LIKE '%' || :query || '%'
+           OR toName LIKE '%' || :query || '%'
+        ORDER BY datePostedMs DESC
+        LIMIT :limit
+        """,
+    )
+    suspend fun search(query: String, limit: Int = 100): List<CachedMessageEntity>
 }
 
 @Dao
@@ -143,6 +156,17 @@ interface FileDao {
 
     @Delete
     suspend fun removeQueuedDownload(download: QueuedDownloadEntity)
+
+    @Query(
+        """
+        SELECT * FROM file_entries
+        WHERE filename LIKE '%' || :query || '%'
+           OR description LIKE '%' || :query || '%'
+        ORDER BY filename
+        LIMIT :limit
+        """,
+    )
+    suspend fun searchFiles(query: String, limit: Int = 100): List<FileEntryEntity>
 }
 
 @Dao

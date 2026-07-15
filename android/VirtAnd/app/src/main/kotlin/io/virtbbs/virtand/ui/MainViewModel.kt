@@ -20,6 +20,7 @@ import io.virtbbs.virtand.data.entities.QueuedUploadEntity
 import io.virtbbs.virtand.settings.SettingsStore
 import io.virtbbs.virtand.sync.SyncEngine
 import io.virtbbs.virtand.sync.SyncResult
+import io.virtbbs.virtand.util.isNetworkAvailable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -78,6 +79,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _fileSearchResults = MutableStateFlow<List<FileEntryEntity>>(emptyList())
     val fileSearchResults: StateFlow<List<FileEntryEntity>> = _fileSearchResults
+
+    private val _fileSearchStatus = MutableStateFlow("")
+    val fileSearchStatus: StateFlow<String> = _fileSearchStatus
+
+    private val _messageSearchResults = MutableStateFlow<List<CachedMessageEntity>>(emptyList())
+    val messageSearchResults: StateFlow<List<CachedMessageEntity>> = _messageSearchResults
+
+    private val _messageSearchStatus = MutableStateFlow("")
+    val messageSearchStatus: StateFlow<String> = _messageSearchStatus
 
     private val _nodeSearchResults = MutableStateFlow<List<FidoNodeResult>>(emptyList())
     val nodeSearchResults: StateFlow<List<FidoNodeResult>> = _nodeSearchResults
@@ -228,10 +238,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { db.fileDao().removeQueuedDownload(item) }
     }
 
-    fun searchFiles(host: String, port: Int, username: String, password: String, query: String) {
+    fun searchFiles(host: String, port: Int, username: String, password: String, query: String, forceServer: Boolean = false) {
         viewModelScope.launch {
             _fileSearchResults.value = emptyList()
-            if (query.isBlank() || host.isBlank() || username.isBlank() || password.isBlank()) return@launch
+            if (query.isBlank()) {
+                _fileSearchStatus.value = ""
+                return@launch
+            }
+
+            val cfg = settings.snapshot()
+            val useLocal = !forceServer && (cfg.localFileSearch || !getApplication<Application>().isNetworkAvailable())
+
+            if (useLocal) {
+                val results = withContext(Dispatchers.IO) {
+                    db.fileDao().searchFiles(query.trim())
+                }
+                _fileSearchResults.value = results
+                _fileSearchStatus.value = if (results.isEmpty()) {
+                    "No local matches — try server search if online."
+                } else {
+                    "${results.size} local match(es)."
+                }
+                return@launch
+            }
+
+            if (host.isBlank() || username.isBlank() || password.isBlank()) {
+                _fileSearchStatus.value = "Configure credentials for server search."
+                return@launch
+            }
+
+            _fileSearchStatus.value = "Searching server…"
             _fileSearchResults.value = withContext(Dispatchers.IO) {
                 try {
                     val api = UserApiClient(host.trim(), port, username.trim(), password)
@@ -253,7 +289,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     emptyList()
                 }
             }
+            _fileSearchStatus.value = if (_fileSearchResults.value.isEmpty()) {
+                "No server matches."
+            } else {
+                "${_fileSearchResults.value.size} server match(es)."
+            }
         }
+    }
+
+    fun searchMessages(query: String) {
+        viewModelScope.launch {
+            _messageSearchResults.value = emptyList()
+            if (query.isBlank()) {
+                _messageSearchStatus.value = ""
+                return@launch
+            }
+            val results = withContext(Dispatchers.IO) {
+                db.messageDao().search(query.trim())
+            }
+            _messageSearchResults.value = results
+            _messageSearchStatus.value = if (results.isEmpty()) {
+                "No local matches."
+            } else {
+                "${results.size} local match(es)."
+            }
+        }
+    }
+
+    fun clearMessageSearch() {
+        _messageSearchResults.value = emptyList()
+        _messageSearchStatus.value = ""
     }
 
   fun searchNodes(
@@ -324,10 +389,27 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun saveSettings(host: String, port: Int, username: String, password: String, networks: List<String>, purgeDays: Int = 7) {
+    fun saveSettings(
+        host: String,
+        port: Int,
+        username: String,
+        password: String,
+        networks: List<String>,
+        purgeDays: Int = 7,
+        renderAnsi: Boolean = true,
+        localFileSearch: Boolean = true,
+    ) {
         viewModelScope.launch {
-            settings.save(host, port, username, password, networks, purgeDays)
+            settings.save(host, port, username, password, networks, purgeDays, renderAnsi, localFileSearch)
         }
+    }
+
+    fun setRenderAnsi(enabled: Boolean) {
+        viewModelScope.launch { settings.setRenderAnsi(enabled) }
+    }
+
+    fun setLocalFileSearch(enabled: Boolean) {
+        viewModelScope.launch { settings.setLocalFileSearch(enabled) }
     }
 
     fun purgeNow() {

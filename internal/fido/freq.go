@@ -1,8 +1,8 @@
 // Package fido — freq.go
 //
-// Implements FREQ (File REQuest), the FidoNet convention for requesting files
-// by netmail to "Freq". VirtBBS queues matching raw files in the requester's
-// outbound .OUT subdirectory for BinkP pickup (no WaZOO .REQ or M_GET).
+// Implements FREQ (File REQuest): netmail to "Freq", WaZOO/Bark .REQ, SRIF,
+// BinkP session M_GET, and per-file passwords. Matching files are queued as
+// raw outbound files for BinkP pickup.
 package fido
 
 import (
@@ -62,6 +62,12 @@ func ProcessFreqRequest(nd *NetworkDef, catalog FreqCatalog, filesRoot string, n
 	if !passwordOK {
 		return replyFreq(nd, our, pm, "Invalid password.\r\n")
 	}
+	// FILE_REQUEST / file_request style: filenames in subject, password in body.
+	if pm.Attrib&AttribFileRequest != 0 || strings.EqualFold(strings.TrimSpace(pm.ToName), "FileRequest") {
+		if subCmds := freqSubjectFileCommands(pm.Subject, nd.FreqPassword); len(subCmds) > 0 {
+			cmdLines = append(subCmds, cmdLines...)
+		}
+	}
 	linkType, peerKey := LinkTypeForAddr(nd, pm.OrigAddr)
 	RecordFreqRecv(networkName, linkType, peerKey)
 
@@ -73,67 +79,33 @@ func ProcessFreqRequest(nd *NetworkDef, catalog FreqCatalog, filesRoot string, n
 		return replyFreq(nd, our, pm, out.String())
 	}
 
-	maxFiles := nd.EffectiveFreqMaxFiles()
-	maxBytes := nd.EffectiveFreqMaxBytes()
-	queuedTotal := 0
-	var queuedBytes int64
-
-	for _, line := range cmdLines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		upper := strings.ToUpper(line)
-		switch {
-		case upper == "%HELP" || upper == "HELP":
-			writeFreqHelp(&out)
-		case upper == "%LIST" || upper == "LIST" || upper == "FILES":
-			writeFreqCatalog(&out, catalog, filesRoot)
-		case upper == "NODELIST" || upper == "%NODELIST":
-			n, b, msg := queueFreqNodelistFile(nd, pm.OrigAddr, "NODELIST.")
-			out.WriteString(msg)
-			queuedTotal += n
-			queuedBytes += b
-		case upper == "NODEDIFF" || upper == "%NODEDIFF":
-			n, b, msg := queueFreqNodelistFile(nd, pm.OrigAddr, "NODEDIFF.")
-			out.WriteString(msg)
-			queuedTotal += n
-			queuedBytes += b
-		default:
-			if queuedTotal >= maxFiles || queuedBytes >= maxBytes {
-				fmt.Fprintf(&out, "  %s — limit reached (%d files, %d bytes max)\r\n", line, maxFiles, maxBytes)
-				continue
-			}
-			matches, err := resolveFreqFiles(catalog, filesRoot, line)
-			if err != nil {
-				fmt.Fprintf(&out, "  %s — ERROR: %v\r\n", line, err)
-				continue
-			}
-			if len(matches) == 0 {
-				fmt.Fprintf(&out, "  %s — not found\r\n", line)
-				continue
-			}
-			remainingFiles := maxFiles - queuedTotal
-			remainingBytes := maxBytes - queuedBytes
-			queued, msgs := queueFreqRawFiles(nd, pm.OrigAddr, matches, remainingFiles, remainingBytes)
-			for _, m := range msgs {
-				out.WriteString(m)
-			}
-			for _, q := range queued {
-				fmt.Fprintf(&out, "  queued %s (%d bytes)\r\n", q.destName, q.bytes)
-				RecordFreqFileQueued(networkName, q.destName, q.bytes)
-				queuedTotal++
-				queuedBytes += q.bytes
-			}
-		}
+	queuedTotal, queuedBytes, report, err := FulfillFreqCommands(nd, catalog, filesRoot, networkName, pm.OrigAddr, cmdLines)
+	if err != nil {
+		return err
 	}
-
+	out.WriteString(report)
 	if queuedTotal > 0 {
 		fmt.Fprintf(&out, "\r\n%d file(s) queued (%d bytes).\r\n", queuedTotal, queuedBytes)
-		recordFreqNodeSent(networkName, pm.OrigAddr.String(), 1, queuedTotal, queuedBytes)
 	}
 
 	return replyFreq(nd, our, pm, out.String())
+}
+
+// freqSubjectFileCommands extracts requested filenames from a FILE_REQUEST subject.
+func freqSubjectFileCommands(subject, globalPassword string) []string {
+	subject = strings.TrimSpace(subject)
+	if subject == "" || strings.EqualFold(subject, "FREQ") {
+		return nil
+	}
+	subject = freqSubjectForAuth(subject)
+	var out []string
+	for _, f := range strings.Fields(subject) {
+		if globalPassword != "" && f == globalPassword {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
 }
 
 func authorizeFreqRequester(nd *NetworkDef, ndb *NodelistDB, addr Addr) (bool, string) {
@@ -405,14 +377,46 @@ func replyFreq(nd *NetworkDef, our Addr, pm *Message, body string) error {
 }
 
 // RequestFreq composes and writes an outbound FREQ request to toAddr.
-// mode overrides the network freq_outbound setting when non-empty (classic or file_request).
+// mode overrides the network freq_outbound setting when non-empty
+// (classic, file_request, wazoo, or bark).
 func RequestFreq(nd *NetworkDef, fromName string, lines []string, toAddr, mode string) (pktPath string, err error) {
 	switch ResolveFreqOutboundMode(nd, mode) {
 	case FreqOutboundFileRequest:
 		return requestFreqFileRequest(nd, fromName, lines, toAddr)
+	case FreqOutboundWaZooMode:
+		return requestFreqWaZoo(nd, lines, toAddr, false)
+	case FreqOutboundBark:
+		return requestFreqWaZoo(nd, lines, toAddr, true)
 	default:
 		return requestFreqClassic(nd, fromName, lines, toAddr)
 	}
+}
+
+func requestFreqWaZoo(nd *NetworkDef, lines []string, toAddr string, bark bool) (string, error) {
+	dest, err := ParseAddr(toAddr)
+	if err != nil {
+		return "", fmt.Errorf("invalid destination %q: %w", toAddr, err)
+	}
+	names, err := freqFileRequestNames(lines)
+	if err != nil {
+		return "", err
+	}
+	outDir := OutboundDir(nd.OutboundDir, dest, nd.UplinkAddr(), true)
+	var path string
+	if bark {
+		path, err = WriteBarkREQ(outDir, dest, names, nd.FreqPassword)
+	} else {
+		path, err = WriteWaZooREQ(outDir, dest, names)
+	}
+	if err == nil {
+		linkType, peerKey := LinkTypeForAddr(nd, dest)
+		if linkType == "" {
+			linkType = "downlink"
+			peerKey = dest.String()
+		}
+		RecordFreqSent(nd.Name, linkType, peerKey)
+	}
+	return path, err
 }
 
 func requestFreqFileRequest(nd *NetworkDef, fromName string, lines []string, toAddr string) (pktPath string, err error) {

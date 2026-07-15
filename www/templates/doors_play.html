@@ -1,0 +1,18 @@
+{{define "doors_play.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{tf .Locale "doors.play_title" .DoorName}}</h2></div>
+  <div class="card-body">
+  <p><a href="/doors">{{t .Locale "doors.back"}}</a></p>
+  <pre id="door-term" class="door-terminal p-2 border rounded mb-2" aria-live="polite"></pre>
+  <p class="meta">{{t .Locale "doors.terminal_help"}}</p>
+  </div>
+</div>
+<script src="/static/doors.js" defer></script>
+<script defer>
+document.addEventListener('DOMContentLoaded', function(){
+  if (window.VirtBBSDoor) VirtBBSDoor.connect({{ .DoorIndex }});
+});
+</script>
+{{template "footer" .}}
+{{end}}

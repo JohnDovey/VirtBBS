@@ -17,6 +17,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
 	"github.com/virtbbs/virtbbs/internal/node"
+	"github.com/virtbbs/virtbbs/internal/social"
 	"github.com/virtbbs/virtbbs/internal/users"
 )
 
@@ -40,6 +41,10 @@ type Server struct {
 	tmplOnce sync.Once
 	tmpl     *template.Template
 	tmplErr  error
+
+	socialOnce sync.Once
+	social     *social.Store
+	socialErr  error
 }
 
 // ListenAndServe starts the HTTP listener.
@@ -138,6 +143,19 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/admin/fido/nodelist/add", s.handleAdminFidoNodelistAdd)
 	mux.HandleFunc("/admin/fido/nodelist/node", s.handleAdminFidoNodelistNode)
 	mux.HandleFunc("/set-locale", s.handleSetLocale)
+	mux.HandleFunc("/shoutbox", s.handleShoutbox)
+	mux.HandleFunc("/chat", s.handleChat)
+	mux.HandleFunc("/chat/room", s.handleChatRoom)
+	mux.HandleFunc("/api/shoutbox", s.handleAPIShoutbox)
+	mux.HandleFunc("/api/chat", s.handleAPIChat)
+	mux.HandleFunc("/polls", s.handlePolls)
+	mux.HandleFunc("/polls/view", s.handlePollView)
+	mux.HandleFunc("/admin/polls", s.handleAdminPolls)
+	mux.HandleFunc("/doors", s.handleDoors)
+	mux.HandleFunc("/doors/play", s.handleDoorsPlay)
+	mux.HandleFunc("/doors/ws", s.handleDoorsWS)
+	mux.HandleFunc("/packetbbs", s.handlePacketBBS)
+	mux.HandleFunc("/ai", s.handleAI)
 	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(filepath.Join(s.Root, "static")))))
 	log.Printf("Web UI www root: %s", s.Root)
 	return http.ListenAndServe(s.Addr, mux)
@@ -205,6 +223,7 @@ type pageData struct {
 	Error       string
 	Locale      string
 	NavNetworks []NetworkNavItem
+	AdHTML      string
 }
 
 func (s *Server) base(r *http.Request) pageData {
