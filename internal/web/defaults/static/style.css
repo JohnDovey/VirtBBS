@@ -309,12 +309,19 @@ body.virtbbs-body {
   font-family: "Consolas", "Courier New", monospace;
   font-size: 0.85rem;
   background: #080810;
+  color: #ddd;
   padding: 1rem;
   border-radius: var(--bs-border-radius);
   border: 1px solid var(--virtbbs-border);
   overflow-x: auto;
   line-height: 1.35;
   white-space: pre-wrap;
+}
+
+.door-terminal {
+  min-height: 24rem;
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 .ansi-bold { font-weight: bold; }
