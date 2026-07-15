@@ -48,6 +48,10 @@
     if (e.key === 'Backspace') return '\x7f';
     if (e.key === 'Tab') return '\t';
     if (e.key === 'Escape') return '\x1b';
+    if (e.key === 'ArrowUp') return '\x1b[A';
+    if (e.key === 'ArrowDown') return '\x1b[B';
+    if (e.key === 'ArrowRight') return '\x1b[C';
+    if (e.key === 'ArrowLeft') return '\x1b[D';
     if (e.key.length === 1) return e.key;
     return null;
   }

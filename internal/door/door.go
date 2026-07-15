@@ -135,14 +135,26 @@ func Run(rw io.ReadWriteCloser, cfg Config, sess Session) error {
 		args = append(args, dropPath)
 	}
 
-	// Resolve working directory.
+	// Resolve working directory and executable.
+	// Relative Cmd paths with Dir set are resolved after chdir in the child,
+	// so "DoorGames/foo/foo" + work_dir "DoorGames/foo" fails. Always give
+	// pty.Start an absolute binary path; Dir remains the door's cwd.
 	workDir := cfg.WorkDir
 	if workDir == "" {
 		workDir = filepath.Dir(cfg.Cmd)
 	}
+	if workDir != "" && !filepath.IsAbs(workDir) {
+		if abs, err := filepath.Abs(workDir); err == nil {
+			workDir = abs
+		}
+	}
+	cmdPath, err := resolveDoorCmd(cfg.Cmd, workDir)
+	if err != nil {
+		return fmt.Errorf("door %q: %w", cfg.Name, err)
+	}
 
 	// Execute the door in a pseudo-terminal.
-	cmd := exec.Command(cfg.Cmd, args...)
+	cmd := exec.Command(cmdPath, args...)
 	cmd.Dir = workDir
 	cmd.Env = append(os.Environ(),
 		fmt.Sprintf("DOORFILE=%s", dropPath),
@@ -188,6 +200,52 @@ func Run(rw io.ReadWriteCloser, cfg Config, sess Session) error {
 	}
 
 	return nil
+}
+
+// resolveDoorCmd returns an absolute path to the door executable.
+// Candidates (in order): absolute Cmd; Cmd relative to process cwd; basename
+// under workDir; Cmd joined under workDir.
+func resolveDoorCmd(cmd, workDir string) (string, error) {
+	if cmd == "" {
+		return "", fmt.Errorf("no executable configured")
+	}
+	try := func(p string) (string, bool) {
+		if p == "" {
+			return "", false
+		}
+		if !filepath.IsAbs(p) {
+			if abs, err := filepath.Abs(p); err == nil {
+				p = abs
+			}
+		}
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, true
+		}
+		return "", false
+	}
+
+	if filepath.IsAbs(cmd) {
+		if p, ok := try(cmd); ok {
+			return p, nil
+		}
+		return "", fmt.Errorf("executable not found: %s", cmd)
+	}
+
+	// Relative to BBS process cwd (as configured in VirtBBS.DAT).
+	if p, ok := try(cmd); ok {
+		return p, nil
+	}
+	// Basename inside work directory (e.g. cmd=mathmaze, work_dir=DoorGames/MathMaze).
+	base := filepath.Base(cmd)
+	if workDir != "" {
+		if p, ok := try(filepath.Join(workDir, base)); ok {
+			return p, nil
+		}
+		if p, ok := try(filepath.Join(workDir, cmd)); ok {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("executable not found: %s (work_dir=%s)", cmd, workDir)
 }
 
 // ─── Drop file writers ────────────────────────────────────────────────────────

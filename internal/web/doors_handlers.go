@@ -119,7 +119,9 @@ func (s *Server) handleDoorsWS(w http.ResponseWriter, r *http.Request) {
 		SysopName:     cfg.Sysop.Name,
 		Credits:       u.Credits,
 	}
-	_ = door.Run(ws, dcfg, sess)
+	if err := door.Run(ws, dcfg, sess); err != nil {
+		_, _ = ws.Write([]byte("\r\nDoor error: " + err.Error() + "\r\n"))
+	}
 	_ = s.Deps.Nodes.Update(nodeID, node.StatusWeb, "Web UI", u.ID, u.Name, u.City)
 }
 
