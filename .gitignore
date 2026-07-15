@@ -42,6 +42,7 @@ display/ANSIART.ANS
 DoorGames/MathMaze/mathmaze
 AnsiEdit/ansiedit
 AnsiEdit/ansiedit.exe
+AnsiEdit/Test.ans
 
 DoorGames/MathMaze/scores.json
 DoorGames/MathMaze/config.toml
