@@ -80,3 +80,12 @@
 #   drop_file       = "DOOR.SYS"
 #   append_drop_file = true
 #   min_security    = 10
+#
+# [[doors]]
+#   name             = "MathMaze"
+#   description      = "Solve maths gates to escape the maze"
+#   cmd              = "DoorGames/MathMaze/mathmaze"
+#   work_dir         = "DoorGames/MathMaze"
+#   drop_file        = "DOOR.SYS"
+#   append_drop_file = true
+#   min_security     = 10

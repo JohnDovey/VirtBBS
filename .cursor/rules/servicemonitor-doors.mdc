@@ -1,0 +1,25 @@
+---
+description: Deploy VirtBBS door games to ServiceMonitor after changes
+globs: DoorGames/**/*
+alwaysApply: false
+---
+
+# ServiceMonitor door deployment + MathMaze versioning
+
+When changing anything under `DoorGames/` (especially MathMaze):
+
+1. **Bump the patch version** in [`DoorGames/MathMaze/version.go`](DoorGames/MathMaze/version.go) on every change (x.x.**N**). Bump minor only for significant features; major only when explicitly requested. Update the “Current version” line in `DoorGames/MathMaze/README.md` to match.
+2. Rebuild the door binary in-tree (`cd DoorGames/MathMaze && GOTOOLCHAIN=local go build -o mathmaze .`).
+3. Copy the binary (and updated `config.toml.example` if changed) to:
+
+   `/Volumes/JohnDovey/Projects/ServiceMonitor/services/VirtBBS/DoorGames/MathMaze/`
+
+4. Prefer running ServiceMonitor’s sync so paths stay consistent:
+
+   ```bash
+   /Volumes/JohnDovey/Projects/ServiceMonitor/scripts/sync-binaries.sh
+   ```
+
+5. Keep `[[doors]]` entries in sync between local [`VirtBBS.DAT`](VirtBBS.DAT) and ServiceMonitor’s [`services/VirtBBS/VirtBBS.DAT`](file:///Volumes/JohnDovey/Projects/ServiceMonitor/services/VirtBBS/VirtBBS.DAT) when adding or renaming doors.
+
+Do **not** overwrite ServiceMonitor `scores.json` or a customized `config.toml` / `VirtBBS.DAT` without the user’s request.

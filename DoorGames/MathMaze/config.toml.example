@@ -1,0 +1,10 @@
+# MathMaze configuration (optional — defaults apply if missing)
+
+base_width = 9
+base_height = 7
+
+# Where to write the Top Scores bulletin (VirtBBS display folder)
+bulletin_path = "../../display/MATHMAZE.ANS"
+
+# How many entries in each Top / Lowest list
+top_n = 10

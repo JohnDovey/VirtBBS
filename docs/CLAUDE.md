@@ -44,6 +44,21 @@ go build ./cmd/virtbbs
 
 Sysop administration is web-only (`internal/web`, `/admin/*`). The only JSON-over-TCP API is `internal/userapi` on port 9998 (default) for the VirtAnd Android client — BBS username/password auth, not sysop credentials.
 
+### Door games → ServiceMonitor
+
+Doors live under `DoorGames/`. The live monitored BBS is
+`/Volumes/JohnDovey/Projects/ServiceMonitor/services/VirtBBS/`. After changing a door:
+
+1. Bump the **patch** in `DoorGames/MathMaze/version.go` (same rule as VirtBBS: every change bumps patch).
+2. Rebuild and sync:
+
+```bash
+cd DoorGames/MathMaze && GOTOOLCHAIN=local go build -o mathmaze .
+/Volumes/JohnDovey/Projects/ServiceMonitor/scripts/sync-binaries.sh
+```
+
+That installs `mathmaze` under `ServiceMonitor/services/VirtBBS/DoorGames/MathMaze/`. Keep `[[doors]]` in both local `VirtBBS.DAT` and ServiceMonitor’s `VirtBBS.DAT` when adding doors.
+
 ## Web interface
 
 Browser-based BBS UI and sysop admin served by `internal/web`. Templates and static assets live under `paths.www` (default `www/`). See `www/README.md` for routes and feature checklist.

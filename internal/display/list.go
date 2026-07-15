@@ -13,12 +13,13 @@ type Bulletin struct {
 }
 
 var bulletinTitles = map[string]string{
-	"LOGON":    "Logon Message",
-	"BINKPDAY": "BinkP Statistics (24h)",
-	"BINKPALL": "BinkP Statistics (All Time)",
+	"LOGON":     "Logon Message",
+	"BINKPDAY":  "BinkP Statistics (24h)",
+	"BINKPALL":  "BinkP Statistics (All Time)",
 	"ROBOTSTAT": "Robot Stats",
 	"APPSTATS":  "VirtAnd App Stats",
-	"BULLETIN": "Bulletin",
+	"MATHMAZE":  "MathMaze Top Scores",
+	"BULLETIN":  "Bulletin",
 }
 
 // skipBulletins are display files not shown in the bulletin list.
@@ -29,12 +30,13 @@ var skipBulletins = map[string]bool{
 
 // bulletinOrder controls sort priority (lower first).
 var bulletinOrder = map[string]int{
-	"LOGON":    0,
-	"BINKPDAY": 1,
-	"BINKPALL": 2,
+	"LOGON":     0,
+	"BINKPDAY":  1,
+	"BINKPALL":  2,
 	"ROBOTSTAT": 3,
 	"APPSTATS":  4,
-	"BULLETIN":  5,
+	"MATHMAZE":  5,
+	"BULLETIN":  6,
 }
 
 // ListBulletins returns display files in displayDir suitable for caller bulletins.
