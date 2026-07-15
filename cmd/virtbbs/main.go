@@ -63,6 +63,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/fidofiles"
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
+	"github.com/virtbbs/virtbbs/internal/mrc"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/scheduler"
 	"github.com/virtbbs/virtbbs/internal/session"
@@ -344,6 +345,16 @@ func main() {
 	uptime.RecordStart()
 	printStartupBanner(cfg, uptime.MessageLines(cfg.BBS.Name))
 
+	mrcPrefs, err := mrc.OpenPrefs(sqlDB)
+	if err != nil {
+		log.Fatalf("mrc prefs: %v", err)
+	}
+	mrcPlatform := fmt.Sprintf("VirtBBS_%s/unix", version.Version)
+	mrcHub := mrc.NewHub(mrcPrefs, mrcPlatform)
+	mrcHub.Start()
+	defer mrcHub.Stop()
+	mrcHub.ApplyConfig(cfg.MRC.Resolve(cfg.BBS.Name, cfg.Sysop.Name, mrcPlatform))
+
 	deps := session.Deps{
 		Users:       userStore,
 		Messages:    msgStore,
@@ -351,6 +362,7 @@ func main() {
 		Callers:     callersLog,
 		Files:       fileStore,
 		Conferences: confStore,
+		MRC:         mrcHub,
 	}
 
 	telnetHandler := func(rw io.ReadWriteCloser, remoteAddr string) {
@@ -424,6 +436,7 @@ func main() {
 		Files:       fileStore,
 		Nodes:       nodeStore,
 		Callers:     callersLog,
+		MRC:         mrcHub,
 	}
 	webSrv := &web.Server{Addr: webAddr, Root: cfg.Paths.WWW, Deps: webDeps}
 	go func() {
@@ -465,6 +478,25 @@ func printStartupBanner(cfg *config.Config, uptimeLines []string) {
 	line(fmt.Sprintf("  SSH         :%d", cfg.Network.SSHPort))
 	line(fmt.Sprintf("  Web UI      %s:%d  (www: %s)", cfg.Network.WebBind, cfg.Network.WebPort, cfg.Paths.WWW))
 	line(fmt.Sprintf("  User API    %s:%d", cfg.Network.UserAPIBind, cfg.Network.UserAPIPort))
+	if cfg.MRC.Enabled {
+		host := cfg.MRC.Host
+		if host == "" {
+			host = "mrc.bottomlessabyss.net"
+		}
+		port := cfg.MRC.Port
+		if port <= 0 {
+			if cfg.MRC.UseTLS {
+				port = 5001
+			} else {
+				port = 5000
+			}
+		}
+		tlsNote := ""
+		if cfg.MRC.UseTLS {
+			tlsNote = " (TLS)"
+		}
+		line(fmt.Sprintf("  MRC hub     %s:%d%s", host, port, tlsNote))
+	}
 	if cfg.Fido.Enabled {
 		sep()
 		line("  FIDO / VIRTNET")

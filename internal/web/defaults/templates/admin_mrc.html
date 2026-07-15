@@ -1,0 +1,56 @@
+{{define "admin_mrc.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "admin_mrc.title"}}</h2></div>
+  <div class="card-body">
+    {{if .Flash}}<div class="alert alert-success">{{.Flash}}</div>{{end}}
+    {{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+
+    <h3 class="h6">{{t .Locale "admin_mrc.status"}}</h3>
+    <ul class="list-unstyled mb-4">
+      <li>{{t .Locale "admin_mrc.state_enabled"}}:
+        {{if .Status.Enabled}}<span class="text-success">{{t .Locale "admin_mrc.yes"}}</span>{{else}}<span class="text-secondary">{{t .Locale "admin_mrc.no"}}</span>{{end}}
+      </li>
+      <li>{{t .Locale "admin_mrc.state_connected"}}:
+        {{if .Status.Connected}}<span class="text-success">{{t .Locale "admin_mrc.yes"}}</span>{{else if .Status.Reconnecting}}<span class="text-warning">{{t .Locale "admin_mrc.reconnecting"}}</span>{{else}}<span class="text-secondary">{{t .Locale "admin_mrc.no"}}</span>{{end}}
+      </li>
+      <li>{{t .Locale "admin_mrc.state_addr"}}: <code>{{.Status.Addr}}</code></li>
+      <li>{{t .Locale "admin_mrc.state_bbs"}}: <code>{{.Status.BBSName}}</code></li>
+      <li>{{t .Locale "admin_mrc.state_attached"}}: {{.Status.Attached}}</li>
+      {{if .Status.LastError}}<li class="text-danger">{{t .Locale "admin_mrc.state_error"}}: {{.Status.LastError}}</li>{{end}}
+    </ul>
+
+    <form method="post" action="/admin/mrc" class="admin-form">
+      <h3 class="h6">{{t .Locale "admin_mrc.section_conn"}}</h3>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="enabled" value="1" id="mrc_enabled" {{if .Config.MRC.Enabled}}checked{{end}}>
+        <label class="form-check-label" for="mrc_enabled">{{t .Locale "admin_mrc.enabled"}}</label>
+      </div>
+      <label class="form-label">{{t .Locale "admin_mrc.host"}} <input class="form-control" name="host" value="{{.Config.MRC.Host}}"></label>
+      <label class="form-label">{{t .Locale "admin_mrc.port"}} <input class="form-control" type="number" name="port" value="{{.Config.MRC.Port}}"></label>
+      <div class="form-check mb-3">
+        <input class="form-check-input" type="checkbox" name="use_tls" value="1" id="mrc_tls" {{if .Config.MRC.UseTLS}}checked{{end}}>
+        <label class="form-check-label" for="mrc_tls">{{t .Locale "admin_mrc.use_tls"}}</label>
+      </div>
+
+      <h3 class="h6">{{t .Locale "admin_mrc.section_identity"}}</h3>
+      <label class="form-label">{{t .Locale "admin_mrc.bbs_name"}} <input class="form-control" name="bbs_name" value="{{.Config.MRC.BBSName}}" placeholder="{{.Config.BBS.Name}}"></label>
+      <p class="meta small">{{t .Locale "admin_mrc.bbs_name_help"}}</p>
+      <label class="form-label">{{t .Locale "admin_mrc.bbs_pretty"}} <input class="form-control" name="bbs_pretty" value="{{.Config.MRC.BBSPretty}}"></label>
+      <label class="form-label">{{t .Locale "admin_mrc.sysop"}} <input class="form-control" name="sysop" value="{{.Config.MRC.Sysop}}"></label>
+      <label class="form-label">{{t .Locale "admin_mrc.description"}} <input class="form-control" name="description" value="{{.Config.MRC.Description}}"></label>
+      <label class="form-label">{{t .Locale "admin_mrc.telnet"}} <input class="form-control" name="telnet" value="{{.Config.MRC.Telnet}}"></label>
+      <label class="form-label">{{t .Locale "admin_mrc.ssh"}} <input class="form-control" name="ssh" value="{{.Config.MRC.SSH}}"></label>
+      <label class="form-label">{{t .Locale "admin_mrc.website"}} <input class="form-control" name="website" value="{{.Config.MRC.Website}}"></label>
+
+      <h3 class="h6 mt-3">{{t .Locale "admin_mrc.section_session"}}</h3>
+      <label class="form-label">{{t .Locale "admin_mrc.default_room"}} <input class="form-control" name="default_room" value="{{.Config.MRC.DefaultRoom}}"></label>
+      <label class="form-label">{{t .Locale "admin_mrc.min_security"}} <input class="form-control" type="number" name="min_security" value="{{.Config.MRC.MinSecurity}}"></label>
+      <p class="meta">{{t .Locale "admin_mrc.apply_note"}}</p>
+      <button class="btn btn-primary" type="submit">{{t .Locale "admin_mrc.save"}}</button>
+      <a class="btn btn-secondary" href="/admin">{{t .Locale "admin_mrc.back"}}</a>
+    </form>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}
