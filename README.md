@@ -36,7 +36,7 @@ Component-specific READMEs: [www/README.md](www/README.md) (web UI), [android/Vi
 
 | Client | How |
 |--------|-----|
-| **Web browser** | `http://localhost:8081/` — login, messages, files, netmail, QWK, profile, sysop admin |
+| **Web browser** | `http://localhost:8081/` — login, messages, files, netmail, QWK, profile, sysop admin; unauthenticated `GET /sniff` (and `/api/sniff`) for MeshSniff / LAN identity |
 | **Telnet** | `telnet localhost 2323` — full ANSI terminal session (SyncTerm, NetRunner, etc.) |
 | **SSH** | `ssh -p 3232 user@localhost` — same session over SSH |
 | **VirtAnd (Android)** | Point client using token auth + QWK/REP sync on port 9998 |

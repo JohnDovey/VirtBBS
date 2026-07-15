@@ -92,6 +92,8 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/api/notify", s.handleNotify)
 	mux.HandleFunc("/api/stream", s.handleStream)
 	mux.HandleFunc("/manifest.webmanifest", s.handleManifest)
+	mux.HandleFunc("/sniff", s.handleSniff)
+	mux.HandleFunc("/api/sniff", s.handleSniff)
 	mux.HandleFunc("/forgot-password", s.handleForgotPassword)
 	mux.HandleFunc("/reset-password", s.handleResetPassword)
 	mux.HandleFunc("/addressbook", s.handleAddressBook)
