@@ -176,7 +176,7 @@ func bulletinTitle(name string) string {
 	titles := map[string]string{
 		"LOGON": "Logon Message", "BINKPDAY": "BinkP Statistics (24h)",
 		"BINKPALL": "BinkP Statistics (All Time)", "ROBOTSTAT": "Robot Stats",
-		"APPSTATS": "VirtAnd App Stats", "MATHMAZE": "MathMaze Top Scores",
+		"APPSTATS": "VirtAnd App Stats", "MATHMAZE": "MathMaze Top Scores", "ANSIART": "AnsiArt Gallery",
 		"BULLETIN": "Bulletin",
 	}
 	if t, ok := titles[upper]; ok {

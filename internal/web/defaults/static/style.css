@@ -341,6 +341,14 @@ body.virtbbs-body {
 .ansi-fg-bright-magenta { color: #f6f; }
 .ansi-fg-bright-cyan { color: #6ff; }
 .ansi-fg-bright-white { color: #fff; }
+.ansi-bg-black { background-color: #111; }
+.ansi-bg-red { background-color: #c44; }
+.ansi-bg-green { background-color: #4c4; }
+.ansi-bg-yellow { background-color: #cc4; }
+.ansi-bg-blue { background-color: #48c; }
+.ansi-bg-magenta { background-color: #c4c; }
+.ansi-bg-cyan { background-color: #4cc; }
+.ansi-bg-white { background-color: #ddd; }
 
 .msg-body-formatted {
   white-space: normal;

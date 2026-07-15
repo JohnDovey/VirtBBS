@@ -1,0 +1,20 @@
+{{define "ansiart_view.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{.Meta.Title}}</h2></div>
+  <div class="card-body">
+  <p><a href="/ansiart">← AnsiArt</a></p>
+  <p class="meta">
+    Author: {{.Sauce.Author}} · Group: {{.Sauce.Group}} · {{.Meta.Mode}}
+    {{.Sauce.Width}}x{{.Sauce.Height}} · {{.Sauce.Date}}
+    {{if .Sauce.Comment}}<br>{{.Sauce.Comment}}{{end}}
+  </p>
+  <p>
+    <a class="btn btn-sm btn-outline-primary" href="/ansiart/download?user={{.UserQ | urlquery}}&amp;id={{.IDQ | urlquery}}&amp;which=result">Download art</a>
+    <a class="btn btn-sm btn-outline-secondary" href="/ansiart/download?user={{.UserQ | urlquery}}&amp;id={{.IDQ | urlquery}}&amp;which=source">Download source</a>
+  </p>
+  <div class="ansi-screen door-terminal">{{.Preview}}</div>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

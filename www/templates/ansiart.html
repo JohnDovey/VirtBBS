@@ -1,0 +1,42 @@
+{{define "ansiart.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header"><h2 class="h5 mb-0">{{t .Locale "ansiart.title"}}</h2></div>
+  <div class="card-body">
+  <p><a href="/doors">{{t .Locale "doors.back"}}</a></p>
+  <p class="meta">{{t .Locale "ansiart.help"}}</p>
+  <form method="post" action="/ansiart/convert" enctype="multipart/form-data" class="mb-4">
+    <div class="mb-2">
+      <label class="form-label">Image</label>
+      <input class="form-control" type="file" name="file" accept="image/*" required>
+    </div>
+    <div class="mb-2">
+      <label class="form-label">Title</label>
+      <input class="form-control" type="text" name="title" placeholder="optional">
+    </div>
+    <div class="mb-2">
+      <label class="form-label">Mode</label>
+      <select class="form-select" name="mode">
+        <option value="ansi">ANSI truecolor</option>
+        <option value="ascii">ASCII</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Width (columns)</label>
+      <input class="form-control" type="number" name="width" value="80" min="20" max="200">
+    </div>
+    <button type="submit" class="btn btn-primary">Convert</button>
+  </form>
+  <h3 class="h6">Recent gallery</h3>
+  <ul class="compact-list">
+  {{range .Entries}}
+    <li><a href="/ansiart/view?user={{.Meta.User | urlquery}}&amp;id={{.Meta.ID | urlquery}}">{{.Meta.Title}}</a>
+      — {{.Meta.User}} · {{.Meta.Mode}} {{.Meta.Width}}x{{.Meta.Height}}</li>
+  {{else}}
+    <li class="meta">No conversions yet.</li>
+  {{end}}
+  </ul>
+  </div>
+</div>
+{{template "footer" .}}
+{{end}}

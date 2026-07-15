@@ -89,3 +89,12 @@
 #   drop_file        = "DOOR.SYS"
 #   append_drop_file = true
 #   min_security     = 10
+#
+# [[doors]]
+#   name             = "AnsiArt"
+#   description      = "Convert images to ANSI/ASCII art"
+#   cmd              = "DoorGames/AnsiArt/ansiart"
+#   work_dir         = "DoorGames/AnsiArt"
+#   drop_file        = "DOOR.SYS"
+#   append_drop_file = true
+#   min_security     = 10

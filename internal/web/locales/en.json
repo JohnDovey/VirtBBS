@@ -949,6 +949,8 @@
   "doors.title": "Door games",
   "doors.back": "← Doors",
   "doors.help": "Native door programs configured in VirtBBS.DAT. Requires a local executable.",
+  "ansiart.title": "AnsiArt",
+  "ansiart.help": "Upload an image and convert it to ANSI (truecolor) or ASCII. Files are stored with SAUCE metadata.",
   "doors.empty": "No doors available for your security level.",
   "doors.play_title": "Door — %s",
   "doors.terminal_help": "Click the terminal area and type. Use Enter to send input.",

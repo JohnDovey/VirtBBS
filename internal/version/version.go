@@ -323,6 +323,9 @@
 //                        body line; upstream requests send password in subject.
 //   v1.7.8  2026-06-30  BinkP: receive interleaved inbound M_FILE while waiting for M_GOT
 //                        (fixes session stall against binkd when both sides have mail).
+//   v2.2.4  2026-07-15  AnsiArt door + /ansiart web helper (HBFS truecolor/ASCII,
+//                        SAUCE); pkg/transfer for door Zmodem; truecolor in
+//                        ansihtml and doors.js.
 //   v2.2.3  2026-07-15  Web doors: interpret ANSI (colors, clear screen) in the
 //                        browser terminal instead of dumping raw escape text.
 //   v2.2.2  2026-07-15  Door launch: resolve relative cmd against cwd/work_dir so
@@ -350,4 +353,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "2.2.3"
+const Version = "2.2.4"

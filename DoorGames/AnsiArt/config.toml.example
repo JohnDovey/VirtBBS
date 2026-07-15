@@ -1,0 +1,5 @@
+# AnsiArt configuration (optional)
+
+library_dir = "LIBRARY"
+bulletin_path = "../../display/ANSIART.ANS"
+default_width = 80

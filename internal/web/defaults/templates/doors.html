@@ -5,6 +5,7 @@
   <div class="card-body">
   <p><a href="/menu">{{t .Locale "common.dashboard_back"}}</a></p>
   <p class="meta">{{t .Locale "doors.help"}}</p>
+  <p><a href="/ansiart">AnsiArt</a> — convert images to ANSI/ASCII (web upload)</p>
   <ul class="compact-list">
   {{range .Doors}}
     <li><a href="/doors/play?n={{.Index}}">{{.Name}}</a>{{if .Description}} — {{.Description}}{{end}}</li>

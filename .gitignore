@@ -36,11 +36,18 @@ display/BINKPDAY.ANS
 display/BINKPALL.ANS
 display/ROBOTSTAT.ANS
 display/MATHMAZE.ANS
+display/ANSIART.ANS
 
 # MathMaze door binary and local score DB
 DoorGames/MathMaze/mathmaze
+AnsiEdit/ansiedit
 DoorGames/MathMaze/scores.json
 DoorGames/MathMaze/config.toml
+
+# AnsiArt door binary and conversion library
+DoorGames/AnsiArt/ansiart
+DoorGames/AnsiArt/LIBRARY/
+DoorGames/AnsiArt/config.toml
 
 # Local FidoNet operational files (not part of source; repo root only)
 /ROUTES.BBS

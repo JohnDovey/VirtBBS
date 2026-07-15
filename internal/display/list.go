@@ -19,6 +19,7 @@ var bulletinTitles = map[string]string{
 	"ROBOTSTAT": "Robot Stats",
 	"APPSTATS":  "VirtAnd App Stats",
 	"MATHMAZE":  "MathMaze Top Scores",
+	"ANSIART":   "AnsiArt Gallery",
 	"BULLETIN":  "Bulletin",
 }
 
@@ -36,7 +37,8 @@ var bulletinOrder = map[string]int{
 	"ROBOTSTAT": 3,
 	"APPSTATS":  4,
 	"MATHMAZE":  5,
-	"BULLETIN":  6,
+	"ANSIART":   6,
+	"BULLETIN":  7,
 }
 
 // ListBulletins returns display files in displayDir suitable for caller bulletins.

@@ -20,6 +20,17 @@
     '97': 'ansi-fg-bright-white'
   };
 
+  var BG = {
+    '40': 'ansi-bg-black',
+    '41': 'ansi-bg-red',
+    '42': 'ansi-bg-green',
+    '43': 'ansi-bg-yellow',
+    '44': 'ansi-bg-blue',
+    '45': 'ansi-bg-magenta',
+    '46': 'ansi-bg-cyan',
+    '47': 'ansi-bg-white'
+  };
+
   function escapeHTML(s) {
     return s
       .replace(/&/g, '&amp;')
@@ -29,10 +40,14 @@
   }
 
   // Convert a screen buffer (SGR codes only; clears already applied) to HTML.
+  // Supports named colors and truecolor 38;2 / 48;2 sequences.
   function ansiToHTML(raw) {
     var s = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     var bold = false;
     var fg = '';
+    var bg = '';
+    var fgRGB = '';
+    var bgRGB = '';
     var out = '';
 
     function flush(text) {
@@ -40,9 +55,16 @@
       var escaped = escapeHTML(text).replace(/\n/g, '<br>');
       var classes = [];
       if (bold) classes.push('ansi-bold');
-      if (fg) classes.push(fg);
-      if (classes.length) {
-        out += '<span class="' + classes.join(' ') + '">' + escaped + '</span>';
+      if (fg && !fgRGB) classes.push(fg);
+      if (bg && !bgRGB) classes.push(bg);
+      var styles = [];
+      if (fgRGB) styles.push('color:rgb(' + fgRGB + ')');
+      if (bgRGB) styles.push('background-color:rgb(' + bgRGB + ')');
+      var attr = '';
+      if (classes.length) attr += ' class="' + classes.join(' ') + '"';
+      if (styles.length) attr += ' style="' + styles.join(';') + '"';
+      if (attr) {
+        out += '<span' + attr + '>' + escaped + '</span>';
       } else {
         out += escaped;
       }
@@ -62,14 +84,38 @@
         if (!code || code === '0') {
           bold = false;
           fg = '';
+          bg = '';
+          fgRGB = '';
+          bgRGB = '';
           continue;
         }
-        code.split(';').forEach(function (part) {
+        var parts = code.split(';');
+        for (var p = 0; p < parts.length; p++) {
+          var part = parts[p];
           if (part === '1') bold = true;
           else if (part === '22') bold = false;
-          else if (part === '39') fg = '';
-          else if (FG[part]) fg = FG[part];
-        });
+          else if (part === '39') {
+            fg = '';
+            fgRGB = '';
+          } else if (part === '49') {
+            bg = '';
+            bgRGB = '';
+          } else if (part === '38' && parts[p + 1] === '2' && p + 4 < parts.length) {
+            fgRGB = parts[p + 2] + ',' + parts[p + 3] + ',' + parts[p + 4];
+            fg = '';
+            p += 4;
+          } else if (part === '48' && parts[p + 1] === '2' && p + 4 < parts.length) {
+            bgRGB = parts[p + 2] + ',' + parts[p + 3] + ',' + parts[p + 4];
+            bg = '';
+            p += 4;
+          } else if (FG[part]) {
+            fg = FG[part];
+            fgRGB = '';
+          } else if (BG[part]) {
+            bg = BG[part];
+            bgRGB = '';
+          }
+        }
         continue;
       }
       var next = s.indexOf('\x1b', i);
