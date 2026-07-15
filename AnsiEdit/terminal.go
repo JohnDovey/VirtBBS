@@ -255,9 +255,73 @@ func (t *Terminal) PromptLine(prompt string) string {
 		}()
 	}
 	line, _ := bufio.NewReader(t.in).ReadString('\n')
-	// trim CR/LF
 	for len(line) > 0 && (line[len(line)-1] == '\n' || line[len(line)-1] == '\r') {
 		line = line[:len(line)-1]
 	}
 	return line
+}
+
+// PromptLineEdit reads a line in raw mode, starting with initial text already in
+// the field (editable). Returns ok=false if the user presses Esc.
+func (t *Terminal) PromptLineEdit(row, col int, prompt, initial string) (string, bool) {
+	buf := []rune(initial)
+	pos := len(buf)
+	t.ShowCursor()
+	redraw := func() {
+		t.MoveTo(row, col)
+		t.Print("\x1b[K")
+		t.Print(prompt)
+		t.Print(string(buf))
+		// Place cursor at pos within the field
+		t.MoveTo(row, col+len([]rune(prompt))+pos)
+	}
+	redraw()
+	for {
+		ev, err := t.ReadEvent()
+		if err != nil {
+			t.HideCursor()
+			return string(buf), false
+		}
+		switch ev.Kind {
+		case KeyEsc:
+			t.HideCursor()
+			return string(buf), false
+		case KeyEnter:
+			t.HideCursor()
+			return string(buf), true
+		case KeyBackspace:
+			if pos > 0 {
+				buf = append(buf[:pos-1], buf[pos:]...)
+				pos--
+				redraw()
+			}
+		case KeyDelete:
+			if pos < len(buf) {
+				buf = append(buf[:pos], buf[pos+1:]...)
+				redraw()
+			}
+		case KeyLeft:
+			if pos > 0 {
+				pos--
+				redraw()
+			}
+		case KeyRight:
+			if pos < len(buf) {
+				pos++
+				redraw()
+			}
+		case KeyHome:
+			pos = 0
+			redraw()
+		case KeyEnd:
+			pos = len(buf)
+			redraw()
+		case KeyRune:
+			if ev.Rune >= 32 {
+				buf = append(buf[:pos], append([]rune{ev.Rune}, buf[pos:]...)...)
+				pos++
+				redraw()
+			}
+		}
+	}
 }

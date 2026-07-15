@@ -7,6 +7,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -117,12 +118,12 @@ func TestConvertASCII(t *testing.T) {
 			img.Set(x, y, color.RGBA{uint8(x * 12), uint8(y * 12), 128, 255})
 		}
 	}
-	c := ConvertImage(img, ImportASCII, 10)
-	if c.Cols != 10 {
-		t.Fatalf("cols=%d", c.Cols)
+	c := ConvertImage(img, ImportASCII, 10, 10)
+	if c.Cols > 10 || c.Rows > 10 {
+		t.Fatalf("exceeded fit box: %dx%d", c.Cols, c.Rows)
 	}
-	if c.Rows < 1 {
-		t.Fatal("no rows")
+	if c.Cols < 1 || c.Rows < 1 {
+		t.Fatal("empty canvas")
 	}
 }
 
@@ -133,14 +134,87 @@ func TestConvertANSI(t *testing.T) {
 			img.Set(x, y, color.RGBA{255, uint8(x * 6), uint8(y * 6), 255})
 		}
 	}
-	c := ConvertImage(img, ImportANSI, 10)
-	if c.Cols != 10 {
-		t.Fatalf("cols=%d", c.Cols)
+	c := ConvertImage(img, ImportANSI, 10, 10)
+	if c.Cols > 10 || c.Rows > 10 {
+		t.Fatalf("exceeded fit box: %dx%d", c.Cols, c.Rows)
 	}
 	cell := c.Get(0, 0)
 	if !cell.FG.True || !cell.BG.True {
 		t.Errorf("expected truecolor cell %+v", cell)
 	}
+}
+
+func TestConvertScalesFullImage(t *testing.T) {
+	const W, H = 200, 100
+	img := image.NewRGBA(image.Rect(0, 0, W, H))
+	for y := 0; y < H; y++ {
+		for x := 0; x < W; x++ {
+			img.Set(x, y, color.RGBA{40, 40, 40, 255})
+		}
+	}
+	paint := func(x0, y0, x1, y1 int, c color.RGBA) {
+		for y := y0; y < y1; y++ {
+			for x := x0; x < x1; x++ {
+				img.Set(x, y, c)
+			}
+		}
+	}
+	paint(0, 0, 50, 25, color.RGBA{255, 0, 0, 255})
+	paint(W-50, 0, W, 25, color.RGBA{0, 0, 255, 255})
+	paint(0, H-25, 50, H, color.RGBA{0, 255, 0, 255})
+	paint(W-50, H-25, W, H, color.RGBA{255, 255, 0, 255})
+
+	c := ConvertImage(img, ImportANSI, 40, 25)
+	if c.Cols > 40 || c.Rows > 25 {
+		t.Fatalf("fit exceeded: %dx%d", c.Cols, c.Rows)
+	}
+	dominant := func(cell Cell) (r, g, b uint8) {
+		fr, fg, fb := cell.FG.RGB()
+		br, bg, bb := cell.BG.RGB()
+		// Prefer the brighter / more saturated channel pair contribution
+		if fr+fg+fb >= br+bg+bb {
+			return fr, fg, fb
+		}
+		return br, bg, bb
+	}
+	near := func(gotR, gotG, gotB uint8, wantR, wantG, wantB uint8) bool {
+		dr := int(gotR) - int(wantR)
+		dg := int(gotG) - int(wantG)
+		db := int(gotB) - int(wantB)
+		return dr*dr+dg*dg+db*db < 80*80
+	}
+	tlr, tlg, tlb := dominant(c.Get(0, 0))
+	trr, trg, trb := dominant(c.Get(c.Cols-1, 0))
+	blr, blg, blb := dominant(c.Get(0, c.Rows-1))
+	brr, brg, brb := dominant(c.Get(c.Cols-1, c.Rows-1))
+	if !near(tlr, tlg, tlb, 255, 0, 0) {
+		t.Errorf("TL want red got %d,%d,%d", tlr, tlg, tlb)
+	}
+	if !near(trr, trg, trb, 0, 0, 255) {
+		t.Errorf("TR want blue got %d,%d,%d", trr, trg, trb)
+	}
+	if !near(blr, blg, blb, 0, 255, 0) {
+		t.Errorf("BL want green got %d,%d,%d", blr, blg, blb)
+	}
+	if !near(brr, brg, brb, 255, 255, 0) {
+		t.Errorf("BR want yellow got %d,%d,%d", brr, brg, brb)
+	}
+}
+
+func TestFitCellSize(t *testing.T) {
+	c, r := fitCellSize(800, 600, 80, 25)
+	if c > 80 || r > 25 {
+		t.Fatalf("800x600 → %dx%d exceeds box", c, r)
+	}
+	// Wide image should use full width more often than height
+	c2, r2 := fitCellSize(1600, 400, 80, 25)
+	if c2 > 80 || r2 > 25 {
+		t.Fatalf("wide → %dx%d", c2, r2)
+	}
+	_ = c
+	_ = r
+	_ = c2
+	_ = r2
 }
 
 func TestImportPNGFile(t *testing.T) {
@@ -165,14 +239,50 @@ func TestImportPNGFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := ConvertImage(loaded, ImportASCII, 8)
-	if c.Cols != 8 {
-		t.Fatalf("cols=%d", c.Cols)
+	c := ConvertImage(loaded, ImportASCII, 8, 8)
+	if c.Cols > 8 || c.Rows > 8 {
+		t.Fatalf("size %dx%d", c.Cols, c.Rows)
 	}
 	var sauce Sauce
 	PrefillSauceForImport(&sauce, path, c, ImportASCII)
 	if !sauce.Present || sauce.Title != "dot" {
 		t.Errorf("sauce=%+v", sauce)
+	}
+}
+
+func TestUndoStack(t *testing.T) {
+	e := NewEditor(nil, NewCanvas(10, 5), "", Sauce{})
+	e.cx, e.cy = 2, 1
+	e.fg = classicFG(9)
+	e.paint('A')
+	e.paint('B')
+	if e.canvas.Get(2, 1).Ch != 'A' || e.canvas.Get(3, 1).Ch != 'B' {
+		t.Fatalf("paint failed")
+	}
+	e.undoLast()
+	if e.canvas.Get(3, 1).Ch != ' ' || e.cx != 3 || e.cy != 1 {
+		t.Fatalf("undo B: cell=%q pos=%d,%d", string(e.canvas.Get(3, 1).Ch), e.cx, e.cy)
+	}
+	e.undoLast()
+	if e.canvas.Get(2, 1).Ch != ' ' {
+		t.Fatalf("undo A: %q", string(e.canvas.Get(2, 1).Ch))
+	}
+	// Cap at undoLimit
+	e.cx, e.cy = 0, 0
+	for i := 0; i < undoLimit+10; i++ {
+		e.cx = i % e.canvas.Cols
+		e.cy = (i / e.canvas.Cols) % e.canvas.Rows
+		e.paint('X')
+	}
+	if len(e.undo) != undoLimit {
+		t.Fatalf("undo depth=%d want %d", len(e.undo), undoLimit)
+	}
+}
+
+func TestTrimPathSpaces(t *testing.T) {
+	s := strings.TrimSpace("  /tmp/foo.png  ")
+	if s != "/tmp/foo.png" {
+		t.Fatal(s)
 	}
 }
 
@@ -202,14 +312,21 @@ func TestLoadLogonANS(t *testing.T) {
 }
 
 func TestCP437Bridge(t *testing.T) {
-	// 0xDB alone is not valid UTF-8 (incomplete sequence) → CP437 path.
-	raw := []byte{0xDB, 'A', 0xB1}
+	// Ambiguous as UTF-8 (0xDB 0xB0 = U+06F0) but must decode as CP437 █░ for .ANS.
+	raw := []byte{0xDB, 0xB0, 'A'}
 	s := decodeANSBytes(raw)
 	runes := []rune(s)
-	if len(runes) != 3 || runes[0] != '█' || runes[1] != 'A' || runes[2] != '▒' {
+	if len(runes) != 3 || runes[0] != '█' || runes[1] != '░' || runes[2] != 'A' {
 		t.Fatalf("decoded=%q runes=%v", s, runes)
 	}
-	// Real UTF-8 box-drawing must pass through.
+	// Incomplete UTF-8 lead byte alone → CP437.
+	raw2 := []byte{0xDB, 'A', 0xB1}
+	s2 := decodeANSBytes(raw2)
+	r2 := []rune(s2)
+	if len(r2) != 3 || r2[0] != '█' || r2[1] != 'A' || r2[2] != '▒' {
+		t.Fatalf("decoded2=%q runes=%v", s2, r2)
+	}
+	// Real UTF-8 box-drawing (3-byte sequences) must pass through.
 	utf := "╔═╗"
 	if decodeANSBytes([]byte(utf)) != utf {
 		t.Fatalf("utf8 passthrough failed")

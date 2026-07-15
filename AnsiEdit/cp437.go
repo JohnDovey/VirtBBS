@@ -70,16 +70,18 @@ func cp437FromRune(r rune) (byte, bool) {
 }
 
 // decodeANSBytes converts raw file bytes to a Unicode string suitable for parsing.
-// CP437 high bytes become Unicode; valid UTF-8 with multi-byte runes passes through.
+// Classic PCBoard .ANS files are CP437. Accidental 2-byte UTF-8 sequences from
+// high CP437 pairs (e.g. 0xDB 0xB0 → U+06F0) must still be treated as CP437.
+// Intentional UTF-8 art uses 3-byte sequences for box/block glyphs (U+0800+).
 func decodeANSBytes(raw []byte) string {
 	if utf8.Valid(raw) {
 		s := string(raw)
 		for _, r := range s {
-			if r > 0xFF {
-				return s
+			if r > 0x7FF {
+				return s // genuine multi-byte UTF-8 (3+ bytes)
 			}
 		}
-		// All runes ≤ U+00FF: may still be mis-decoded CP437; re-decode from bytes.
+		// Valid UTF-8 but only ≤2-byte runes: may be misread CP437 — fall through.
 	}
 	needs := false
 	for _, b := range raw {
@@ -92,7 +94,7 @@ func decodeANSBytes(raw []byte) string {
 		return string(raw)
 	}
 	var sb strings.Builder
-	sb.Grow(len(raw))
+	sb.Grow(len(raw) * 2)
 	for _, b := range raw {
 		if b < 0x80 {
 			sb.WriteByte(b)

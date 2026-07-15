@@ -24,6 +24,10 @@ const (
 	ImportASCII
 )
 
+// charAspect is the typical terminal cell height/width ratio (~2:1).
+// Image fit math treats one cell as covering 1×charAspect “square” pixels.
+const charAspect = 2.0
+
 var semigraphics = []rune{
 	' ',      // 0000
 	'\u2598', // 0001 ▘
@@ -57,38 +61,61 @@ func LoadImage(path string) (image.Image, error) {
 	return img, err
 }
 
-// ConvertImage builds a canvas from an image.
-// widthCells is the target character width; height follows aspect (~2:1 cells).
-func ConvertImage(img image.Image, mode ImportMode, widthCells int) *Canvas {
-	if widthCells < 8 {
-		widthCells = 8
+// fitCellSize chooses cols×rows that fit the whole image inside maxW×maxH,
+// correcting for ~2:1 character cell aspect so the picture is not cropped.
+func fitCellSize(iw, ih, maxW, maxH int) (cols, rows int) {
+	if maxW < 1 {
+		maxW = defCols
 	}
-	if widthCells > maxCols {
-		widthCells = maxCols
+	if maxH < 1 {
+		maxH = defRows
 	}
+	if maxW > maxCols {
+		maxW = maxCols
+	}
+	if maxH > maxRows {
+		maxH = maxRows
+	}
+	if iw < 1 || ih < 1 {
+		return maxW, 1
+	}
+
+	// Display aspect of C×R cells ≈ C : (R * charAspect). Match image iw:ih.
+	// C / (R * charAspect) = iw / ih  →  R = C * ih / (iw * charAspect)
+	cols = maxW
+	rows = int(math.Round(float64(cols) * float64(ih) / (float64(iw) * charAspect)))
+	if rows < 1 {
+		rows = 1
+	}
+	if rows > maxH {
+		rows = maxH
+		cols = int(math.Round(float64(rows) * float64(iw) * charAspect / float64(ih)))
+		if cols < 1 {
+			cols = 1
+		}
+		if cols > maxW {
+			cols = maxW
+		}
+	}
+	return cols, rows
+}
+
+// ConvertImage builds a canvas from an image, scaling the whole image to fit
+// inside maxWidth×maxHeight cells (no cropping).
+func ConvertImage(img image.Image, mode ImportMode, maxWidth, maxHeight int) *Canvas {
 	b := img.Bounds()
 	iw, ih := b.Dx(), b.Dy()
-	if iw < 1 || ih < 1 {
-		return NewCanvas(widthCells, 1)
-	}
+	cols, rows := fitCellSize(iw, ih, maxWidth, maxHeight)
 
 	switch mode {
 	case ImportASCII:
-		// One sample per cell; aspect: char ~2 high → sample height = widthCells * (ih/iw) / 2
-		hCells := int(math.Round(float64(ih) / float64(iw) * float64(widthCells) / 2.0))
-		if hCells < 1 {
-			hCells = 1
-		}
-		if hCells > maxRows {
-			hCells = maxRows
-		}
-		resized := resizeImage(img, widthCells, hCells)
-		c := NewCanvas(widthCells, hCells)
-		for y := 0; y < hCells; y++ {
-			for x := 0; x < widthCells; x++ {
+		resized := resizeImage(img, cols, rows)
+		c := NewCanvas(cols, rows)
+		for y := 0; y < rows; y++ {
+			for x := 0; x < cols; x++ {
 				rr, gg, bb, _ := resized.At(x, y).RGBA()
-				r, g, b := uint8(rr>>8), uint8(gg>>8), uint8(bb>>8)
-				lum := 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(b)
+				r, g, bv := uint8(rr>>8), uint8(gg>>8), uint8(bb>>8)
+				lum := 0.299*float64(r) + 0.587*float64(g) + 0.114*float64(bv)
 				idx := int(lum / 255.0 * float64(len(asciiRamp)-1))
 				if idx < 0 {
 					idx = 0
@@ -101,20 +128,12 @@ func ConvertImage(img image.Image, mode ImportMode, widthCells int) *Canvas {
 		}
 		return c
 
-	default: // ImportANSI HBFS
-		// Sample 2×2 pixels per cell → resize to widthCells*2 by heightCells*2
-		hCells := int(math.Round(float64(ih) / float64(iw) * float64(widthCells)))
-		if hCells < 1 {
-			hCells = 1
-		}
-		if hCells > maxRows {
-			hCells = maxRows
-		}
-		pw, ph := widthCells*2, hCells*2
+	default: // ImportANSI HBFS — 2×2 samples per cell
+		pw, ph := cols*2, rows*2
 		resized := resizeImage(img, pw, ph)
-		c := NewCanvas(widthCells, hCells)
-		for cy := 0; cy < hCells; cy++ {
-			for cx := 0; cx < widthCells; cx++ {
+		c := NewCanvas(cols, rows)
+		for cy := 0; cy < rows; cy++ {
+			for cx := 0; cx < cols; cx++ {
 				px := cx * 2
 				py := cy * 2
 				pix := [4]rgb8{
@@ -153,9 +172,20 @@ func pixelRGB(img image.Image, x, y int) rgb8 {
 	return rgb8{uint8(r >> 8), uint8(g >> 8), uint8(b32 >> 8)}
 }
 
+// resizeImage scales the entire source into a new w×h RGBA (origin 0,0).
 func resizeImage(src image.Image, w, h int) *image.RGBA {
+	if w < 1 {
+		w = 1
+	}
+	if h < 1 {
+		h = 1
+	}
+	sb := src.Bounds()
+	// Normalize to RGBA at (0,0) so JPEG/YCbCr and odd Min offsets scale cleanly.
+	tmp := image.NewRGBA(image.Rect(0, 0, sb.Dx(), sb.Dy()))
+	xdraw.Copy(tmp, image.Pt(0, 0), src, sb, xdraw.Src, nil)
 	dst := image.NewRGBA(image.Rect(0, 0, w, h))
-	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, src.Bounds(), xdraw.Over, nil)
+	xdraw.CatmullRom.Scale(dst, dst.Bounds(), tmp, tmp.Bounds(), xdraw.Src, nil)
 	return dst
 }
 
@@ -194,6 +224,10 @@ func optimizeTile(pix [4]rgb8) (pattern int, fore, back rgb8) {
 			bestB = avg[0]
 			bestF = avg[1]
 		}
+	}
+	// If "foreground" won with empty pixels, prefer full block when all FG.
+	if bestP == 0 && colorDiff(bestF, bestB) == 0 {
+		return 15, bestF, bestB
 	}
 	return bestP, bestF, bestB
 }

@@ -41,6 +41,8 @@ display/ANSIART.ANS
 # MathMaze door binary and local score DB
 DoorGames/MathMaze/mathmaze
 AnsiEdit/ansiedit
+AnsiEdit/ansiedit.exe
+
 DoorGames/MathMaze/scores.json
 DoorGames/MathMaze/config.toml
 
