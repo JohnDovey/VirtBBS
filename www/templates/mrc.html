@@ -1,0 +1,70 @@
+{{define "mrc.html"}}
+{{template "header" .}}
+<div class="card mb-3">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <h2 class="h5 mb-0">{{t .Locale "mrc.title"}}</h2>
+    <span class="badge text-bg-secondary" id="mrc-status-badge">{{if .CanJoin}}{{t .Locale "mrc.ready"}}{{else}}{{t .Locale "mrc.unavailable"}}{{end}}</span>
+  </div>
+  <div class="card-body">
+    {{if .StatusMsg}}<div class="alert alert-warning">{{.StatusMsg}}</div>{{end}}
+    {{if .CanJoin}}
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label" for="mrc-handle">{{t .Locale "mrc.handle"}}</label>
+        <input class="form-control" id="mrc-handle" value="{{.Handle}}" maxlength="32">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label" for="mrc-room">{{t .Locale "mrc.room"}}</label>
+        <input class="form-control" id="mrc-room" value="{{.DefaultRoom}}" maxlength="40">
+      </div>
+      <div class="col-md-4 d-flex align-items-end gap-2">
+        <button type="button" class="btn btn-primary" id="mrc-connect">{{t .Locale "mrc.connect"}}</button>
+        <button type="button" class="btn btn-outline-secondary" id="mrc-disconnect" disabled>{{t .Locale "mrc.disconnect"}}</button>
+      </div>
+    </div>
+    <div class="d-flex justify-content-between small text-secondary mb-1">
+      <span id="mrc-room-label">#—</span>
+      <span id="mrc-topic-label" class="text-truncate ms-2">{{t .Locale "mrc.topic_none"}}</span>
+    </div>
+    <div class="mrc-log border rounded p-2 mb-3 bg-dark text-light" id="mrc-log" aria-live="polite"></div>
+    <div class="row g-2">
+      <div class="col">
+        <input class="form-control font-monospace" id="mrc-input" maxlength="140" placeholder="{{t .Locale "mrc.placeholder"}}" disabled autocomplete="off">
+      </div>
+      <div class="col-auto">
+        <button type="button" class="btn btn-success" id="mrc-send" disabled>{{t .Locale "common.send"}}</button>
+      </div>
+    </div>
+    <p class="meta mt-2 mb-0">{{t .Locale "mrc.help"}}</p>
+    <div class="mt-2 small text-secondary" id="mrc-nicks"></div>
+    {{else}}
+    <p class="mb-0"><a href="/admin/mrc">{{t .Locale "mrc.admin_link"}}</a></p>
+    {{end}}
+  </div>
+</div>
+<style>
+.mrc-log { min-height: 320px; max-height: 55vh; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: .9rem; }
+.mrc-line { margin-bottom: .35rem; word-wrap: break-word; }
+.mrc-line .ts { color: #888; margin-right: .4rem; }
+.mrc-line .who { color: #5cf; font-weight: 600; }
+.mrc-line.private .who { color: #f5f; }
+.mrc-line.notice, .mrc-line.system { color: #aaa; }
+</style>
+{{if .CanJoin}}
+<script>
+window.VirtBBSMRC = {
+  handle: {{printf "%q" .Handle}},
+  room: {{printf "%q" .DefaultRoom}},
+  labels: {
+    connected: {{printf "%q" (t .Locale "mrc.connected")}},
+    disconnected: {{printf "%q" (t .Locale "mrc.disconnected")}},
+    connecting: {{printf "%q" (t .Locale "mrc.connecting")}},
+    topicNone: {{printf "%q" (t .Locale "mrc.topic_none")}},
+    nicks: {{printf "%q" (t .Locale "mrc.nicks")}}
+  }
+};
+</script>
+<script src="/static/mrc.js" defer></script>
+{{end}}
+{{template "footer" .}}
+{{end}}

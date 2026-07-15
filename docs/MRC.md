@@ -25,7 +25,18 @@ VirtBBS includes a **built-in** MRC 1.3 client: one process-level hub connection
 
 2. Save. The hub reapplies config immediately (no full process restart). First-time enable from Admin works because the hub supervisor is always started with VirtBBS.
 
-3. From Telnet/SSH main menu, press **`[A]`** (or type `MRC`).
+3. From Telnet/SSH main menu, press **`[A]`** (or type `MRC`), **or** open **`/mrc`** in the web UI (nav: MRC).
+
+## Web UI
+
+Logged-in callers can use **`/mrc`** for a live WebSocket client on the same process hub as Telnet/SSH:
+
+- Enter handle + room, click **Connect**
+- Messages stream in real time; pipe colors render as HTML spans
+- Same slash-command set as the terminal client (`/join`, `/msg`, `/quit`, …)
+- Sysops still configure the hub under **Admin → MRC**
+
+Web and terminal users on this BBS share rooms and identity through the single outbound MRC connection.
 
 ## Network
 

@@ -1,6 +1,9 @@
 package mrc
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestPipeToANSI(t *testing.T) {
 	in := "|15Hello|07 world"
@@ -10,5 +13,12 @@ func TestPipeToANSI(t *testing.T) {
 	}
 	if StripPipe(in) != "Hello world" {
 		t.Fatalf("strip=%q", StripPipe(in))
+	}
+}
+
+func TestPipeToHTML(t *testing.T) {
+	out := PipeToHTML("|15Hi|07 <world>")
+	if !strings.Contains(out, "<span") || !strings.Contains(out, "&lt;world&gt;") {
+		t.Fatalf("unexpected html: %q", out)
 	}
 }

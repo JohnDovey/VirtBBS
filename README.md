@@ -26,7 +26,7 @@ All guides live in [`docs/`](docs/):
 | [AreaFix FileFix TIC.md](docs/AreaFix%20FileFix%20TIC.md) | AreaFix, FileFix, TIC robots and file echo |
 | [Using-VirtBBS-as-a-Network-Hub.md](docs/Using-VirtBBS-as-a-Network-Hub.md) | Running VirtBBS as a Fido network hub |
 | [Graphviz Bundle.md](docs/Graphviz%20Bundle.md) | Bundling Graphviz `dot` with the server |
-| [MRC.md](docs/MRC.md) | Built-in Multi-Relay Chat hub and terminal client |
+| [MRC.md](docs/MRC.md) | Built-in Multi-Relay Chat hub, terminal + web client |
 | [CLAUDE.md](docs/CLAUDE.md) | Notes for AI assistants and toolchain paths |
 
 Component-specific READMEs: [www/README.md](www/README.md) (web UI), [android/VirtAnd/README.md](android/VirtAnd/README.md) (Android client).
@@ -54,7 +54,7 @@ The **web UI** is the primary interface for everyday use and all sysop administr
 | **Sysop admin (web)** | `/admin/*` — users, nodes, config, MRC, conferences, FidoNet, BinkP, callers |
 | **Telnet server** | RFC 854 with full IAC negotiation (character mode, echo, NAWS, TTYPE). Default port 2323 |
 | **SSH server** | `golang.org/x/crypto/ssh`, PTY support. Default port 3232 |
-| **MRC Chat** | Built-in Multi-Relay Chat hub + terminal client (`[A]`); Admin → MRC — see [docs/MRC.md](docs/MRC.md) |
+| **MRC Chat** | Built-in Multi-Relay Chat hub; Telnet/SSH `[A]` + web `/mrc`; Admin → MRC — see [docs/MRC.md](docs/MRC.md) |
 | **User database** | SQLite — supports importer from PCBoard binary USERS file |
 | **Message base** | SQLite with multi-conference support. Importer from PCBoard MSGS format |
 | **File areas** | Per-directory file listings, upload/download tracking, Zmodem |
