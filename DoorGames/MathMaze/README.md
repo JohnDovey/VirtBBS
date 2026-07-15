@@ -1,9 +1,9 @@
 # MathMaze
 
 BBS door game for VirtBBS: navigate a random maze with arrow keys.
-Each unsolved room is sealed by maths gates — walk into the exit labeled with the correct answer.
+Each unsolved room is locked until you solve a maths question by pressing **1–4**.
 
-Current version: **1.0.0** (see `version.go`).
+Current version: **1.0.1** (see `version.go`).
 
 ## Versioning
 
@@ -67,11 +67,12 @@ Copy `config.toml.example` to `config.toml` and set `bulletin_path` to your disp
 
 | Key | Action |
 |-----|--------|
-| Arrow keys | Move / choose a gate |
+| Arrow keys | Move through unlocked rooms |
+| 1–4 | Choose an answer when a room is locked |
 | Q | Quit and save scores |
 
 ## Scoring
 
-- Correct gate: **+5**
-- Wrong gate: **-2** (level score floored at 0); new question; gates re-labeled
+- Correct answer: **+5** (enter the room)
+- Wrong answer: **-2** (level score floored at 0); new question with new choices
 - Questions get harder each level

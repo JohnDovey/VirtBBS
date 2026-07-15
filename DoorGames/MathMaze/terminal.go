@@ -19,6 +19,10 @@ const (
 	KeyRight
 	KeyQuit
 	KeyEnter
+	Key1
+	Key2
+	Key3
+	Key4
 	KeyOther
 )
 
@@ -83,6 +87,14 @@ func (t *Terminal) ReadKey() (int, error) {
 		return KeyQuit, nil
 	case '\r', '\n':
 		return KeyEnter, nil
+	case '1':
+		return Key1, nil
+	case '2':
+		return Key2, nil
+	case '3':
+		return Key3, nil
+	case '4':
+		return Key4, nil
 	case 0x1b:
 		return t.readEscape()
 	case 0xe0, 0x00: // some DOS-style prefixes
@@ -103,6 +115,21 @@ func (t *Terminal) ReadKey() (int, error) {
 		return KeyOther, nil
 	}
 	return KeyOther, nil
+}
+
+// DigitFromKey returns 1–4 for number keys, or 0 if not a digit choice.
+func DigitFromKey(key int) int {
+	switch key {
+	case Key1:
+		return 1
+	case Key2:
+		return 2
+	case Key3:
+		return 3
+	case Key4:
+		return 4
+	}
+	return 0
 }
 
 func (t *Terminal) readEscape() (int, error) {
