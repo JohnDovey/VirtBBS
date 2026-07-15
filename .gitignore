@@ -35,7 +35,6 @@ android/**/local.properties
 display/BINKPDAY.ANS
 display/BINKPALL.ANS
 display/ROBOTSTAT.ANS
-display/APPSTATS.ANS
 display/MATHMAZE.ANS
 
 # MathMaze door binary and local score DB
