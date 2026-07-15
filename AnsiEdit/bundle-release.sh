@@ -30,6 +30,7 @@ build_bin windows amd64 "ansiedit-windows-amd64.exe"
 build_bin darwin  amd64 "ansiedit-darwin-amd64"
 
 cp HELP.txt "${DIR}/HELP.txt"
+cp HELP.md "${DIR}/HELP.md"
 cp README.md "${DIR}/README.md"
 
 (cd "$OUT" && zip -rq "${NAME}.zip" "$NAME")
