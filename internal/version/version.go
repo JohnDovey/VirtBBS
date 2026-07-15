@@ -323,6 +323,10 @@
 //                        body line; upstream requests send password in subject.
 //   v1.7.8  2026-06-30  BinkP: receive interleaved inbound M_FILE while waiting for M_GOT
 //                        (fixes session stall against binkd when both sides have mail).
+//   v2.3.0  2026-07-15  Built-in Multi-Relay Chat (MRC): process-level hub,
+//                        Telnet/SSH ANSI client (main menu [A]), Admin → MRC
+//                        settings with live status, [mrc] VirtBBS.DAT config,
+//                        mrc_user_prefs; see docs/MRC.md.
 //   v2.2.4  2026-07-15  AnsiArt door + /ansiart web helper (HBFS truecolor/ASCII,
 //                        SAUCE); pkg/transfer for door Zmodem; truecolor in
 //                        ansihtml and doors.js.
@@ -353,4 +357,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "2.2.4"
+const Version = "2.3.0"

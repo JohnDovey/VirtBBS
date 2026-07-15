@@ -68,6 +68,25 @@
 #   [fido.networks.areas]
 #     LOVELY_CHAT = 3
 
+# ── Multi-Relay Chat (MRC) ────────────────────────────────────────────────────
+# Built-in global BBS chat network client. One hub connection serves all nodes.
+# Configure here or via Admin → MRC (/admin/mrc). Outbound TCP only (no inbound port).
+#
+# [mrc]
+#   enabled      = false
+#   host         = "mrc.bottomlessabyss.net"
+#   port         = 5000          # 5001 when use_tls = true
+#   use_tls      = false
+#   bbs_name     = ""            # MRC id (no spaces); default: sanitised [bbs].name
+#   bbs_pretty   = ""            # display name; default: [bbs].name
+#   sysop        = ""            # default: [sysop].name
+#   description  = ""
+#   telnet       = ""            # e.g. example.com:2323
+#   ssh          = ""
+#   website      = ""
+#   default_room = "lobby"
+#   min_security = 10
+
 # ── Door Games ────────────────────────────────────────────────────────────────
 # Each [[doors]] section defines one door game.
 # drop_file can be "DOOR.SYS" (default) or "DORINFO1.DEF"

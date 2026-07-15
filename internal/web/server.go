@@ -16,6 +16,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/conferences"
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
+	"github.com/virtbbs/virtbbs/internal/mrc"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/social"
 	"github.com/virtbbs/virtbbs/internal/users"
@@ -29,6 +30,7 @@ type Deps struct {
 	Files       *files.Store
 	Nodes       *node.Store
 	Callers     *callers.Log
+	MRC         *mrc.Hub
 }
 
 // Server serves the browser-based BBS interface.
@@ -119,6 +121,7 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/admin/nodes", s.handleAdminNodes)
 	mux.HandleFunc("/admin/broadcast", s.handleAdminBroadcast)
 	mux.HandleFunc("/admin/config", s.handleAdminConfig)
+	mux.HandleFunc("/admin/mrc", s.handleAdminMRC)
 	mux.HandleFunc("/admin/conferences", s.handleAdminConferences)
 	mux.HandleFunc("/admin/messages", s.handleAdminMessages)
 	mux.HandleFunc("/admin/files", s.handleAdminFiles)

@@ -44,6 +44,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/door"
 	"github.com/virtbbs/virtbbs/internal/fido"
 	"github.com/virtbbs/virtbbs/internal/messages"
+	"github.com/virtbbs/virtbbs/internal/mrc"
 )
 
 // Config holds all VirtBBS runtime configuration.
@@ -55,6 +56,7 @@ type Config struct {
 	BBS     BBSConfig     `toml:"bbs"     json:"bbs"`
 	Session SessionConfig `toml:"session" json:"session"`
 	Fido    fido.Config   `toml:"fido"    json:"fido"`
+	MRC     mrc.Config    `toml:"mrc"     json:"mrc"`
 	Doors   []door.Config `toml:"doors"   json:"doors"`
 }
 
@@ -186,5 +188,6 @@ func defaults() *Config {
 			NewUserSecurity: 10,
 		},
 		Fido: fido.DefaultConfig(),
+		MRC:  mrc.DefaultConfig(),
 	}
 }

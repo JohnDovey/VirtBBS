@@ -56,6 +56,7 @@ import (
 	"github.com/virtbbs/virtbbs/internal/fidofiles"
 	"github.com/virtbbs/virtbbs/internal/files"
 	"github.com/virtbbs/virtbbs/internal/messages"
+	"github.com/virtbbs/virtbbs/internal/mrc"
 	"github.com/virtbbs/virtbbs/internal/node"
 	"github.com/virtbbs/virtbbs/internal/postname"
 	"github.com/virtbbs/virtbbs/internal/ppl"
@@ -72,6 +73,7 @@ type Deps struct {
 	Callers     *callers.Log
 	Files       *files.Store
 	Conferences *conferences.Store
+	MRC         *mrc.Hub
 }
 
 // Session holds all runtime state for one connected user.
@@ -97,6 +99,9 @@ type session struct {
 	statMsgsLeft  int
 	statFilesDown int
 	statFilesUp   int
+
+	// talkMuted suppresses the Talk/broadcast pump while a fullscreen UI (MRC) owns the terminal.
+	talkMuted bool
 }
 
 // Run drives the session from login through logoff.
@@ -128,6 +133,9 @@ func Run(rw io.ReadWriteCloser, remoteAddr string, deps Deps, echoInput bool) {
 			for {
 				select {
 				case msg := <-ctrl.Messages:
+					if s.talkMuted {
+						continue
+					}
 					_, _ = io.WriteString(rw, ansi.EncodeOutput(msg, s.cp437Out))
 				case <-ctrl.Done():
 					return
@@ -329,7 +337,7 @@ func (s *session) mainMenu() {
 			"  [M]essages   [F]iles   [C]onference   [U]sers   [W]ho's online" +
 			ansi.Reset())
 		s.writeln(ansi.Color(ansi.BrightWhite) +
-			"  [T]alk       [D]oors   [P]PE   [S]tats   [R]profile [G]oodbye  [?]Menu" +
+			"  [T]alk       [D]oors   [P]PE   [A]MRC   [S]tats   [R]profile [G]oodbye  [?]Menu" +
 			ansi.Reset())
 		if s.user.Sysop {
 			s.writeln(ansi.Color(ansi.BrightYellow) + "  [!] Sysop menu" + ansi.Reset())
@@ -352,6 +360,8 @@ func (s *session) mainMenu() {
 			s.talkToNode()
 		case "D":
 			s.doorMenu()
+		case "A", "MRC":
+			s.mrcChat()
 		case "R":
 			s.profileMenu()
 		case "S":
@@ -456,7 +466,7 @@ func (s *session) showPCBoardMenu() {
 		hline("╠", "╩", "╣", "═"),
 		fullRow("       MISC / OTHER"),
 		fullHLine("╠", "╣", "═"),
-		fullRow(key("W", "Who's Online") + "  " + key("T", "Talk") + "  " + key("U", "Users") + "  " + key("D", "Doors") + "  " + key("P", "PPE")),
+		fullRow(key("W", "Who's Online") + "  " + key("T", "Talk") + "  " + key("U", "Users") + "  " + key("D", "Doors") + "  " + key("P", "PPE") + "  " + key("A", "MRC")),
 	}
 	if s.user.Sysop {
 		out = append(out, fullRow(key("!", "Sysop Menu")))
