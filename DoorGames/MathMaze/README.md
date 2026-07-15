@@ -3,7 +3,7 @@
 BBS door game for VirtBBS: navigate a random maze with arrow keys.
 Each unsolved room is locked until you solve a maths question by pressing **1–4**.
 
-Current version: **1.0.1** (see `version.go`).
+Current version: **1.0.2** (see `version.go`).
 
 ## Versioning
 
@@ -61,7 +61,8 @@ That copies `mathmaze` to `ServiceMonitor/services/VirtBBS/DoorGames/MathMaze/`.
 Copy `config.toml.example` to `config.toml` and set `bulletin_path` to your display directory if needed. On quit, MathMaze writes:
 
 - `scores.json` — persistent high scores
-- `MATHMAZE.ANS` — Top Scores bulletin (overall, per level, highest level, lowest per level)
+- bulletin at `bulletin_path` (default `../../display/MATHMAZE.ANS`)
+- `MATHMAZE.ANS` in this directory is the committed starter / reference Top Scores bulletin
 
 ## Controls
 
