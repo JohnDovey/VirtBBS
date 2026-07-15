@@ -1,0 +1,59 @@
+AnsiEdit 1.0.5 — Help
+======================
+
+Fullscreen ANSI art editor for classic BBS .ANS / .ASC screens.
+Requires an interactive terminal (TTY). SyncTerm or Windows Terminal
+recommended for truecolor imports.
+
+RUN
+---
+  Linux / macOS:  ./ansiedit-linux-amd64
+                  ./ansiedit-darwin-amd64
+  Windows:        ansiedit-windows-amd64.exe
+
+  ./ansiedit-linux-amd64                  new 80×25 canvas
+  ./ansiedit-linux-amd64 LOGON.ANS        open a file
+  ./ansiedit-linux-amd64 -cols 80 -rows 40
+  ./ansiedit-linux-amd64 -version
+
+KEYS (letter commands are UPPERCASE)
+------------------------------------
+  Arrows / Home / End / PgUp / PgDn   Move / scroll
+  Printable characters                Paint with current FG/BG
+  Space                               Paint draw glyph (default █)
+  Backspace / Del                     Clear cell
+  U                                   Undo last paint/clear (25 deep)
+  F then 0-9 or a-f                   Set foreground (see palette)
+  B then 0-7                          Set background
+  Tab / Shift+Tab                     Cycle draw glyph
+  C                                   Character picker
+  S / F2                              Save
+  O / F3                              Open
+  I                                   Import image (PNG/JPEG/GIF/WebP)
+  M                                   SAUCE + COMNT editor
+  N                                   New canvas
+  Ctrl+L                              Redraw
+  Ctrl+Q  or  Esc Esc                 Quit (confirm if dirty)
+  ? / F1                              In-editor help
+
+Bottom row: blue █ + white 0-f = FG color keys (use F then digit).
+
+IMPORT IMAGE (I)
+----------------
+Enter image path (spaces trimmed). On open error, a popup shows the
+reason and returns to the path field with your text kept.
+
+Choose ANSI (HBFS truecolor) or ASCII ramp, then max width/height
+(defaults 80×25). The whole image is scaled to fit — nothing cropped.
+
+SAUCE (M)
+---------
+Edit Title, Author, Group, Date, types, size, Flags, and COMNT lines
+(up to 255 × 64 bytes). Ctrl+S applies; X removes SAUCE on next save.
+
+FILES
+-----
+Saves .ANS / .ASC as art bytes + optional EOF + COMNT + SAUCE00.
+Import sets SAUCE width/height and a COMNT note automatically.
+
+More detail: see README.md in the VirtBBS AnsiEdit/ tree.

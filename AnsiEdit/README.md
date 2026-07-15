@@ -87,4 +87,13 @@ Files are stored as art bytes + `0x1A` + optional `COMNT` + 128-byte `SAUCE00`.
 
 ## Version
 
-Current version: **1.0.4** (patch bump on every change).
+Current version: **1.0.5** (patch bump on every change).
+
+### Single release zip (Linux + Windows + macOS)
+
+```bash
+cd AnsiEdit
+./bundle-release.sh
+```
+
+Creates `AnsiEdit-<version>.zip` with three amd64 binaries and `HELP.txt` under `/Volumes/JohnDovey/tmp/ansiedit-bundle-<version>/`.
