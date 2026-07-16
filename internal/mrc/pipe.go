@@ -88,3 +88,73 @@ func StripPipe(s string) string {
 	}
 	return b.String()
 }
+
+// mysticHex is browser-friendly hex colors for |00-|15.
+var mysticHex = map[string]string{
+	"00": "#000000",
+	"01": "#0000aa",
+	"02": "#00aa00",
+	"03": "#00aaaa",
+	"04": "#aa0000",
+	"05": "#aa00aa",
+	"06": "#aa5500",
+	"07": "#aaaaaa",
+	"08": "#555555",
+	"09": "#5555ff",
+	"10": "#55ff55",
+	"11": "#55ffff",
+	"12": "#ff5555",
+	"13": "#ff55ff",
+	"14": "#ffff55",
+	"15": "#ffffff",
+}
+
+// PipeToHTML converts Mystic |NN pipe codes to colored <span> HTML.
+// The result is safe for insertion into HTML when EscapeHTML was applied to text runs.
+func PipeToHTML(s string) string {
+	if s == "" {
+		return ""
+	}
+	var b strings.Builder
+	b.Grow(len(s) + 32)
+	open := false
+	flushOpen := func() {
+		if open {
+			b.WriteString("</span>")
+			open = false
+		}
+	}
+	for i := 0; i < len(s); {
+		if s[i] == '|' && i+2 < len(s) {
+			code := s[i+1 : i+3]
+			if hex, ok := mysticHex[code]; ok {
+				flushOpen()
+				b.WriteString(`<span style="color:`)
+				b.WriteString(hex)
+				b.WriteString(`">`)
+				open = true
+				i += 3
+				continue
+			}
+			if isTwoDigits(code) {
+				i += 3
+				continue
+			}
+		}
+		switch s[i] {
+		case '&':
+			b.WriteString("&amp;")
+		case '<':
+			b.WriteString("&lt;")
+		case '>':
+			b.WriteString("&gt;")
+		case '"':
+			b.WriteString("&quot;")
+		default:
+			b.WriteByte(s[i])
+		}
+		i++
+	}
+	flushOpen()
+	return b.String()
+}

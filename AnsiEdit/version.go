@@ -2,7 +2,7 @@ package main
 
 // Version is the AnsiEdit semver. Bump patch on every change;
 // minor for significant features; major only when explicitly requested.
-const Version = "1.0.9"
+const Version = "1.0.10"
 
 // Copyright holder and contact (embedded in -version and About).
 const (

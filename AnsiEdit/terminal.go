@@ -55,6 +55,7 @@ type Terminal struct {
 }
 
 func NewTerminal(in io.Reader, out io.Writer) *Terminal {
+	_ = prepareConsole()
 	t := &Terminal{in: in, out: out, br: bufio.NewReader(in), fd: -1}
 	if f, ok := in.(*os.File); ok && term.IsTerminal(int(f.Fd())) {
 		t.fd = int(f.Fd())
@@ -71,6 +72,7 @@ func (t *Terminal) Close() {
 	if t.raw && t.oldState != nil && t.fd >= 0 {
 		_ = term.Restore(t.fd, t.oldState)
 	}
+	restoreConsole()
 }
 
 func (t *Terminal) Write(p []byte) (int, error) { return t.out.Write(p) }
@@ -122,6 +124,8 @@ func (t *Terminal) ReadEvent() (Event, error) {
 		return Event{Kind: KeyTab}, nil
 	case 0x1b:
 		return t.readEscape()
+	case 0xe0, 0x00: // Windows conhost scan-code prefix
+		return t.readWindowsScan()
 	}
 	if b < 0x20 {
 		return Event{Kind: KeyNone}, nil
@@ -146,6 +150,34 @@ func (t *Terminal) ReadEvent() (Event, error) {
 		return Event{Kind: KeyNone}, nil
 	}
 	return Event{Kind: KeyRune, Rune: r}, nil
+}
+
+func (t *Terminal) readWindowsScan() (Event, error) {
+	nb, err := t.br.ReadByte()
+	if err != nil {
+		return Event{}, err
+	}
+	switch nb {
+	case 0x48:
+		return Event{Kind: KeyUp}, nil
+	case 0x50:
+		return Event{Kind: KeyDown}, nil
+	case 0x4B:
+		return Event{Kind: KeyLeft}, nil
+	case 0x4D:
+		return Event{Kind: KeyRight}, nil
+	case 0x47:
+		return Event{Kind: KeyHome}, nil
+	case 0x4F:
+		return Event{Kind: KeyEnd}, nil
+	case 0x49:
+		return Event{Kind: KeyPgUp}, nil
+	case 0x51:
+		return Event{Kind: KeyPgDn}, nil
+	case 0x53:
+		return Event{Kind: KeyDelete}, nil
+	}
+	return Event{Kind: KeyNone}, nil
 }
 
 func (t *Terminal) readEscape() (Event, error) {

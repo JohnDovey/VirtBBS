@@ -149,6 +149,8 @@ func (s *Server) ListenAndServe() error {
 	mux.HandleFunc("/shoutbox", s.handleShoutbox)
 	mux.HandleFunc("/chat", s.handleChat)
 	mux.HandleFunc("/chat/room", s.handleChatRoom)
+	mux.HandleFunc("/mrc", s.handleMRC)
+	mux.HandleFunc("/mrc/ws", s.handleMRCWS)
 	mux.HandleFunc("/api/shoutbox", s.handleAPIShoutbox)
 	mux.HandleFunc("/api/chat", s.handleAPIChat)
 	mux.HandleFunc("/polls", s.handlePolls)

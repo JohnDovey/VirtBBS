@@ -4,7 +4,7 @@
 
 | | |
 |---|---|
-| **Version** | 1.0.9 |
+| **Version** | 1.0.10 |
 | **Copyright** | Copyright (c) 2026 John Dovey \<dovey.john@gmail.com\> |
 | **License** | MIT |
 | **Repository** | [github.com/JohnDovey/VirtBBS](https://github.com/JohnDovey/VirtBBS) (`AnsiEdit/`) |
@@ -34,8 +34,8 @@ In the editor, press **`A`** for an About screen, or **`?` / F1** for a short ke
 
 ## Requirements
 
-- An **interactive TTY** (real terminal): macOS Terminal, iTerm2, Windows Terminal, SyncTerm, etc.
-- On **Windows**, use Windows Terminal / ConPTY (or SyncTerm). Plain legacy `cmd.exe` may be limited.
+- An **interactive TTY** (real terminal): macOS Terminal, iTerm2, Windows PowerShell, Windows Terminal, SyncTerm, etc.
+- On **Windows**, PowerShell and `cmd.exe` work on Windows 10+ (AnsiEdit enables ANSI/VT mode and UTF-8). **Windows Terminal** or **SyncTerm** is still recommended for truecolor image imports.
 - For **truecolor** image imports and accurate palette display, prefer SyncTerm or a modern terminal with 24-bit color.
 - On macOS/Linux terminals, CP437 glyphs are shown as **Unicode** equivalents.
 
@@ -293,6 +293,8 @@ Override destination with `RELEASE_DIR=...`.
 | Only part of an import visible | Imports fit to max W×H (default 80×25); raise max height with **I**, or **Z** resize after |
 | Can’t type uppercase letters | Commands use uppercase; paint lowercase, or insert via **T** / Space glyph |
 | Path open failed | Read the popup; edit the same path (spaces are trimmed) |
+| Garbled screen / no colors on Windows | Use Windows 10+; run in PowerShell or Windows Terminal (not redirected output). Rebuild **1.0.10+** which enables VT mode automatically |
+| Arrow keys don't move cursor (Windows) | Fixed in 1.0.10+ (scan-code + VT input); update binary |
 | Lost edges after resize | Shrinking clips; undo does not restore prior size — save before large shrinks |
 
 ---

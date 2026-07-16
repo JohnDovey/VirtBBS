@@ -143,6 +143,7 @@ Legend: `[x]` done · `[ ]` not yet implemented
 ### Extended community features
 
 - [x] Doors / games (native web doors via WebSocket terminal)
+- [x] Multi-Relay Chat (`/mrc` + `/mrc/ws`, shares process hub with Telnet)
 - [x] Chat rooms, shoutbox, polls, credits, PGP, AI/MCP, PacketBBS, ads
 
 ### Still out of scope
