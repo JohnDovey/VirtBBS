@@ -1,4 +1,4 @@
-AnsiEdit 1.0.9 — Help
+AnsiEdit 1.0.10 — Help
 ======================
 
 Copyright (c) 2026 John Dovey <dovey.john@gmail.com>
@@ -6,8 +6,8 @@ MIT License
 https://github.com/JohnDovey/VirtBBS  (AnsiEdit/)
 
 Fullscreen ANSI art editor for classic BBS .ANS / .ASC screens.
-Requires an interactive terminal (TTY). SyncTerm or Windows Terminal
-recommended for truecolor imports.
+Requires an interactive terminal (TTY). On Windows use PowerShell or
+Windows Terminal (10+). SyncTerm recommended for truecolor imports.
 
 RUN
 ---

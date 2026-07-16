@@ -33,7 +33,7 @@ GOOS=linux   GOARCH=amd64 CGO_ENABLED=0 go build -o ansiedit .
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o ansiedit.exe .
 ```
 
-Windows needs a real TTY console (Windows Terminal / ConPTY). Classic `cmd.exe` may work; SyncTerm or a similar client is better for truecolor ANSI.
+Windows needs a real TTY console (PowerShell, `cmd.exe`, or Windows Terminal). AnsiEdit enables Windows virtual-terminal (ANSI) mode automatically on startup. **Windows Terminal** or **SyncTerm** is still best for truecolor imports; legacy conhost on Windows 10+ should now show colors and box-drawing correctly.
 
 ## Usage
 
@@ -92,7 +92,7 @@ Files are stored as art bytes + `0x1A` + optional `COMNT` + 128-byte `SAUCE00`.
 
 ## Version
 
-Current version: **1.0.9** (patch bump on every change).
+Current version: **1.0.10** (patch bump on every change).
 
 ## Copyright
 
