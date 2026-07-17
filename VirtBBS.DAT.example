@@ -88,7 +88,7 @@
 #   min_security = 10
 
 # ── Door Games ────────────────────────────────────────────────────────────────
-# Each [[doors]] section defines one door game.
+# Each [[doors]] section defines one door (games under DoorGames/, tools under Doors/).
 # drop_file can be "DOOR.SYS" (default) or "DORINFO1.DEF"
 # Example:
 #
@@ -114,6 +114,15 @@
 #   description      = "Convert images to ANSI/ASCII art"
 #   cmd              = "DoorGames/AnsiArt/ansiart"
 #   work_dir         = "DoorGames/AnsiArt"
+#   drop_file        = "DOOR.SYS"
+#   append_drop_file = true
+#   min_security     = 10
+#
+# [[doors]]
+#   name             = "NodeGUI"
+#   description      = "Browse FidoNet Zone 1 nodelist"
+#   cmd              = "Doors/NodeGUI/nodegui"
+#   work_dir         = "Doors/NodeGUI"
 #   drop_file        = "DOOR.SYS"
 #   append_drop_file = true
 #   min_security     = 10

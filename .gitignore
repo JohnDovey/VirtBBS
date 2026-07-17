@@ -52,6 +52,12 @@ DoorGames/AnsiArt/ansiart
 DoorGames/AnsiArt/LIBRARY/
 DoorGames/AnsiArt/config.toml
 
+# NodeGUI door binary and local nodelist DB
+Doors/NodeGUI/nodegui
+Doors/NodeGUI/data/
+Doors/NodeGUI/*.sqlite3
+Doors/NodeGUI/*.settings.json
+
 # Local FidoNet operational files (not part of source; repo root only)
 /ROUTES.BBS
 /NODELIST.*

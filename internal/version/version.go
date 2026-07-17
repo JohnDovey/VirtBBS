@@ -323,6 +323,8 @@
 //                        body line; upstream requests send password in subject.
 //   v1.7.8  2026-06-30  BinkP: receive interleaved inbound M_FILE while waiting for M_GOT
 //                        (fixes session stall against binkd when both sides have mail).
+//   v2.5.0  2026-07-16  Bundle NodeGUI as a standard non-game door under Doors/;
+//                        import/source URL changes are sysop-only (sec ≥ 100).
 //   v2.4.0  2026-07-15  Web MRC client: /mrc page + /mrc/ws WebSocket sharing
 //                        the process-level hub with Telnet/SSH; pipe→HTML,
 //                        nav link, docs update.
@@ -360,4 +362,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "2.4.0"
+const Version = "2.5.0"

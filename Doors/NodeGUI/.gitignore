@@ -1,0 +1,40 @@
+# Build artifacts
+/nodegui
+/nodegui.exe
+/bin/
+/tmpcheck/
+*.exe
+*.test
+*.out
+
+# Runtime data (generated on first import)
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+data/
+cache/
+Z1DAILY.*
+NODELIST.*
+
+# Editor / OS
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Legacy Gambas leftovers (if any remain on disk)
+.action/
+.connection/
+.hidden/
+.lang/
+.src/
+.project
+.settings
+.startup
+.directory
+.icon.png
+*.gambas
+.lock

@@ -46,7 +46,8 @@ Sysop administration is web-only (`internal/web`, `/admin/*`). The only JSON-ove
 
 ### Door games → ServiceMonitor
 
-Doors live under `DoorGames/` (MathMaze, AnsiArt, …). The live monitored BBS is
+Game doors live under `DoorGames/` (MathMaze, AnsiArt, …). Non-game doors live
+under `Doors/` (NodeGUI, …). The live monitored BBS is
 `/Volumes/JohnDovey/Projects/ServiceMonitor/services/VirtBBS/`. After changing a door:
 
 1. Bump the **patch** in that door’s `version.go` (same rule as VirtBBS: every change bumps patch).
@@ -55,10 +56,14 @@ Doors live under `DoorGames/` (MathMaze, AnsiArt, …). The live monitored BBS i
 ```bash
 cd DoorGames/MathMaze && GOTOOLCHAIN=local go build -o mathmaze .
 cd DoorGames/AnsiArt && GOTOOLCHAIN=local go build -o ansiart .
+cd Doors/NodeGUI && GOTOOLCHAIN=local go build -o nodegui .
 /Volumes/JohnDovey/Projects/ServiceMonitor/scripts/sync-binaries.sh
 ```
 
-That installs door binaries under `ServiceMonitor/services/VirtBBS/DoorGames/…`. Keep `[[doors]]` in both local `VirtBBS.DAT` and ServiceMonitor’s `VirtBBS.DAT` when adding doors. Browser image convert: `/ansiart` (shared `pkg/ansiart`).
+That installs door binaries under `ServiceMonitor/services/VirtBBS/DoorGames/…`
+and `ServiceMonitor/services/VirtBBS/Doors/…`. Keep `[[doors]]` in both local
+`VirtBBS.DAT` and ServiceMonitor’s `VirtBBS.DAT` when adding doors. Browser
+image convert: `/ansiart` (shared `pkg/ansiart`).
 
 ## Web interface
 
