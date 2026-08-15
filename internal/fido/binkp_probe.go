@@ -36,7 +36,7 @@ func isBinkpProbeError(err error) bool {
 	if errors.Is(err, net.ErrClosed) {
 		return true
 	}
-	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) {
+	if errors.Is(err, syscall.ECONNRESET) || errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNABORTED) {
 		return true
 	}
 	var ne net.Error
@@ -51,6 +51,11 @@ func isBinkpProbeError(err error) bool {
 		"use of closed network connection",
 		"i/o timeout",
 		"deadline exceeded",
+		// Windows wsarecv/wsasend wording for ECONNRESET/ECONNABORTED — a
+		// health-checker connecting and closing immediately (no handshake
+		// data) surfaces as these on Windows instead of the Unix strings above.
+		"forcibly closed by the remote host",
+		"established connection was aborted",
 	} {
 		if strings.Contains(msg, needle) {
 			return true

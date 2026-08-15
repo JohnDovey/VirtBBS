@@ -323,6 +323,13 @@
 //                        body line; upstream requests send password in subject.
 //   v1.7.8  2026-06-30  BinkP: receive interleaved inbound M_FILE while waiting for M_GOT
 //                        (fixes session stall against binkd when both sides have mail).
+//   v2.5.1  2026-08-15  BinkP: recognize Windows ECONNABORTED ("established
+//                        connection was aborted") and its wsarecv wording as
+//                        port-scan/health-check noise in isBinkpProbeError,
+//                        so a monitor's connect+close probe (e.g.
+//                        ServiceMonitor's 1s TCP health check) is folded into
+//                        the periodic summary line instead of logging one
+//                        "handshake error" per probe.
 //   v2.5.0  2026-07-16  Bundle NodeGUI as a standard non-game door under Doors/;
 //                        import/source URL changes are sysop-only (sec ≥ 100).
 //   v2.4.0  2026-07-15  Web MRC client: /mrc page + /mrc/ws WebSocket sharing
@@ -362,4 +369,4 @@
 package version
 
 // Version is the current VirtBBS release version.
-const Version = "2.5.0"
+const Version = "2.5.1"
